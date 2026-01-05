@@ -1,0 +1,226 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum UserRole {
+  COORDINATOR
+  HOD
+  DEAN
+  ADMIN
+}
+
+enum SubmissionStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  REJECTED
+}
+
+// ============================================================================
+// ORGANIZATIONAL STRUCTURE
+// ============================================================================
+
+model School {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  code        String       @unique
+  description String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relations
+  departments Department[]
+  users       User[]
+
+  @@map("schools")
+}
+
+model Department {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Foreign Keys
+  schoolId String
+
+  // Relations
+  school     School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  programmes Programme[]
+  users      User[]
+
+  @@unique([name, schoolId])
+  @@map("departments")
+}
+
+model Programme {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  description String?
+  degreeType  String? // e.g., "BSc", "MSc", "PhD"
+  duration    Int? // Duration in years
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Foreign Keys
+  departmentId String
+
+  // Relations
+  department  Department   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  submissions Submission[]
+
+  @@unique([name, departmentId])
+  @@map("programmes")
+}
+
+// ============================================================================
+// USER MANAGEMENT
+// ============================================================================
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  role         UserRole @default(COORDINATOR)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Foreign Keys (optional - user may be linked to school/department)
+  schoolId     String?
+  departmentId String?
+
+  // Relations
+  school      School?     @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+  department  Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  // Submissions created by this user
+  submissions       Submission[]
+  // Phase transitions performed by this user
+  phaseTransitions  PhaseTransition[]
+  // Comments made by this user
+  comments          Comment[]
+
+  @@map("users")
+}
+
+// ============================================================================
+// SUBMISSION WORKFLOW
+// ============================================================================
+
+model Submission {
+  id           String           @id @default(cuid())
+  title        String
+  academicYear String // e.g., "2025/2026"
+  currentPhase Int              @default(1) // Phase 1-11
+  status       SubmissionStatus @default(DRAFT)
+  submittedAt  DateTime?
+  approvedAt   DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  // Foreign Keys
+  programmeId String
+  createdById String
+
+  // Relations
+  programme        Programme          @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  createdBy        User               @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  content          SubmissionContent?
+  phaseTransitions PhaseTransition[]
+  comments         Comment[]
+
+  @@unique([programmeId, academicYear])
+  @@map("submissions")
+}
+
+// ============================================================================
+// SUBMISSION CONTENT (Sections A-H as JSON)
+// ============================================================================
+
+model SubmissionContent {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Foreign Keys
+  submissionId String @unique
+
+  // Content Sections (stored as JSON for rich text and tables)
+  sectionA Json? // Programme Overview
+  sectionB Json? // Programme Objectives
+  sectionC Json? // Admission Requirements
+  sectionD Json? // Curriculum Structure
+  sectionE Json? // Course Descriptions
+  sectionF Json? // Assessment Methods
+  sectionG Json? // Resources and Facilities
+  sectionH Json? // Quality Assurance
+
+  // Relations
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@map("submission_contents")
+}
+
+// ============================================================================
+// AUDIT TRAIL - Phase Transitions
+// ============================================================================
+
+model PhaseTransition {
+  id            String   @id @default(cuid())
+  fromPhase     Int
+  toPhase       Int
+  action        String // e.g., "APPROVED", "RETURNED", "ESCALATED"
+  remarks       String?
+  transitionedAt DateTime @default(now())
+
+  // Foreign Keys
+  submissionId  String
+  performedById String
+
+  // Relations
+  submission  Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  performedBy User       @relation(fields: [performedById], references: [id], onDelete: Restrict)
+
+  @@map("phase_transitions")
+}
+
+// ============================================================================
+// COMMENTS / FEEDBACK
+// ============================================================================
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  section   String? // Which section the comment refers to (A-H)
+  phase     Int // Phase at which the comment was made
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Foreign Keys
+  submissionId String
+  authorId     String
+
+  // Relations
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  author     User       @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@map("comments")
+}
