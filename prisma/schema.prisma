@@ -28,6 +28,18 @@ enum SubmissionStatus {
   REJECTED
 }
 
+enum CommentType {
+  SUGGESTION
+  ISSUE
+  QUESTION
+  APPROVAL
+}
+
+enum CommentStatus {
+  OPEN
+  RESOLVED
+}
+
 // ============================================================================
 // ORGANIZATIONAL STRUCTURE
 // ============================================================================
@@ -207,12 +219,15 @@ model PhaseTransition {
 // ============================================================================
 
 model Comment {
-  id        String   @id @default(cuid())
-  content   String
-  section   String? // Which section the comment refers to (A-H)
-  phase     Int // Phase at which the comment was made
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String        @id @default(cuid())
+  content    String
+  section    String?       // Which section the comment refers to (A-H)
+  phase      Int           // Phase at which the comment was made
+  type       CommentType   @default(SUGGESTION)
+  status     CommentStatus @default(OPEN)
+  resolvedAt DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
 
   // Foreign Keys
   submissionId String
