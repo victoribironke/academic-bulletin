@@ -1,3 +1,6 @@
+// Disable SSL certificate verification for Supabase connection
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, UserRole } from "@prisma/client";

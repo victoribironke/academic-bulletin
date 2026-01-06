@@ -1,14 +1,22 @@
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
+import { Pool } from "pg";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
 function createPrismaClient() {
-  const connectionString = process.env.DATABASE_URL!;
-  const adapter = new PrismaPg({ connectionString });
+  // Create a pg Pool with SSL configuration for Supabase
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL!,
+    ssl: {
+      rejectUnauthorized: false,
+    },
+  });
+
+  const adapter = new PrismaPg(pool);
   return new PrismaClient({ adapter });
 }
 
