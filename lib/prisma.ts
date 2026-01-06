@@ -1,3 +1,9 @@
+// Workaround for Supabase SSL certificate issues in development
+// TODO: Remove this in production and use proper certificate handling
+if (process.env.NODE_ENV !== "production") {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+}
+
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
