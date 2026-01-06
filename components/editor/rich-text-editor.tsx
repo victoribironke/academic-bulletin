@@ -118,6 +118,7 @@ export function RichTextEditor({
         class: "prose prose-sm max-w-none min-h-[200px] p-4 focus:outline-none",
       },
     },
+    immediatelyRender: false,
   });
 
   return (
