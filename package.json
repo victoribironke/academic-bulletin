@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "ts-lint": "tsc --noEmit --incremental",
     "lint": "eslint",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
