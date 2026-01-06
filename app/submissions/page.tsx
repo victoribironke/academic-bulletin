@@ -112,7 +112,6 @@ export default function SubmissionsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterPhase, setFilterPhase] = useState<string>("all");
-  const { currentUser } = useUser();
   const { hasPermission } = usePermission();
 
   const canCreate = hasPermission("create:submission");

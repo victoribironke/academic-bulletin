@@ -7,7 +7,7 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
-import { User } from "@/lib/auth";
+import { User, hasPermission, hasAnyPermission, Permission } from "@/lib/auth";
 
 interface UserContextType {
   currentUser: User | null;
@@ -85,16 +85,10 @@ export function usePermission() {
 
   return {
     user: currentUser,
-    hasPermission: (
-      permission: Parameters<typeof import("@/lib/auth").hasPermission>[1]
-    ) => {
-      const { hasPermission } = require("@/lib/auth");
+    hasPermission: (permission: Permission) => {
       return hasPermission(currentUser, permission);
     },
-    hasAnyPermission: (
-      permissions: Parameters<typeof import("@/lib/auth").hasAnyPermission>[1]
-    ) => {
-      const { hasAnyPermission } = require("@/lib/auth");
+    hasAnyPermission: (permissions: Permission[]) => {
       return hasAnyPermission(currentUser, permissions);
     },
   };
