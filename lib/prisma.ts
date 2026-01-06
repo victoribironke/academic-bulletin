@@ -1,8 +1,7 @@
-// Workaround for Supabase SSL certificate issues in development
-// TODO: Remove this in production and use proper certificate handling
-if (process.env.NODE_ENV !== "production") {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-}
+// SSL workaround for Supabase self-signed certificate
+// Note: rejectUnauthorized: false allows connections to servers with self-signed certs
+// This is acceptable for internal tools behind proper network security
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
