@@ -40,6 +40,17 @@ enum CommentStatus {
   RESOLVED
 }
 
+enum StaffType {
+  ACADEMIC
+  ADJUNCT
+  NON_ACADEMIC
+}
+
+enum CourseStatus {
+  CORE
+  ELECTIVE
+}
+
 // ============================================================================
 // ORGANIZATIONAL STRUCTURE
 // ============================================================================
@@ -74,6 +85,7 @@ model Department {
   school     School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   programmes Programme[]
   users      User[]
+  staff      Staff[]
 
   @@unique([name, schoolId])
   @@map("departments")
@@ -134,6 +146,31 @@ model User {
 }
 
 // ============================================================================
+// STAFF DIRECTORY (per department, shared across submissions)
+// ============================================================================
+
+model Staff {
+  id             String    @id @default(cuid())
+  name           String
+  position       String    // e.g., "Professor", "Senior Lecturer", "Lab Technologist"
+  specialization String?
+  email          String?
+  type           StaffType @default(ACADEMIC)
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Foreign Keys
+  departmentId String
+
+  // Relations
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  courses    Course[]   // Courses this staff member teaches
+
+  @@map("staff")
+}
+
+// ============================================================================
 // SUBMISSION WORKFLOW
 // ============================================================================
 
@@ -153,18 +190,20 @@ model Submission {
   createdById String
 
   // Relations
-  programme        Programme          @relation(fields: [programmeId], references: [id], onDelete: Cascade)
-  createdBy        User               @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  content          SubmissionContent?
-  phaseTransitions PhaseTransition[]
-  comments         Comment[]
+  programme          Programme           @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  createdBy          User                @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  content            SubmissionContent?
+  phaseTransitions   PhaseTransition[]
+  comments           Comment[]
+  courses            Course[]
+  courseDescriptions CourseDescription[]
 
   @@unique([programmeId, academicYear])
   @@map("submissions")
 }
 
 // ============================================================================
-// SUBMISSION CONTENT (Sections A-H as JSON)
+// SUBMISSION CONTENT (Structured Sections)
 // ============================================================================
 
 model SubmissionContent {
@@ -175,20 +214,96 @@ model SubmissionContent {
   // Foreign Keys
   submissionId String @unique
 
-  // Content Sections (stored as JSON for rich text and tables)
-  sectionA Json? // Programme Overview
-  sectionB Json? // Programme Objectives
-  sectionC Json? // Admission Requirements
-  sectionD Json? // Curriculum Structure
-  sectionE Json? // Course Descriptions
-  sectionF Json? // Assessment Methods
-  sectionG Json? // Resources and Facilities
-  sectionH Json? // Quality Assurance
+  // Section 1: Programme Info (structured)
+  programmeInfo Json? // { schoolName, deanName, deptName, hodName, coordinator, overview }
+
+  // Section 2: Philosophy & Objectives (structured with word count validation)
+  philosophy      String? // 150-250 words
+  objectives      Json?   // Array of objective strings
+  uniqueFeatures  Json?   // Array of feature strings
+  employability   String?
+  centurySkills   Json?   // Array of 21st century skills
+
+  // Section 3: Admission Requirements (structured)
+  utmeRequirements        String?
+  directEntryRequirements String?
+  transferRequirements    String?
+  minimumDuration         String?
+
+  // Section 4: Graduation Requirements (structured)
+  graduationRequirements String?
+  minimumCGPA            Float?
+  totalUnits             Int?
+  creditDistribution     Json? // { level100: {sem1: x, sem2: y}, level200: {...}, ... }
+
+  // Section 5: Approvals (structured)
+  approvals Json? // { coordinator: {name, date, signature}, hod: {...}, dean: {...} }
+
+  // Legacy sections (kept for backward compatibility)
+  sectionA Json?
+  sectionB Json?
+  sectionC Json?
+  sectionD Json?
+  sectionE Json?
+  sectionF Json?
+  sectionG Json?
+  sectionH Json?
 
   // Relations
   submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
   @@map("submission_contents")
+}
+
+// ============================================================================
+// COURSE STRUCTURE (per submission, per level)
+// ============================================================================
+
+model Course {
+  id           String       @id @default(cuid())
+  code         String       // e.g., "COS 101"
+  title        String       // e.g., "Introduction to Computing Sciences"
+  units        Int          // Credit units
+  status       CourseStatus @default(CORE) // Core or Elective
+  semester     Int          // 1 or 2
+  level        Int          // 100, 200, 300, 400
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  // Foreign Keys
+  submissionId String
+  lecturerId   String? // Lecturer must be assigned before submission
+
+  // Relations
+  submission  Submission         @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  lecturer    Staff?             @relation(fields: [lecturerId], references: [id], onDelete: SetNull)
+  description CourseDescription?
+
+  @@unique([code, submissionId])
+  @@map("courses")
+}
+
+// ============================================================================
+// COURSE DESCRIPTIONS
+// ============================================================================
+
+model CourseDescription {
+  id               String   @id @default(cuid())
+  learningOutcomes Json?    // Array of learning outcome strings
+  courseContent    String?  // Rich text content
+  labWork          String?  // Lab work description (if applicable)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Foreign Keys
+  submissionId String
+  courseId     String @unique
+
+  // Relations
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  course     Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@map("course_descriptions")
 }
 
 // ============================================================================
@@ -221,7 +336,7 @@ model PhaseTransition {
 model Comment {
   id         String        @id @default(cuid())
   content    String
-  section    String?       // Which section the comment refers to (A-H)
+  section    String?       // Which section the comment refers to
   phase      Int           // Phase at which the comment was made
   type       CommentType   @default(SUGGESTION)
   status     CommentStatus @default(OPEN)
@@ -239,3 +354,4 @@ model Comment {
 
   @@map("comments")
 }
+
