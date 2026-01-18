@@ -122,8 +122,14 @@ export function CourseTable({
     }
 
     setValidationErrors(errors);
-    onValidationChange?.(errors.length === 0, errors);
-  }, [coursesByLevel, onValidationChange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coursesByLevel]);
+
+  // Notify parent of validation changes separately
+  useEffect(() => {
+    onValidationChange?.(validationErrors.length === 0, validationErrors);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [validationErrors]);
 
   const createEmptyCourse = (level: number): Course => ({
     code: "",
