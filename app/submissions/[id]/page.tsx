@@ -238,6 +238,8 @@ export default function SubmissionDetailPage({
 
   const canEdit =
     hasPermission("edit:submission") && submission?.status === "DRAFT";
+  const canComment =
+    hasPermission("comment:submission") || hasPermission("review:submission");
   const canReview = hasPermission("review:submission");
   const canApprove = hasPermission("approve:submission");
 
@@ -1043,7 +1045,7 @@ export default function SubmissionDetailPage({
               )}
 
               {/* Add Comment Form */}
-              {canReview && (
+              {canComment && (
                 <div className="space-y-3 pb-4 border-b">
                   <Textarea
                     placeholder="Add a comment..."

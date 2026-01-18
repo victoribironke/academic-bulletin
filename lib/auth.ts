@@ -17,6 +17,7 @@ export type Permission =
   | "view:submissions"
   | "create:submission"
   | "edit:submission"
+  | "comment:submission" // New: Deans can only comment
   | "review:submission"
   | "approve:submission"
   | "view:schools"
@@ -27,6 +28,8 @@ export type Permission =
   | "manage:programmes"
   | "view:users"
   | "manage:users"
+  | "view:staff"
+  | "manage:staff"
   | "admin:all";
 
 // Role-based permission mapping
@@ -39,33 +42,38 @@ const rolePermissions: Record<UserRole, Permission[]> = {
     "view:programmes",
     "view:departments",
     "view:schools",
+    "view:staff",
   ],
   HOD: [
     "view:dashboard",
     "view:submissions",
     "create:submission",
     "edit:submission",
+    "comment:submission",
     "review:submission",
     "view:programmes",
     "manage:programmes",
     "view:departments",
     "view:schools",
+    "view:staff",
+    "manage:staff",
   ],
   DEAN: [
+    // Dean can ONLY view and comment - cannot edit submissions
     "view:dashboard",
     "view:submissions",
-    "review:submission",
-    "approve:submission",
+    "comment:submission", // Can add comments/feedback
     "view:programmes",
     "view:departments",
-    "manage:departments",
     "view:schools",
+    "view:staff",
   ],
   ADMIN: [
     "view:dashboard",
     "view:submissions",
     "create:submission",
     "edit:submission",
+    "comment:submission",
     "review:submission",
     "approve:submission",
     "view:schools",
@@ -76,6 +84,8 @@ const rolePermissions: Record<UserRole, Permission[]> = {
     "manage:programmes",
     "view:users",
     "manage:users",
+    "view:staff",
+    "manage:staff",
     "admin:all",
   ],
 };
@@ -85,7 +95,7 @@ const rolePermissions: Record<UserRole, Permission[]> = {
  */
 export function hasPermission(
   user: User | null,
-  permission: Permission
+  permission: Permission,
 ): boolean {
   if (!user) return false;
   const permissions = rolePermissions[user.role];
@@ -97,7 +107,7 @@ export function hasPermission(
  */
 export function hasAnyPermission(
   user: User | null,
-  permissions: Permission[]
+  permissions: Permission[],
 ): boolean {
   return permissions.some((permission) => hasPermission(user, permission));
 }
