@@ -192,10 +192,7 @@ export function CourseTable({
       key: "lecturerId",
       header: "Lecturer",
       type: "select",
-      options: [
-        { value: "", label: "Select lecturer..." },
-        ...staff.map((s) => ({ value: s.id, label: s.name })),
-      ],
+      options: staff.map((s) => ({ value: s.id, label: s.name })),
       required: true,
       width: "200px",
     },
