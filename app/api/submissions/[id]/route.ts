@@ -72,7 +72,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!submission) {
       return NextResponse.json(
         { error: "Submission not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     console.error("Failed to fetch submission:", error);
     return NextResponse.json(
       { error: "Failed to fetch submission" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -94,7 +94,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const { title, content, status } = body;
 
     // Update submission
-    const submission = await prisma.submission.update({
+    await prisma.submission.update({
       where: { id },
       data: {
         ...(title && { title }),
@@ -144,13 +144,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     ) {
       return NextResponse.json(
         { error: "Submission not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     return NextResponse.json(
       { error: "Failed to update submission" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -176,13 +176,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     ) {
       return NextResponse.json(
         { error: "Submission not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     return NextResponse.json(
       { error: "Failed to delete submission" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -73,7 +73,7 @@ interface DashboardStats {
   };
 }
 
-const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444"];
+// const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444"];
 const actionLabels: Record<string, string> = {
   SUBMIT: "Submitted",
   APPROVE: "Approved",
@@ -340,8 +340,8 @@ export default function DashboardPage() {
                           activity.action === "APPROVE"
                             ? "bg-green-100"
                             : activity.action === "REJECT"
-                            ? "bg-red-100"
-                            : "bg-blue-100"
+                              ? "bg-red-100"
+                              : "bg-blue-100"
                         }`}
                       >
                         {activity.action === "APPROVE" ? (
@@ -367,7 +367,7 @@ export default function DashboardPage() {
                         <p className="text-xs text-muted-foreground">
                           Phase {activity.fromPhase} → {activity.toPhase} •{" "}
                           {new Date(
-                            activity.transitionedAt
+                            activity.transitionedAt,
                           ).toLocaleDateString()}
                         </p>
                       </div>

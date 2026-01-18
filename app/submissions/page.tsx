@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useUser, usePermission } from "@/contexts/user-context";
+import { usePermission } from "@/contexts/user-context";
 import { Button } from "@/components/ui/button";
 import {
   Card,
