@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, use, useCallback } from "react";
 import Link from "next/link";
 import { useUser, usePermission } from "@/contexts/user-context";
 import {
   RichTextEditor,
   RichTextViewer,
 } from "@/components/editor/rich-text-editor";
+import { StaffTable } from "@/components/forms/staff-table";
+import { CourseTable } from "@/components/forms/course-table";
+import { CourseDescriptionForm } from "@/components/forms/course-description-form";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,7 +20,9 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -28,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   ArrowLeft,
   Save,
@@ -39,6 +44,14 @@ import {
   Clock,
   Loader2,
   Plus,
+  AlertCircle,
+  Users,
+  BookOpen,
+  FileText,
+  GraduationCap,
+  Building,
+  Target,
+  ClipboardList,
 } from "lucide-react";
 
 interface Submission {
@@ -50,11 +63,13 @@ interface Submission {
   submittedAt: string | null;
   approvedAt: string | null;
   programme: {
+    id: string;
     name: string;
     code: string;
     department: {
+      id: string;
       name: string;
-      school: { name: string; code: string };
+      school: { id: string; name: string; code: string };
     };
   };
   createdBy: {
@@ -63,14 +78,27 @@ interface Submission {
     role: string;
   };
   content: {
-    sectionA: { content?: string } | null;
-    sectionB: { content?: string } | null;
-    sectionC: { content?: string } | null;
-    sectionD: { content?: string } | null;
-    sectionE: { content?: string } | null;
-    sectionF: { content?: string } | null;
-    sectionG: { content?: string } | null;
-    sectionH: { content?: string } | null;
+    philosophy?: string;
+    objectives?: string[];
+    uniqueFeatures?: string[];
+    employability?: string;
+    centurySkills?: string[];
+    utmeRequirements?: string;
+    directEntryRequirements?: string;
+    transferRequirements?: string;
+    minimumDuration?: string;
+    graduationRequirements?: string;
+    minimumCGPA?: number;
+    totalUnits?: number;
+    // Legacy sections
+    sectionA?: { content?: string };
+    sectionB?: { content?: string };
+    sectionC?: { content?: string };
+    sectionD?: { content?: string };
+    sectionE?: { content?: string };
+    sectionF?: { content?: string };
+    sectionG?: { content?: string };
+    sectionH?: { content?: string };
   } | null;
   comments: Comment[];
   phaseTransitions: PhaseTransition[];
@@ -105,43 +133,51 @@ interface PhaseTransition {
   };
 }
 
-const sectionInfo: Record<string, { title: string; description: string }> = {
-  A: {
-    title: "General Programme Information",
-    description:
-      "School, Department, Programme Title, Degree, Duration, Mode, Coordinator",
+// Updated section structure based on template
+const sections = [
+  {
+    key: "staff",
+    title: "Staff Directory",
+    icon: Users,
+    description: "Academic, Adjunct, and Non-Academic Staff",
   },
-  B: {
-    title: "Programme Philosophy & Objectives",
-    description:
-      "Philosophy (150-250 words), Vision, Mission, Learning Outcomes",
+  {
+    key: "overview",
+    title: "Programme Overview",
+    icon: Building,
+    description: "Philosophy, Objectives, Unique Features",
   },
-  C: {
-    title: "Admission & Graduation Requirements",
-    description: "UTME/Direct Entry criteria, Graduation requirements",
+  {
+    key: "admission",
+    title: "Admission Requirements",
+    icon: GraduationCap,
+    description: "UTME, Direct Entry, Transfer requirements",
   },
-  D: {
-    title: "Entrepreneurial Content",
-    description: "Entrepreneurship philosophy, courses, skills, partnerships",
+  {
+    key: "graduation",
+    title: "Graduation Requirements",
+    icon: Target,
+    description: "Credit units, minimum CGPA",
   },
-  E: {
-    title: "Programme Structure & Course Descriptions",
-    description: "Semester-by-semester structure, course details",
+  {
+    key: "courses",
+    title: "Course Structure",
+    icon: BookOpen,
+    description: "Courses by level with lecturers",
   },
-  F: {
-    title: "Programme Regulations",
-    description:
-      "Assessment, Probation, Internship, Project/Thesis requirements",
+  {
+    key: "descriptions",
+    title: "Course Descriptions",
+    icon: FileText,
+    description: "Learning outcomes and content",
   },
-  G: {
-    title: "Summary of Changes",
-    description: "Changes to structure, new/deleted courses, policy changes",
+  {
+    key: "regulations",
+    title: "Regulations & Changes",
+    icon: ClipboardList,
+    description: "Programme regulations, summary of changes",
   },
-  H: {
-    title: "Approvals",
-    description: "Coordinator, HoD, Dean signatures and dates",
-  },
-};
+];
 
 const phaseNames: Record<number, string> = {
   1: "Preparation",
@@ -176,11 +212,24 @@ export default function SubmissionDetailPage({
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [activeSection, setActiveSection] = useState("A");
-  const [editedContent, setEditedContent] = useState<Record<string, string>>(
-    {}
-  );
+  const [activeSection, setActiveSection] = useState("staff");
   const [hasChanges, setHasChanges] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+
+  // Form state for structured sections
+  const [philosophy, setPhilosophy] = useState("");
+  const [objectives, setObjectives] = useState<string[]>([""]);
+  const [uniqueFeatures, setUniqueFeatures] = useState<string[]>([""]);
+  const [employability, setEmployability] = useState("");
+  const [utmeRequirements, setUtmeRequirements] = useState("");
+  const [directEntryRequirements, setDirectEntryRequirements] = useState("");
+  const [transferRequirements, setTransferRequirements] = useState("");
+  const [minimumDuration, setMinimumDuration] = useState("");
+  const [graduationRequirements, setGraduationRequirements] = useState("");
+  const [minimumCGPA, setMinimumCGPA] = useState<number>(2.5);
+  const [totalUnits, setTotalUnits] = useState<number>(154);
+  const [regulations, setRegulations] = useState("");
+  const [summaryOfChanges, setSummaryOfChanges] = useState("");
 
   // Comments state
   const [newComment, setNewComment] = useState("");
@@ -192,20 +241,35 @@ export default function SubmissionDetailPage({
   const canReview = hasPermission("review:submission");
   const canApprove = hasPermission("approve:submission");
 
-  const fetchSubmission = async () => {
+  const fetchSubmission = useCallback(async () => {
     try {
       const response = await fetch(`/api/submissions/${id}`);
       if (response.ok) {
         const data = await response.json();
         setSubmission(data);
-        // Initialize edited content from submission
+        // Initialize form state from submission content
         if (data.content) {
-          const content: Record<string, string> = {};
-          Object.keys(sectionInfo).forEach((key) => {
-            const sectionKey = `section${key}` as keyof typeof data.content;
-            content[key] = data.content[sectionKey]?.content || "";
-          });
-          setEditedContent(content);
+          setPhilosophy(data.content.philosophy || "");
+          setObjectives(
+            data.content.objectives?.length ? data.content.objectives : [""],
+          );
+          setUniqueFeatures(
+            data.content.uniqueFeatures?.length
+              ? data.content.uniqueFeatures
+              : [""],
+          );
+          setEmployability(data.content.employability || "");
+          setUtmeRequirements(data.content.utmeRequirements || "");
+          setDirectEntryRequirements(
+            data.content.directEntryRequirements || "",
+          );
+          setTransferRequirements(data.content.transferRequirements || "");
+          setMinimumDuration(data.content.minimumDuration || "");
+          setGraduationRequirements(data.content.graduationRequirements || "");
+          setMinimumCGPA(data.content.minimumCGPA || 2.5);
+          setTotalUnits(data.content.totalUnits || 154);
+          setRegulations(data.content.sectionF?.content || "");
+          setSummaryOfChanges(data.content.sectionG?.content || "");
         }
       }
     } catch (err) {
@@ -213,26 +277,41 @@ export default function SubmissionDetailPage({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     fetchSubmission();
-  }, [id]);
+  }, [fetchSubmission]);
 
-  const handleContentChange = (section: string, content: string) => {
-    setEditedContent((prev) => ({ ...prev, [section]: content }));
-    setHasChanges(true);
+  // Word count helper
+  const getWordCount = (text: string) => {
+    return text.trim().split(/\s+/).filter(Boolean).length;
   };
+
+  const philosophyWordCount = getWordCount(philosophy);
+  const isPhilosophyValid =
+    philosophyWordCount >= 150 && philosophyWordCount <= 250;
 
   const handleSave = async () => {
     if (!submission) return;
     setIsSaving(true);
 
     try {
-      const contentToSave: Record<string, { content: string }> = {};
-      Object.keys(editedContent).forEach((key) => {
-        contentToSave[`section${key}`] = { content: editedContent[key] };
-      });
+      const contentToSave = {
+        philosophy,
+        objectives: objectives.filter((o) => o.trim()),
+        uniqueFeatures: uniqueFeatures.filter((f) => f.trim()),
+        employability,
+        utmeRequirements,
+        directEntryRequirements,
+        transferRequirements,
+        minimumDuration,
+        graduationRequirements,
+        minimumCGPA,
+        totalUnits,
+        sectionF: { content: regulations },
+        sectionG: { content: summaryOfChanges },
+      };
 
       const response = await fetch(`/api/submissions/${id}`, {
         method: "PUT",
@@ -254,12 +333,27 @@ export default function SubmissionDetailPage({
   const handleTransition = async (action: string) => {
     if (!submission || !currentUser) return;
 
+    // Validate before submission
+    if (action === "SUBMIT") {
+      const errors: string[] = [];
+      if (!isPhilosophyValid) {
+        errors.push("Philosophy must be 150-250 words");
+      }
+      if (validationErrors.length > 0) {
+        errors.push(...validationErrors);
+      }
+      if (errors.length > 0) {
+        alert("Cannot submit:\n" + errors.join("\n"));
+        return;
+      }
+    }
+
     const remarks =
       action === "REJECT"
         ? prompt("Please provide a reason for rejection:")
         : action === "RETURN"
-        ? prompt("Please provide feedback for the changes needed:")
-        : null;
+          ? prompt("Please provide feedback for the changes needed:")
+          : null;
 
     if ((action === "REJECT" || action === "RETURN") && !remarks) return;
 
@@ -311,7 +405,7 @@ export default function SubmissionDetailPage({
 
   const handleResolveComment = async (
     commentId: string,
-    currentStatus: string
+    currentStatus: string,
   ) => {
     try {
       const response = await fetch(
@@ -322,7 +416,7 @@ export default function SubmissionDetailPage({
           body: JSON.stringify({
             status: currentStatus === "OPEN" ? "RESOLVED" : "OPEN",
           }),
-        }
+        },
       );
 
       if (response.ok) {
@@ -331,6 +425,34 @@ export default function SubmissionDetailPage({
     } catch (err) {
       console.error("Failed to update comment:", err);
     }
+  };
+
+  const addListItem = (
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+  ) => {
+    setter((prev) => [...prev, ""]);
+    setHasChanges(true);
+  };
+
+  const updateListItem = (
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+    index: number,
+    value: string,
+  ) => {
+    setter((prev) => {
+      const newItems = [...prev];
+      newItems[index] = value;
+      return newItems;
+    });
+    setHasChanges(true);
+  };
+
+  const removeListItem = (
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+    index: number,
+  ) => {
+    setter((prev) => prev.filter((_, i) => i !== index));
+    setHasChanges(true);
   };
 
   if (isLoading) {
@@ -357,8 +479,11 @@ export default function SubmissionDetailPage({
   }
 
   const sectionComments = submission.comments.filter(
-    (c) => c.section === activeSection
+    (c) => c.section === activeSection,
   );
+
+  const currentSection = sections.find((s) => s.key === activeSection);
+  const SectionIcon = currentSection?.icon || FileText;
 
   return (
     <div className="space-y-6">
@@ -468,38 +593,422 @@ export default function SubmissionDetailPage({
           <Card>
             <CardHeader className="pb-3">
               <Tabs value={activeSection} onValueChange={setActiveSection}>
-                <TabsList className="grid grid-cols-8 w-full">
-                  {Object.keys(sectionInfo).map((key) => (
-                    <TabsTrigger key={key} value={key}>
-                      {key}
-                    </TabsTrigger>
-                  ))}
+                <TabsList className="grid grid-cols-7 w-full">
+                  {sections.map((section) => {
+                    const Icon = section.icon;
+                    return (
+                      <TabsTrigger
+                        key={section.key}
+                        value={section.key}
+                        className="flex items-center gap-1"
+                      >
+                        <Icon className="h-4 w-4" />
+                        <span className="hidden xl:inline text-xs">
+                          {section.title.split(" ")[0]}
+                        </span>
+                      </TabsTrigger>
+                    );
+                  })}
                 </TabsList>
               </Tabs>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div>
-                  <h3 className="font-semibold">
-                    Section {activeSection}: {sectionInfo[activeSection].title}
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <SectionIcon className="h-5 w-5" />
+                    {currentSection?.title}
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    {sectionInfo[activeSection].description}
+                    {currentSection?.description}
                   </p>
                 </div>
                 <Separator />
-                {canEdit ? (
-                  <RichTextEditor
-                    content={editedContent[activeSection] || ""}
-                    onChange={(content) =>
-                      handleContentChange(activeSection, content)
-                    }
-                    placeholder={`Enter content for Section ${activeSection}...`}
+
+                {/* Staff Directory Section */}
+                {activeSection === "staff" && (
+                  <StaffTable
+                    departmentId={submission.programme.department.id}
+                    disabled={!canEdit}
                   />
-                ) : (
-                  <RichTextViewer
-                    content={editedContent[activeSection] || ""}
+                )}
+
+                {/* Programme Overview Section */}
+                {activeSection === "overview" && (
+                  <div className="space-y-6">
+                    {/* Philosophy */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Programme Philosophy *</Label>
+                        <span
+                          className={`text-xs ${
+                            isPhilosophyValid
+                              ? "text-green-600"
+                              : philosophyWordCount > 0
+                                ? "text-red-600"
+                                : "text-muted-foreground"
+                          }`}
+                        >
+                          {philosophyWordCount}/150-250 words
+                        </span>
+                      </div>
+                      {canEdit ? (
+                        <Textarea
+                          value={philosophy}
+                          onChange={(e) => {
+                            setPhilosophy(e.target.value);
+                            setHasChanges(true);
+                          }}
+                          placeholder="The philosophy of this programme is to provide broad and high quality education..."
+                          rows={4}
+                          className={
+                            !isPhilosophyValid && philosophyWordCount > 0
+                              ? "border-red-500"
+                              : ""
+                          }
+                        />
+                      ) : (
+                        <p className="text-sm bg-muted p-3 rounded-md">
+                          {philosophy || "Not provided"}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Objectives */}
+                    <div className="space-y-2">
+                      <Label>Programme Objectives *</Label>
+                      <p className="text-xs text-muted-foreground">
+                        The specific objectives are to:
+                      </p>
+                      {objectives.map((obj, index) => (
+                        <div key={index} className="flex items-start gap-2">
+                          <span className="mt-2 text-sm text-muted-foreground w-6">
+                            {index + 1}.
+                          </span>
+                          {canEdit ? (
+                            <>
+                              <Input
+                                value={obj}
+                                onChange={(e) =>
+                                  updateListItem(
+                                    setObjectives,
+                                    index,
+                                    e.target.value,
+                                  )
+                                }
+                                placeholder="Enter objective..."
+                                className="flex-1"
+                              />
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() =>
+                                  removeListItem(setObjectives, index)
+                                }
+                                disabled={objectives.length <= 1}
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </Button>
+                            </>
+                          ) : (
+                            <p className="text-sm">{obj}</p>
+                          )}
+                        </div>
+                      ))}
+                      {canEdit && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => addListItem(setObjectives)}
+                        >
+                          <Plus className="h-4 w-4 mr-1" /> Add Objective
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Unique Features */}
+                    <div className="space-y-2">
+                      <Label>Unique Features</Label>
+                      {uniqueFeatures.map((feature, index) => (
+                        <div key={index} className="flex items-start gap-2">
+                          <span className="mt-2 text-sm text-muted-foreground w-6">
+                            {index + 1}.
+                          </span>
+                          {canEdit ? (
+                            <>
+                              <Input
+                                value={feature}
+                                onChange={(e) =>
+                                  updateListItem(
+                                    setUniqueFeatures,
+                                    index,
+                                    e.target.value,
+                                  )
+                                }
+                                placeholder="Enter unique feature..."
+                                className="flex-1"
+                              />
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() =>
+                                  removeListItem(setUniqueFeatures, index)
+                                }
+                                disabled={uniqueFeatures.length <= 1}
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </Button>
+                            </>
+                          ) : (
+                            <p className="text-sm">{feature}</p>
+                          )}
+                        </div>
+                      ))}
+                      {canEdit && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => addListItem(setUniqueFeatures)}
+                        >
+                          <Plus className="h-4 w-4 mr-1" /> Add Feature
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Employability */}
+                    <div className="space-y-2">
+                      <Label>Employability Skills</Label>
+                      {canEdit ? (
+                        <Textarea
+                          value={employability}
+                          onChange={(e) => {
+                            setEmployability(e.target.value);
+                            setHasChanges(true);
+                          }}
+                          placeholder="Describe the employability skills this programme develops..."
+                          rows={3}
+                        />
+                      ) : (
+                        <p className="text-sm bg-muted p-3 rounded-md">
+                          {employability || "Not provided"}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Admission Requirements Section */}
+                {activeSection === "admission" && (
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <Label>UTME Requirements *</Label>
+                      {canEdit ? (
+                        <Textarea
+                          value={utmeRequirements}
+                          onChange={(e) => {
+                            setUtmeRequirements(e.target.value);
+                            setHasChanges(true);
+                          }}
+                          placeholder="In addition to appropriate UTME score, a candidate must possess..."
+                          rows={3}
+                        />
+                      ) : (
+                        <p className="text-sm bg-muted p-3 rounded-md">
+                          {utmeRequirements || "Not provided"}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Direct Entry Requirements</Label>
+                      {canEdit ? (
+                        <Textarea
+                          value={directEntryRequirements}
+                          onChange={(e) => {
+                            setDirectEntryRequirements(e.target.value);
+                            setHasChanges(true);
+                          }}
+                          placeholder="A minimum of a credit at the University/National Diploma..."
+                          rows={3}
+                        />
+                      ) : (
+                        <p className="text-sm bg-muted p-3 rounded-md">
+                          {directEntryRequirements || "Not provided"}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Inter-University Transfer Mode</Label>
+                      {canEdit ? (
+                        <Textarea
+                          value={transferRequirements}
+                          onChange={(e) => {
+                            setTransferRequirements(e.target.value);
+                            setHasChanges(true);
+                          }}
+                          placeholder="Students can transfer into 200-Level courses provided..."
+                          rows={2}
+                        />
+                      ) : (
+                        <p className="text-sm bg-muted p-3 rounded-md">
+                          {transferRequirements || "Not provided"}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Minimum Duration</Label>
+                      {canEdit ? (
+                        <Textarea
+                          value={minimumDuration}
+                          onChange={(e) => {
+                            setMinimumDuration(e.target.value);
+                            setHasChanges(true);
+                          }}
+                          placeholder="The minimum duration is four (4) academic sessions..."
+                          rows={2}
+                        />
+                      ) : (
+                        <p className="text-sm bg-muted p-3 rounded-md">
+                          {minimumDuration || "Not provided"}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Graduation Requirements Section */}
+                {activeSection === "graduation" && (
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <Label>Graduation Requirements *</Label>
+                      {canEdit ? (
+                        <Textarea
+                          value={graduationRequirements}
+                          onChange={(e) => {
+                            setGraduationRequirements(e.target.value);
+                            setHasChanges(true);
+                          }}
+                          placeholder="To be eligible for the award of the Bachelor degree, a student must have..."
+                          rows={4}
+                        />
+                      ) : (
+                        <p className="text-sm bg-muted p-3 rounded-md">
+                          {graduationRequirements || "Not provided"}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Minimum CGPA *</Label>
+                        {canEdit ? (
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="1"
+                            max="5"
+                            value={minimumCGPA}
+                            onChange={(e) => {
+                              setMinimumCGPA(parseFloat(e.target.value) || 2.5);
+                              setHasChanges(true);
+                            }}
+                          />
+                        ) : (
+                          <p className="text-sm bg-muted p-3 rounded-md">
+                            {minimumCGPA}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Total Credit Units *</Label>
+                        {canEdit ? (
+                          <Input
+                            type="number"
+                            min="100"
+                            max="250"
+                            value={totalUnits}
+                            onChange={(e) => {
+                              setTotalUnits(parseInt(e.target.value) || 154);
+                              setHasChanges(true);
+                            }}
+                          />
+                        ) : (
+                          <p className="text-sm bg-muted p-3 rounded-md">
+                            {totalUnits}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Course Structure Section */}
+                {activeSection === "courses" && (
+                  <CourseTable
+                    submissionId={submission.id}
+                    departmentId={submission.programme.department.id}
+                    disabled={!canEdit}
+                    onValidationChange={(isValid, errors) => {
+                      if (!isValid) {
+                        setValidationErrors(errors);
+                      } else {
+                        setValidationErrors([]);
+                      }
+                    }}
                   />
+                )}
+
+                {/* Course Descriptions Section */}
+                {activeSection === "descriptions" && (
+                  <CourseDescriptionForm
+                    submissionId={submission.id}
+                    disabled={!canEdit}
+                  />
+                )}
+
+                {/* Regulations & Changes Section */}
+                {activeSection === "regulations" && (
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <Label>Programme Regulations</Label>
+                      {canEdit ? (
+                        <RichTextEditor
+                          content={regulations}
+                          onChange={(content) => {
+                            setRegulations(content);
+                            setHasChanges(true);
+                          }}
+                          placeholder="Assessment methods, probation rules, internship requirements..."
+                        />
+                      ) : (
+                        <RichTextViewer content={regulations} />
+                      )}
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-2">
+                      <Label>Summary of Changes</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Document any changes from the previous bulletin
+                      </p>
+                      {canEdit ? (
+                        <RichTextEditor
+                          content={summaryOfChanges}
+                          onChange={(content) => {
+                            setSummaryOfChanges(content);
+                            setHasChanges(true);
+                          }}
+                          placeholder="List changes to structure, new/deleted courses, policy changes..."
+                        />
+                      ) : (
+                        <RichTextViewer content={summaryOfChanges} />
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
             </CardContent>
@@ -515,10 +1024,24 @@ export default function SubmissionDetailPage({
                   <MessageSquare className="h-5 w-5" />
                   Comments
                 </span>
-                <Badge variant="secondary">Section {activeSection}</Badge>
+                <Badge variant="secondary">
+                  {currentSection?.title.split(" ")[0]}
+                </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Validation Errors */}
+              {validationErrors.length > 0 && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    {validationErrors.map((error, i) => (
+                      <div key={i}>{error}</div>
+                    ))}
+                  </AlertDescription>
+                </Alert>
+              )}
+
               {/* Add Comment Form */}
               {canReview && (
                 <div className="space-y-3 pb-4 border-b">
@@ -559,7 +1082,7 @@ export default function SubmissionDetailPage({
               <ScrollArea className="h-[400px]">
                 {sectionComments.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground text-sm">
-                    No comments for Section {activeSection}
+                    No comments for this section
                   </div>
                 ) : (
                   <div className="space-y-3">
