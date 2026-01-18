@@ -10,6 +10,8 @@ import {
 import { StaffTable } from "@/components/forms/staff-table";
 import { CourseTable } from "@/components/forms/course-table";
 import { CourseDescriptionForm } from "@/components/forms/course-description-form";
+import { BulletinPreview } from "@/components/preview/bulletin-preview";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -323,10 +325,14 @@ export default function SubmissionDetailPage({
 
       if (response.ok) {
         setHasChanges(false);
+        toast.success("Draft saved successfully");
         fetchSubmission();
+      } else {
+        toast.error("Failed to save draft");
       }
     } catch (err) {
       console.error("Failed to save:", err);
+      toast.error("Failed to save draft");
     } finally {
       setIsSaving(false);
     }
@@ -371,10 +377,20 @@ export default function SubmissionDetailPage({
       });
 
       if (response.ok) {
+        const messages: Record<string, string> = {
+          SUBMIT: "Submission sent for review",
+          APPROVE: "Submission approved",
+          REJECT: "Submission rejected",
+          RETURN: "Changes requested",
+        };
+        toast.success(messages[action] || "Action completed");
         fetchSubmission();
+      } else {
+        toast.error("Failed to complete action");
       }
     } catch (err) {
       console.error("Failed to transition:", err);
+      toast.error("Failed to complete action");
     }
   };
 
@@ -552,6 +568,15 @@ export default function SubmissionDetailPage({
                   </Button>
                 </>
               )}
+              {/* Preview button - available to all viewers */}
+              <BulletinPreview
+                submission={
+                  submission as Parameters<
+                    typeof BulletinPreview
+                  >[0]["submission"]
+                }
+                departmentId={submission.programme.department.id}
+              />
             </div>
             <div className="flex items-center gap-2">
               {canReview && submission.status === "IN_REVIEW" && (

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Save, Users } from "lucide-react";
 
 interface StaffMember {
+  [key: string]: unknown;
   id?: string;
   name: string;
   position: string;

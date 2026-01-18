@@ -4,6 +4,7 @@ import "./globals.css";
 import { UserProvider } from "@/contexts/user-context";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { Toaster } from "@/components/ui/sonner";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -38,6 +39,7 @@ export default function RootLayout({
               <main className="p-6">{children}</main>
             </div>
           </div>
+          <Toaster richColors position="top-right" />
         </UserProvider>
       </body>
     </html>

@@ -10,6 +10,7 @@ import { Loader2, Save, BookOpen, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface Course {
+  [key: string]: unknown;
   id?: string;
   code: string;
   title: string;
@@ -320,10 +321,12 @@ export function CourseTable({
             const totals = getTotals(level);
             return (
               <TabsContent key={level} value={level.toString()}>
-                <DynamicTable
+                <DynamicTable<Course>
                   columns={getColumns()}
                   data={coursesByLevel[level] || []}
-                  onChange={(courses) => handleLevelChange(level, courses)}
+                  onChange={(courses) =>
+                    handleLevelChange(level, courses as Course[])
+                  }
                   createEmptyRow={() => createEmptyCourse(level)}
                   disabled={disabled}
                 />
