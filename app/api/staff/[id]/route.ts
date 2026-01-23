@@ -26,16 +26,6 @@ export async function GET(
             },
           },
         },
-        courses: {
-          select: {
-            id: true,
-            code: true,
-            title: true,
-            level: true,
-            semester: true,
-            units: true,
-          },
-        },
       },
     });
 
@@ -61,7 +51,19 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { name, position, specialization, email, type, isActive } = body;
+    const {
+      title,
+      gender,
+      surname,
+      middleName,
+      firstName,
+      highestQualification,
+      academicRank,
+      specialization,
+      email,
+      type,
+      isActive,
+    } = body;
 
     // Check if staff exists
     const existing = await prisma.staff.findUnique({ where: { id } });
@@ -71,11 +73,17 @@ export async function PATCH(
 
     // Build update data
     const updateData: Record<string, unknown> = {};
-    if (name !== undefined) updateData.name = name;
-    if (position !== undefined) updateData.position = position;
+    if (title !== undefined) updateData.title = title;
+    if (gender !== undefined) updateData.gender = gender;
+    if (surname !== undefined) updateData.surname = surname;
+    if (middleName !== undefined) updateData.middleName = middleName || null;
+    if (firstName !== undefined) updateData.firstName = firstName;
+    if (highestQualification !== undefined)
+      updateData.highestQualification = highestQualification;
+    if (academicRank !== undefined) updateData.academicRank = academicRank;
     if (specialization !== undefined)
-      updateData.specialization = specialization;
-    if (email !== undefined) updateData.email = email;
+      updateData.specialization = specialization || null;
+    if (email !== undefined) updateData.email = email || null;
     if (type !== undefined) {
       const validTypes = ["ACADEMIC", "ADJUNCT", "NON_ACADEMIC"];
       if (!validTypes.includes(type)) {
@@ -123,22 +131,10 @@ export async function DELETE(
     // Check if staff exists
     const existing = await prisma.staff.findUnique({
       where: { id },
-      include: { _count: { select: { courses: true } } },
     });
 
     if (!existing) {
       return NextResponse.json({ error: "Staff not found" }, { status: 404 });
-    }
-
-    // Don't allow deletion if staff is assigned to courses
-    if (existing._count.courses > 0) {
-      return NextResponse.json(
-        {
-          error:
-            "Cannot delete staff member assigned to courses. Remove course assignments first or deactivate instead.",
-        },
-        { status: 400 },
-      );
     }
 
     await prisma.staff.delete({ where: { id } });
