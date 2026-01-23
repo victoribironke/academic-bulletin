@@ -88,6 +88,27 @@ const rolePermissions: Record<UserRole, Permission[]> = {
     "manage:staff",
     "admin:all",
   ],
+  SUPER_ADMIN: [
+    // Super Admin has all permissions
+    "view:dashboard",
+    "view:submissions",
+    "create:submission",
+    "edit:submission",
+    "comment:submission",
+    "review:submission",
+    "approve:submission",
+    "view:schools",
+    "manage:schools",
+    "view:departments",
+    "manage:departments",
+    "view:programmes",
+    "manage:programmes",
+    "view:users",
+    "manage:users",
+    "view:staff",
+    "manage:staff",
+    "admin:all",
+  ],
 };
 
 /**
@@ -121,6 +142,7 @@ export function getRoleDisplayName(role: UserRole): string {
     HOD: "Head of Department",
     DEAN: "Dean",
     ADMIN: "Academic Planning Admin",
+    SUPER_ADMIN: "Super Administrator",
   };
   return names[role];
 }
