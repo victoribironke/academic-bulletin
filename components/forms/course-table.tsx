@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Save, BookOpen, AlertCircle } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Loader2, Save, BookOpen } from "lucide-react";
 
+// Updated Course interface - removed lecturerId, added prerequisites
 interface Course {
   [key: string]: unknown;
   id?: string;
@@ -18,14 +18,8 @@ interface Course {
   status: "CORE" | "ELECTIVE";
   semester: number;
   level: number;
-  lecturerId: string;
+  prerequisites: string; // Text field for prerequisites
   isNew?: boolean;
-}
-
-interface Staff {
-  id: string;
-  name: string;
-  position: string;
 }
 
 interface CourseTableProps {
@@ -51,27 +45,21 @@ export function CourseTable({
     300: [],
     400: [],
   });
-  const [staff, setStaff] = useState<Staff[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [activeLevel, setActiveLevel] = useState("100");
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   const fetchData = useCallback(async () => {
     try {
       setIsLoading(true);
 
-      // Fetch courses and staff in parallel
-      const [coursesRes, staffRes] = await Promise.all([
-        fetch(`/api/courses?submissionId=${submissionId}`),
-        fetch(`/api/staff?departmentId=${departmentId}&type=ACADEMIC`),
-      ]);
+      const coursesRes = await fetch(
+        `/api/courses?submissionId=${submissionId}`,
+      );
 
       if (!coursesRes.ok) throw new Error("Failed to fetch courses");
-      if (!staffRes.ok) throw new Error("Failed to fetch staff");
 
       const courses = await coursesRes.json();
-      const staffData = await staffRes.json();
 
       // Group courses by level
       const grouped: Record<number, Course[]> = {
@@ -87,13 +75,12 @@ export function CourseTable({
       });
 
       setCoursesByLevel(grouped);
-      setStaff(staffData);
     } catch (error) {
       console.error("Failed to fetch data:", error);
     } finally {
       setIsLoading(false);
     }
-  }, [submissionId, departmentId]);
+  }, [submissionId]);
 
   useEffect(() => {
     if (submissionId && departmentId) {
@@ -101,35 +88,27 @@ export function CourseTable({
     }
   }, [submissionId, departmentId, fetchData]);
 
-  // Validate courses - check that all have lecturers
+  // Validate courses - basic validation
   useEffect(() => {
     const errors: string[] = [];
-    let hasCoursesWithoutLecturer = false;
+    let hasIncompleteCourses = false;
 
     LEVELS.forEach((level) => {
       const courses = coursesByLevel[level] || [];
       courses.forEach((course) => {
-        if (course.code && course.title && !course.lecturerId) {
-          hasCoursesWithoutLecturer = true;
+        if (course.code && !course.title) {
+          hasIncompleteCourses = true;
         }
       });
     });
 
-    if (hasCoursesWithoutLecturer) {
-      errors.push(
-        "All courses must have a lecturer assigned before submission",
-      );
+    if (hasIncompleteCourses) {
+      errors.push("All courses must have both code and title");
     }
 
-    setValidationErrors(errors);
+    onValidationChange?.(errors.length === 0, errors);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coursesByLevel]);
-
-  // Notify parent of validation changes separately
-  useEffect(() => {
-    onValidationChange?.(validationErrors.length === 0, validationErrors);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [validationErrors]);
 
   const createEmptyCourse = (level: number): Course => ({
     code: "",
@@ -138,11 +117,11 @@ export function CourseTable({
     status: "CORE",
     semester: 1,
     level,
-    lecturerId: "",
+    prerequisites: "",
     isNew: true,
   });
 
-  // Build columns with staff dropdown
+  // Build columns - removed lecturer, added prerequisites
   const getColumns = (): Column<Course>[] => [
     {
       key: "code",
@@ -156,7 +135,7 @@ export function CourseTable({
       key: "title",
       header: "Course Title",
       type: "text",
-      placeholder: "e.g., Introduction to Computing Sciences",
+      placeholder: "e.g., Introduction to computing sciences",
       required: true,
     },
     {
@@ -189,11 +168,10 @@ export function CourseTable({
       width: "70px",
     },
     {
-      key: "lecturerId",
-      header: "Lecturer",
-      type: "select",
-      options: staff.map((s) => ({ value: s.id, label: s.name })),
-      required: true,
+      key: "prerequisites",
+      header: "Prerequisites",
+      type: "text",
+      placeholder: "e.g., COS 101, MTH 101",
       width: "200px",
     },
   ];
@@ -290,17 +268,6 @@ export function CourseTable({
         )}
       </CardHeader>
       <CardContent className="space-y-4">
-        {validationErrors.length > 0 && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              {validationErrors.map((error, i) => (
-                <div key={i}>{error}</div>
-              ))}
-            </AlertDescription>
-          </Alert>
-        )}
-
         <Tabs value={activeLevel} onValueChange={setActiveLevel}>
           <TabsList className="mb-4">
             {LEVELS.map((level) => {
