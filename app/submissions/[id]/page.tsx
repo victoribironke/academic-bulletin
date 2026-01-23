@@ -244,6 +244,11 @@ export default function SubmissionDetailPage({
     hasPermission("comment:submission") || hasPermission("review:submission");
   const canReview = hasPermission("review:submission");
   const canApprove = hasPermission("approve:submission");
+  // Only HOD and above can officially submit (not coordinators)
+  const canSubmit =
+    currentUser &&
+    ["HOD", "ADMIN", "SUPER_ADMIN"].includes(currentUser.role) &&
+    submission?.status === "DRAFT";
 
   const fetchSubmission = useCallback(async () => {
     try {
@@ -546,27 +551,26 @@ export default function SubmissionDetailPage({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               {canEdit && (
-                <>
-                  <Button
-                    onClick={handleSave}
-                    disabled={!hasChanges || isSaving}
-                  >
-                    {isSaving ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Save className="mr-2 h-4 w-4" />
-                    )}
-                    Save Draft
-                  </Button>
-                  <Button
-                    variant="default"
-                    onClick={() => handleTransition("SUBMIT")}
-                    disabled={submission.status !== "DRAFT"}
-                  >
-                    <Send className="mr-2 h-4 w-4" />
-                    Submit for Review
-                  </Button>
-                </>
+                <Button
+                  onClick={handleSave}
+                  disabled={!hasChanges || isSaving}
+                >
+                  {isSaving ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
+                  Save Draft
+                </Button>
+              )}
+              {canSubmit && (
+                <Button
+                  variant="default"
+                  onClick={() => handleTransition("SUBMIT")}
+                >
+                  <Send className="mr-2 h-4 w-4" />
+                  Submit for Review
+                </Button>
               )}
               {/* Preview button - available to all viewers */}
               <BulletinPreview

@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import {
+  formatCourseTitle,
+  formatCourseCode,
+  isValidCourseCode,
+} from "@/lib/validation/name-format";
 
 // GET /api/courses - Get courses for a submission
 export async function GET(request: Request) {
@@ -85,6 +90,21 @@ export async function POST(request: Request) {
       );
     }
 
+    // Validate course code format
+    if (!isValidCourseCode(code)) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid course code format. Expected format: AAA 123 (e.g., COS 101)",
+        },
+        { status: 400 },
+      );
+    }
+
+    // Format course code and title
+    const formattedCode = formatCourseCode(code);
+    const formattedTitle = formatCourseTitle(title);
+
     // Validate level
     const validLevels = [100, 200, 300, 400, 500, 600];
     if (!validLevels.includes(level)) {
@@ -104,7 +124,7 @@ export async function POST(request: Request) {
 
     // Check for duplicate course code in this submission
     const existing = await prisma.course.findUnique({
-      where: { code_submissionId: { code, submissionId } },
+      where: { code_submissionId: { code: formattedCode, submissionId } },
     });
 
     if (existing) {
@@ -116,8 +136,8 @@ export async function POST(request: Request) {
 
     const course = await prisma.course.create({
       data: {
-        code,
-        title,
+        code: formattedCode,
+        title: formattedTitle,
         units,
         status: status || "CORE",
         semester,

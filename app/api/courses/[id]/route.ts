@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import {
+  formatCourseTitle,
+  formatCourseCode,
+  isValidCourseCode,
+} from "@/lib/validation/name-format";
 
 // GET /api/courses/[id] - Get single course with description
 export async function GET(
@@ -71,10 +76,21 @@ export async function PATCH(
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
     }
 
-    // Build update data
+    // Validate course code if provided
+    if (code !== undefined && !isValidCourseCode(code)) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid course code format. Expected format: AAA 123 (e.g., COS 101)",
+        },
+        { status: 400 },
+      );
+    }
+
+    // Build update data with formatting
     const updateData: Record<string, unknown> = {};
-    if (code !== undefined) updateData.code = code;
-    if (title !== undefined) updateData.title = title;
+    if (code !== undefined) updateData.code = formatCourseCode(code);
+    if (title !== undefined) updateData.title = formatCourseTitle(title);
     if (units !== undefined) updateData.units = units;
     if (status !== undefined) updateData.status = status;
     if (semester !== undefined) {

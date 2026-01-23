@@ -124,9 +124,11 @@ export function DynamicTable<T extends Record<string, unknown>>({
         );
 
       case "select":
+        // Convert value to string for comparison (handles number values from DB)
+        const stringValue = value !== undefined && value !== null ? String(value) : "";
         return (
           <Select
-            value={(value as string) || ""}
+            value={stringValue}
             onValueChange={(v) => updateCell(rowIndex, column.key, v)}
           >
             <SelectTrigger className="h-8 text-sm">

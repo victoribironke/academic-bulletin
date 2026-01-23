@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { toTitleCase, isValidName } from "@/lib/validation/name-format";
 
 // GET /api/staff/[id] - Get single staff member
 export async function GET(
@@ -71,13 +72,43 @@ export async function PATCH(
       return NextResponse.json({ error: "Staff not found" }, { status: 404 });
     }
 
-    // Build update data
+    // Validate names if provided
+    if (surname !== undefined && !isValidName(surname)) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid surname. Only letters, spaces, hyphens, and apostrophes allowed",
+        },
+        { status: 400 },
+      );
+    }
+    if (firstName !== undefined && !isValidName(firstName)) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid first name. Only letters, spaces, hyphens, and apostrophes allowed",
+        },
+        { status: 400 },
+      );
+    }
+    if (middleName && !isValidName(middleName)) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid middle name. Only letters, spaces, hyphens, and apostrophes allowed",
+        },
+        { status: 400 },
+      );
+    }
+
+    // Build update data with name formatting
     const updateData: Record<string, unknown> = {};
     if (title !== undefined) updateData.title = title;
     if (gender !== undefined) updateData.gender = gender;
-    if (surname !== undefined) updateData.surname = surname;
-    if (middleName !== undefined) updateData.middleName = middleName || null;
-    if (firstName !== undefined) updateData.firstName = firstName;
+    if (surname !== undefined) updateData.surname = toTitleCase(surname);
+    if (middleName !== undefined)
+      updateData.middleName = middleName ? toTitleCase(middleName) : null;
+    if (firstName !== undefined) updateData.firstName = toTitleCase(firstName);
     if (highestQualification !== undefined)
       updateData.highestQualification = highestQualification;
     if (academicRank !== undefined) updateData.academicRank = academicRank;
