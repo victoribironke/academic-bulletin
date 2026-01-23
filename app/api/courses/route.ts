@@ -21,19 +21,21 @@ export async function GET(request: Request) {
     const courses = await prisma.course.findMany({
       where,
       include: {
-        lecturer: {
-          select: {
-            id: true,
-            name: true,
-            position: true,
-          },
-        },
         description: {
           select: {
             id: true,
             learningOutcomes: true,
             courseContent: true,
             labWork: true,
+          },
+        },
+        masterCourse: {
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            type: true,
+            ownership: true,
           },
         },
       },
@@ -62,7 +64,8 @@ export async function POST(request: Request) {
       status,
       semester,
       level,
-      lecturerId,
+      prerequisites,
+      masterCourseId,
     } = body;
 
     if (
@@ -120,14 +123,16 @@ export async function POST(request: Request) {
         semester,
         level,
         submissionId,
-        lecturerId: lecturerId || null,
+        prerequisites: prerequisites || null,
+        masterCourseId: masterCourseId || null,
       },
       include: {
-        lecturer: {
+        description: true,
+        masterCourse: {
           select: {
             id: true,
-            name: true,
-            position: true,
+            code: true,
+            title: true,
           },
         },
       },
