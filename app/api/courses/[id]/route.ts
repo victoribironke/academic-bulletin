@@ -12,15 +12,16 @@ export async function GET(
     const course = await prisma.course.findUnique({
       where: { id },
       include: {
-        lecturer: {
+        description: true,
+        masterCourse: {
           select: {
             id: true,
-            name: true,
-            position: true,
-            specialization: true,
+            code: true,
+            title: true,
+            type: true,
+            ownership: true,
           },
         },
-        description: true,
         submission: {
           select: {
             id: true,
@@ -53,7 +54,16 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { code, title, units, status, semester, level, lecturerId } = body;
+    const {
+      code,
+      title,
+      units,
+      status,
+      semester,
+      level,
+      prerequisites,
+      masterCourseId,
+    } = body;
 
     // Check if course exists
     const existing = await prisma.course.findUnique({ where: { id } });
@@ -77,17 +87,21 @@ export async function PATCH(
       updateData.semester = semester;
     }
     if (level !== undefined) updateData.level = level;
-    if (lecturerId !== undefined) updateData.lecturerId = lecturerId || null;
+    if (prerequisites !== undefined)
+      updateData.prerequisites = prerequisites || null;
+    if (masterCourseId !== undefined)
+      updateData.masterCourseId = masterCourseId || null;
 
     const course = await prisma.course.update({
       where: { id },
       data: updateData,
       include: {
-        lecturer: {
+        description: true,
+        masterCourse: {
           select: {
             id: true,
-            name: true,
-            position: true,
+            code: true,
+            title: true,
           },
         },
       },
