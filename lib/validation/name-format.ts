@@ -59,14 +59,66 @@ export function toTitleCase(str: string): string {
 }
 
 /**
- * Formats a course title to sentence case
- * Preserves acronyms and special formatting
+ * Formats a course title to title case
+ * Capitalizes first letter of each word EXCEPT prepositions and conjunctions
+ * Always capitalizes the first word
+ * Preserves acronyms
+ *
+ * Example: "introduction to computing" → "Introduction to Computing"
  */
 export function formatCourseTitle(title: string): string {
   if (!title) return "";
 
-  // Common acronyms to preserve
-  const acronyms = [
+  // Words to keep lowercase (prepositions, conjunctions, articles)
+  const lowercaseWords = new Set([
+    // Articles
+    "a",
+    "an",
+    "the",
+    // Coordinating conjunctions
+    "and",
+    "but",
+    "or",
+    "nor",
+    "for",
+    "yet",
+    "so",
+    // Common prepositions
+    "at",
+    "by",
+    "in",
+    "of",
+    "on",
+    "to",
+    "up",
+    "as",
+    "if",
+    "off",
+    "per",
+    "via",
+    "into",
+    "onto",
+    "upon",
+    "with",
+    "from",
+    "over",
+    "under",
+    "about",
+    "above",
+    "below",
+    "between",
+    "through",
+    "during",
+    "before",
+    "after",
+    "against",
+    "among",
+    "within",
+    "without",
+  ]);
+
+  // Common acronyms to preserve (always uppercase)
+  const acronyms = new Set([
     "IT",
     "AI",
     "ML",
@@ -83,17 +135,76 @@ export function formatCourseTitle(title: string): string {
     "CSS",
     "GDS",
     "GST",
-  ];
+    "CPU",
+    "GPU",
+    "RAM",
+    "ROM",
+    "LAN",
+    "WAN",
+    "TCP",
+    "IP",
+    "HTTP",
+    "HTTPS",
+    "OOP",
+    "DBMS",
+    "RDBMS",
+    "HCI",
+    "GUI",
+    "CLI",
+    "IDE",
+    "SDK",
+    "MVC",
+    "REST",
+    "SOAP",
+    "JSON",
+    "XML",
+    "PHP",
+    "CAD",
+    "CAM",
+    "GIS",
+    "GPS",
+    "IOT",
+    "VR",
+    "AR",
+    "ERP",
+    "CRM",
+    "HR",
+    "PR",
+    "QA",
+    "R&D",
+    "CEO",
+    "CFO",
+    "CTO",
+    "MBA",
+    "BSC",
+    "MSC",
+    "PHD",
+  ]);
 
-  let formatted = toSentenceCase(title.trim());
+  const words = title.trim().toLowerCase().split(/\s+/);
 
-  // Restore acronyms
-  acronyms.forEach((acronym) => {
-    const regex = new RegExp(`\\b${acronym.toLowerCase()}\\b`, "gi");
-    formatted = formatted.replace(regex, acronym);
+  const formatted = words.map((word, index) => {
+    // Check if word (uppercase) is an acronym
+    const upperWord = word.toUpperCase();
+    if (acronyms.has(upperWord)) {
+      return upperWord;
+    }
+
+    // Always capitalize the first word
+    if (index === 0) {
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    }
+
+    // Keep prepositions/conjunctions lowercase
+    if (lowercaseWords.has(word)) {
+      return word;
+    }
+
+    // Capitalize first letter of other words
+    return word.charAt(0).toUpperCase() + word.slice(1);
   });
 
-  return formatted;
+  return formatted.join(" ");
 }
 
 /**
