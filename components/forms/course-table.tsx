@@ -6,7 +6,24 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Save, BookOpen } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Loader2, Save, BookOpen, Import } from "lucide-react";
 
 // Updated Course interface - removed lecturerId, added prerequisites
 interface Course {
@@ -19,7 +36,22 @@ interface Course {
   semester: number;
   level: number;
   prerequisites: string; // Text field for prerequisites
+  masterCourseId?: string;
   isNew?: boolean;
+}
+
+// Master course from registry
+interface MasterCourse {
+  id: string;
+  code: string;
+  title: string;
+  units: number;
+  type: string;
+  level: number;
+  semester: number;
+  ownership: string;
+  ownerDepartment?: { code: string; name: string };
+  ownerSchool?: { code: string; name: string };
 }
 
 interface CourseTableProps {
@@ -51,6 +83,14 @@ export function CourseTable({
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [activeLevel, setActiveLevel] = useState("100");
+
+  // Import from registry state
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [masterCourses, setMasterCourses] = useState<MasterCourse[]>([]);
+  const [selectedMasterCourses, setSelectedMasterCourses] = useState<
+    Set<string>
+  >(new Set());
+  const [isLoadingMasterCourses, setIsLoadingMasterCourses] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -128,6 +168,87 @@ export function CourseTable({
     prerequisites: "",
     isNew: true,
   });
+
+  // Fetch master courses for import dialog
+  const fetchMasterCourses = async () => {
+    setIsLoadingMasterCourses(true);
+    try {
+      // Fetch all available master courses (could filter by department/school)
+      const res = await fetch(`/api/master-courses?departmentId=${departmentId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setMasterCourses(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch master courses:", error);
+    } finally {
+      setIsLoadingMasterCourses(false);
+    }
+  };
+
+  // Open import dialog and load courses
+  const openImportDialog = async () => {
+    setImportDialogOpen(true);
+    setSelectedMasterCourses(new Set());
+    await fetchMasterCourses();
+  };
+
+  // Toggle master course selection
+  const toggleMasterCourseSelection = (courseId: string) => {
+    setSelectedMasterCourses((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(courseId)) {
+        newSet.delete(courseId);
+      } else {
+        newSet.add(courseId);
+      }
+      return newSet;
+    });
+  };
+
+  // Import selected master courses
+  const importSelectedCourses = () => {
+    const selectedCourses = masterCourses.filter((mc) =>
+      selectedMasterCourses.has(mc.id),
+    );
+
+    // Get existing course codes to avoid duplicates
+    const existingCodes = new Set<string>();
+    LEVELS.forEach((level) => {
+      (coursesByLevel[level] || []).forEach((c) => {
+        existingCodes.add(c.code);
+      });
+    });
+
+    // Add each selected course to the appropriate level
+    const newCoursesByLevel = { ...coursesByLevel };
+
+    selectedCourses.forEach((mc) => {
+      // Skip if already exists
+      if (existingCodes.has(mc.code)) return;
+
+      const level = mc.level as 100 | 200 | 300 | 400;
+      if (!newCoursesByLevel[level]) return;
+
+      const newCourse: Course = {
+        code: mc.code,
+        title: mc.title,
+        units: mc.units,
+        status: mc.type === "ELECTIVE" ? "ELECTIVE" : "CORE",
+        semester: mc.semester,
+        level: mc.level,
+        prerequisites: "",
+        masterCourseId: mc.id,
+        isNew: true,
+      };
+
+      newCoursesByLevel[level] = [...newCoursesByLevel[level], newCourse];
+    });
+
+    setCoursesByLevel(newCoursesByLevel);
+    setImportDialogOpen(false);
+    setSelectedMasterCourses(new Set());
+  };
 
   // Build columns - removed lecturer, added prerequisites
   const getColumns = (): Column<Course>[] => [
@@ -297,14 +418,20 @@ export function CourseTable({
           <CardTitle>Course Structure</CardTitle>
         </div>
         {!disabled && (
-          <Button onClick={saveCourses} disabled={isSaving}>
-            {isSaving ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Save className="h-4 w-4 mr-2" />
-            )}
-            Save All
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={openImportDialog}>
+              <Import className="h-4 w-4 mr-2" />
+              Import from Registry
+            </Button>
+            <Button onClick={saveCourses} disabled={isSaving}>
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4 mr-2" />
+              )}
+              Save All
+            </Button>
+          </div>
         )}
       </CardHeader>
       <CardContent className="space-y-4">
@@ -357,6 +484,118 @@ export function CourseTable({
           })}
         </Tabs>
       </CardContent>
+
+      {/* Import from Registry Dialog */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Import Courses from Registry</DialogTitle>
+          </DialogHeader>
+
+          {isLoadingMasterCourses ? (
+            <div className="flex items-center justify-center h-48">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : masterCourses.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No courses found in the registry for this department.
+              <br />
+              <span className="text-sm">
+                Ask an administrator to add courses to the Master Course
+                Registry.
+              </span>
+            </div>
+          ) : (
+            <ScrollArea className="h-[400px]">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12"></TableHead>
+                    <TableHead>Code</TableHead>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Units</TableHead>
+                    <TableHead>Level</TableHead>
+                    <TableHead>Sem</TableHead>
+                    <TableHead>Type</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {masterCourses.map((mc) => {
+                    // Check if already added
+                    const existingCodes = new Set<string>();
+                    LEVELS.forEach((level) => {
+                      (coursesByLevel[level] || []).forEach((c) => {
+                        existingCodes.add(c.code);
+                      });
+                    });
+                    const isAlreadyAdded = existingCodes.has(mc.code);
+
+                    return (
+                      <TableRow
+                        key={mc.id}
+                        className={isAlreadyAdded ? "opacity-50" : ""}
+                      >
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedMasterCourses.has(mc.id)}
+                            onCheckedChange={() =>
+                              toggleMasterCourseSelection(mc.id)
+                            }
+                            disabled={isAlreadyAdded}
+                          />
+                        </TableCell>
+                        <TableCell className="font-mono">{mc.code}</TableCell>
+                        <TableCell>{mc.title}</TableCell>
+                        <TableCell>{mc.units}</TableCell>
+                        <TableCell>{mc.level}</TableCell>
+                        <TableCell>{mc.semester}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={
+                              mc.type === "CORE"
+                                ? "bg-blue-50"
+                                : mc.type === "ELECTIVE"
+                                  ? "bg-purple-50"
+                                  : mc.type === "GENERAL"
+                                    ? "bg-green-50"
+                                    : ""
+                            }
+                          >
+                            {mc.type}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          )}
+
+          <DialogFooter>
+            <div className="flex items-center justify-between w-full">
+              <span className="text-sm text-muted-foreground">
+                {selectedMasterCourses.size} course(s) selected
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setImportDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={importSelectedCourses}
+                  disabled={selectedMasterCourses.size === 0}
+                >
+                  Import Selected
+                </Button>
+              </div>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
