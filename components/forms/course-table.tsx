@@ -199,10 +199,25 @@ export function CourseTable({
           };
 
           if (course.isNew || !course.id) {
+            // Try to find matching master course first
+            let masterCourseId = undefined;
+            try {
+              const search = await fetch(
+                `/api/master-courses?code=${course.code}`,
+              );
+              if (search.ok) {
+                const results = await search.json();
+                const match = results.find((m: any) => m.code === course.code);
+                if (match) masterCourseId = match.id;
+              }
+            } catch (e) {
+              // Ignore lookup error
+            }
+
             await fetch("/api/courses", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(courseData),
+              body: JSON.stringify({ ...courseData, masterCourseId }),
             });
           } else {
             await fetch(`/api/courses/${course.id}`, {

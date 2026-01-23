@@ -30,6 +30,7 @@ export interface BulletinCourse {
 }
 
 export interface BulletinStaff {
+  id: string;
   fullName: string;
   title: string;
   rank: string;
@@ -75,9 +76,11 @@ export interface BulletinData {
 /**
  * Generate bulletin data for a single programme (department level)
  */
+// Update signature
 export async function generateDepartmentBulletin(
   programmeId: string,
   academicYear: string,
+  submissionId?: string,
 ): Promise<BulletinData> {
   const programme = await prisma.programme.findUnique({
     where: { id: programmeId },
@@ -95,13 +98,15 @@ export async function generateDepartmentBulletin(
     throw new Error("Programme not found");
   }
 
-  // Get latest approved submission for this programme
+  // Get submission - either specific ID or latest approved
   const submission = await prisma.submission.findFirst({
-    where: {
-      programmeId,
-      academicYear,
-      status: "APPROVED",
-    },
+    where: submissionId
+      ? { id: submissionId }
+      : {
+          programmeId,
+          academicYear,
+          status: "APPROVED",
+        },
     include: {
       courses: {
         include: {
@@ -121,6 +126,7 @@ export async function generateDepartmentBulletin(
   // Format staff with new structured fields
   const formattedStaff: BulletinStaff[] = programme.department.staff.map(
     (s) => ({
+      id: s.id,
       fullName: formatStaffName({
         title: s.title,
         surname: s.surname,
@@ -244,6 +250,7 @@ export async function generateSchoolBulletin(
       });
 
       const formattedStaff: BulletinStaff[] = dept.staff.map((s) => ({
+        id: s.id,
         fullName: formatStaffName({
           title: s.title,
           surname: s.surname,
@@ -362,6 +369,7 @@ export async function generateInstitutionBulletin(
         });
 
         const formattedStaff: BulletinStaff[] = dept.staff.map((s) => ({
+          id: s.id,
           fullName: formatStaffName({
             title: s.title,
             surname: s.surname,

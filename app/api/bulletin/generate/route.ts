@@ -23,6 +23,8 @@ export async function GET(request: Request) {
       );
     }
 
+    const submissionId = searchParams.get("submissionId");
+
     // Validate level
     if (!["department", "school", "institution"].includes(level)) {
       return NextResponse.json(
@@ -44,6 +46,7 @@ export async function GET(request: Request) {
         bulletinData = await generateDepartmentBulletin(
           programmeId,
           academicYear,
+          submissionId || undefined,
         );
         break;
 

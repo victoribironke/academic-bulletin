@@ -39,6 +39,7 @@ import {
   Users,
   School,
   MessageSquare,
+  BookOpen,
 } from "lucide-react";
 
 interface DashboardStats {
@@ -437,6 +438,38 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </Link>
+              {(currentUser?.role === "ADMIN" ||
+                currentUser?.role === "SUPER_ADMIN" ||
+                currentUser?.role === "DEAN" ||
+                currentUser?.role === "HOD") && (
+                <Link href="/master-courses">
+                  <div className="flex items-center gap-3 p-4 rounded-lg border hover:bg-muted transition-colors col-span-2 md:col-span-1">
+                    <BookOpen className="h-8 w-8 text-indigo-500" />
+                    <div>
+                      <p className="text-lg font-bold">Master Courses</p>
+                      <p className="text-sm text-muted-foreground">
+                        Manage Registry
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+              )}
+
+              {(currentUser?.role === "ADMIN" ||
+                currentUser?.role === "SUPER_ADMIN" ||
+                currentUser?.role === "DEAN") && (
+                <Link href="/bulletins">
+                  <div className="flex items-center gap-3 p-4 rounded-lg border hover:bg-muted transition-colors col-span-2 md:col-span-1">
+                    <BookOpen className="h-8 w-8 text-indigo-500" />
+                    <div>
+                      <p className="text-lg font-bold">Academic Bulletins</p>
+                      <p className="text-sm text-muted-foreground">
+                        Generate Reports
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+              )}
             </div>
           </CardContent>
         </Card>
