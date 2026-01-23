@@ -344,11 +344,12 @@ export function CourseTable({
               );
               if (search.ok) {
                 const results = await search.json();
-                const match = results.find((m: any) => m.code === course.code);
+                const match = results.find((m: MasterCourse) => m.code === course.code);
                 if (match) masterCourseId = match.id;
               }
             } catch (e) {
               // Ignore lookup error
+              console.error("Failed to find matching master course:", e);
             }
 
             await fetch("/api/courses", {

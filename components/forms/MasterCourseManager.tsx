@@ -29,7 +29,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, BookOpen, Link, Trash2 } from "lucide-react";
+import { Loader2, Plus, BookOpen, Link } from "lucide-react";
 
 // Types
 interface MasterCourse {

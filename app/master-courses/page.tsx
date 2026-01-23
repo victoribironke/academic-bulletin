@@ -2,7 +2,6 @@
 
 import { useUser } from "@/contexts/user-context";
 import { MasterCourseManager } from "@/components/forms/MasterCourseManager";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";

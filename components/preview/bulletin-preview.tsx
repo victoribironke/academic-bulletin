@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,14 +10,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
 import { Loader2, Eye, Printer, Download } from "lucide-react";
 import {
   BulletinData,
-  BulletinProgramme,
   BulletinCourse,
-  BulletinStaff,
 } from "@/lib/bulletin/generation";
 import { BulletinProgrammeView } from "@/components/preview/bulletin-programme-view";
 
@@ -102,20 +98,20 @@ export function BulletinPreview({ submission }: BulletinPreviewProps) {
   };
 
   // Helper to group courses if data is loaded
-  const getGroupedCourses = (courses: BulletinCourse[]) => {
-    return courses.reduce(
-      (acc, course) => {
-        if (!acc[course.level]) acc[course.level] = { sem1: [], sem2: [] };
-        if (course.semester === 1) {
-          acc[course.level].sem1.push(course);
-        } else {
-          acc[course.level].sem2.push(course);
-        }
-        return acc;
-      },
-      {} as Record<number, { sem1: BulletinCourse[]; sem2: BulletinCourse[] }>,
-    );
-  };
+  // const getGroupedCourses = (courses: BulletinCourse[]) => {
+  //   return courses.reduce(
+  //     (acc, course) => {
+  //       if (!acc[course.level]) acc[course.level] = { sem1: [], sem2: [] };
+  //       if (course.semester === 1) {
+  //         acc[course.level].sem1.push(course);
+  //       } else {
+  //         acc[course.level].sem2.push(course);
+  //       }
+  //       return acc;
+  //     },
+  //     {} as Record<number, { sem1: BulletinCourse[]; sem2: BulletinCourse[] }>,
+  //   );
+  // };
 
   if (!data && !isLoading && isOpen && error) {
     return (
@@ -134,15 +130,15 @@ export function BulletinPreview({ submission }: BulletinPreviewProps) {
   }
 
   const programmeData = data?.programmes[0];
-  const academicStaff =
-    programmeData?.staff.filter((s) => s.type === "ACADEMIC") || [];
-  const adjunctStaff =
-    programmeData?.staff.filter((s) => s.type === "ADJUNCT") || [];
-  const nonAcademicStaff =
-    programmeData?.staff.filter((s) => s.type === "NON_ACADEMIC") || [];
-  const groupedCourses = programmeData
-    ? getGroupedCourses(programmeData.courses)
-    : {};
+  // const academicStaff =
+  //   programmeData?.staff.filter((s) => s.type === "ACADEMIC") || [];
+  // const adjunctStaff =
+  //   programmeData?.staff.filter((s) => s.type === "ADJUNCT") || [];
+  // const nonAcademicStaff =
+  //   programmeData?.staff.filter((s) => s.type === "NON_ACADEMIC") || [];
+  // const groupedCourses = programmeData
+  //   ? getGroupedCourses(programmeData.courses)
+  //   : {};
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
