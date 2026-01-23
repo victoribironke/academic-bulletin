@@ -8,15 +8,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Save, Users } from "lucide-react";
 
+// Updated StaffMember interface with new structured fields
 interface StaffMember {
   [key: string]: unknown;
   id?: string;
-  name: string;
-  position: string;
+  title: string;
+  gender: string;
+  surname: string;
+  middleName: string;
+  firstName: string;
+  highestQualification: string;
+  academicRank: string;
   specialization: string;
   email: string;
   type: "ACADEMIC" | "ADJUNCT" | "NON_ACADEMIC";
   isNew?: boolean;
+  fullName?: string; // Computed from API
 }
 
 interface StaffTableProps {
@@ -24,41 +31,98 @@ interface StaffTableProps {
   disabled?: boolean;
 }
 
-const positionOptions = [
-  { value: "Professor", label: "Professor" },
-  { value: "Associate Professor", label: "Associate Professor" },
-  { value: "Senior Lecturer", label: "Senior Lecturer" },
-  { value: "Lecturer I", label: "Lecturer I" },
-  { value: "Lecturer II", label: "Lecturer II" },
-  { value: "Assistant Lecturer", label: "Assistant Lecturer" },
-  { value: "Graduate Assistant", label: "Graduate Assistant" },
-  {
-    value: "Principal Laboratory Technologist",
-    label: "Principal Lab Technologist",
-  },
-  { value: "Laboratory Technologist", label: "Lab Technologist" },
-  { value: "Principal Office Manager", label: "Principal Office Manager" },
-  { value: "Administrative Assistant", label: "Administrative Assistant" },
+// Title options
+const titleOptions = [
+  { value: "MR", label: "Mr." },
+  { value: "MRS", label: "Mrs." },
+  { value: "MS", label: "Ms." },
+  { value: "DR", label: "Dr." },
+  { value: "PROF", label: "Prof." },
+  { value: "ENGR", label: "Engr." },
+  { value: "BARR", label: "Barr." },
+  { value: "REV", label: "Rev." },
+  { value: "PASTOR", label: "Pastor" },
 ];
 
+// Gender options
+const genderOptions = [
+  { value: "MALE", label: "Male" },
+  { value: "FEMALE", label: "Female" },
+];
+
+// Academic Qualification options
+const qualificationOptions = [
+  { value: "PHD", label: "Ph.D." },
+  { value: "MASTERS", label: "Master's Degree" },
+  { value: "BACHELOR", label: "Bachelor's Degree" },
+  { value: "HND", label: "HND" },
+  { value: "OND", label: "OND" },
+];
+
+// Academic Rank options
+const rankOptions = [
+  { value: "PROFESSOR", label: "Professor" },
+  { value: "ASSOCIATE_PROFESSOR", label: "Associate Professor" },
+  { value: "SENIOR_LECTURER", label: "Senior Lecturer" },
+  { value: "LECTURER_I", label: "Lecturer I" },
+  { value: "LECTURER_II", label: "Lecturer II" },
+  { value: "ASSISTANT_LECTURER", label: "Assistant Lecturer" },
+  { value: "GRADUATE_ASSISTANT", label: "Graduate Assistant" },
+];
+
+// Academic staff columns with structured name fields
 const academicColumns: Column<StaffMember>[] = [
   {
-    key: "name",
-    header: "Name",
-    type: "text",
-    placeholder: "e.g., Prof. John Doe",
+    key: "title",
+    header: "Title",
+    type: "select",
+    options: titleOptions,
     required: true,
   },
   {
-    key: "position",
-    header: "Position",
+    key: "surname",
+    header: "Surname",
+    type: "text",
+    placeholder: "e.g., Okonkwo",
+    required: true,
+  },
+  {
+    key: "firstName",
+    header: "First Name",
+    type: "text",
+    placeholder: "e.g., Chidi",
+    required: true,
+  },
+  {
+    key: "middleName",
+    header: "Middle Name",
+    type: "text",
+    placeholder: "Optional",
+  },
+  {
+    key: "gender",
+    header: "Gender",
     type: "select",
-    options: positionOptions,
+    options: genderOptions,
+    required: true,
+  },
+  {
+    key: "highestQualification",
+    header: "Qualification",
+    type: "select",
+    options: qualificationOptions,
+    required: true,
+  },
+  {
+    key: "academicRank",
+    header: "Rank",
+    type: "select",
+    options: rankOptions,
     required: true,
   },
   {
     key: "specialization",
-    header: "Area of Specialization",
+    header: "Specialization",
     type: "text",
     placeholder: "e.g., Artificial Intelligence",
   },
@@ -66,30 +130,59 @@ const academicColumns: Column<StaffMember>[] = [
     key: "email",
     header: "Email",
     type: "text",
-    placeholder: "e.g., john.doe@babcock.edu.ng",
+    placeholder: "e.g., name@babcock.edu.ng",
   },
 ];
 
+// Non-academic staff columns (fewer required fields)
 const nonAcademicColumns: Column<StaffMember>[] = [
   {
-    key: "name",
-    header: "Name",
-    type: "text",
-    placeholder: "e.g., Mr. James Smith",
+    key: "title",
+    header: "Title",
+    type: "select",
+    options: titleOptions,
     required: true,
   },
   {
-    key: "position",
-    header: "Position",
+    key: "surname",
+    header: "Surname",
+    type: "text",
+    placeholder: "e.g., Smith",
+    required: true,
+  },
+  {
+    key: "firstName",
+    header: "First Name",
+    type: "text",
+    placeholder: "e.g., James",
+    required: true,
+  },
+  {
+    key: "gender",
+    header: "Gender",
     type: "select",
-    options: positionOptions,
+    options: genderOptions,
+    required: true,
+  },
+  {
+    key: "highestQualification",
+    header: "Qualification",
+    type: "select",
+    options: qualificationOptions,
+    required: true,
+  },
+  {
+    key: "academicRank",
+    header: "Rank",
+    type: "select",
+    options: rankOptions,
     required: true,
   },
   {
     key: "email",
     header: "Email",
     type: "text",
-    placeholder: "e.g., james.smith@babcock.edu.ng",
+    placeholder: "e.g., name@babcock.edu.ng",
   },
 ];
 
@@ -133,8 +226,13 @@ export function StaffTable({
   const createEmptyStaff = (
     type: "ACADEMIC" | "ADJUNCT" | "NON_ACADEMIC",
   ): StaffMember => ({
-    name: "",
-    position: "",
+    title: "",
+    gender: "",
+    surname: "",
+    middleName: "",
+    firstName: "",
+    highestQualification: "",
+    academicRank: "",
     specialization: "",
     email: "",
     type,
@@ -151,7 +249,8 @@ export function StaffTable({
       ];
 
       for (const staff of allStaff) {
-        if (!staff.name.trim()) continue; // Skip empty rows
+        // Skip empty rows (check required surname field)
+        if (!staff.surname?.trim()) continue;
 
         if (staff.isNew || !staff.id) {
           // Create new staff
