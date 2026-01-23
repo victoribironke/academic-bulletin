@@ -193,6 +193,9 @@ export function StaffTable({
   const [academicStaff, setAcademicStaff] = useState<StaffMember[]>([]);
   const [adjunctStaff, setAdjunctStaff] = useState<StaffMember[]>([]);
   const [nonAcademicStaff, setNonAcademicStaff] = useState<StaffMember[]>([]);
+  const [originalStaffIds, setOriginalStaffIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("academic");
@@ -204,6 +207,13 @@ export function StaffTable({
       if (!res.ok) throw new Error("Failed to fetch staff");
 
       const data = await res.json();
+
+      // Track original staff IDs for deletion detection
+      const ids = new Set<string>();
+      data.forEach((s: StaffMember) => {
+        if (s.id) ids.add(s.id);
+      });
+      setOriginalStaffIds(ids);
 
       setAcademicStaff(data.filter((s: StaffMember) => s.type === "ACADEMIC"));
       setAdjunctStaff(data.filter((s: StaffMember) => s.type === "ADJUNCT"));
@@ -248,9 +258,17 @@ export function StaffTable({
         ...nonAcademicStaff.map((s) => ({ ...s, type: "NON_ACADEMIC" })),
       ];
 
+      // Track current staff IDs to detect deletions
+      const currentStaffIds = new Set<string>();
+
       for (const staff of allStaff) {
         // Skip empty rows (check required surname field)
         if (!staff.surname?.trim()) continue;
+
+        // Track existing staff IDs
+        if (staff.id && !staff.isNew) {
+          currentStaffIds.add(staff.id);
+        }
 
         if (staff.isNew || !staff.id) {
           // Create new staff
@@ -268,6 +286,15 @@ export function StaffTable({
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(staff),
+          });
+        }
+      }
+
+      // Delete staff that were removed
+      for (const originalId of originalStaffIds) {
+        if (!currentStaffIds.has(originalId)) {
+          await fetch(`/api/staff/${originalId}`, {
+            method: "DELETE",
           });
         }
       }

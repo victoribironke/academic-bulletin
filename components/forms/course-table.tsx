@@ -45,6 +45,9 @@ export function CourseTable({
     300: [],
     400: [],
   });
+  const [originalCourseIds, setOriginalCourseIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [activeLevel, setActiveLevel] = useState("100");
@@ -68,13 +71,18 @@ export function CourseTable({
         300: [],
         400: [],
       };
+      const ids = new Set<string>();
       courses.forEach((course: Course) => {
         if (grouped[course.level]) {
           grouped[course.level].push(course);
         }
+        if (course.id) {
+          ids.add(course.id);
+        }
       });
 
       setCoursesByLevel(grouped);
+      setOriginalCourseIds(ids);
     } catch (error) {
       console.error("Failed to fetch data:", error);
     } finally {
@@ -183,11 +191,19 @@ export function CourseTable({
   const saveCourses = async () => {
     setIsSaving(true);
     try {
+      // Collect all current course IDs to find deleted ones
+      const currentCourseIds = new Set<string>();
+
       for (const level of LEVELS) {
         const courses = coursesByLevel[level] || [];
 
         for (const course of courses) {
           if (!course.code.trim() || !course.title.trim()) continue;
+
+          // Track existing course IDs
+          if (course.id && !course.isNew) {
+            currentCourseIds.add(course.id);
+          }
 
           const courseData = {
             ...course,
@@ -226,6 +242,15 @@ export function CourseTable({
               body: JSON.stringify(courseData),
             });
           }
+        }
+      }
+
+      // Delete courses that were removed
+      for (const originalId of originalCourseIds) {
+        if (!currentCourseIds.has(originalId)) {
+          await fetch(`/api/courses/${originalId}`, {
+            method: "DELETE",
+          });
         }
       }
 
