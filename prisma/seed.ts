@@ -11,7 +11,6 @@ const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({ adapter });
 
 // Placeholder password hash (represents "password123")
-// In production, use bcrypt to generate real hashes
 const PLACEHOLDER_PASSWORD_HASH =
   "$2b$10$placeholder.hash.for.testing.only.do.not.use.in.production";
 
@@ -50,7 +49,77 @@ async function main() {
   console.log(`✅ Department: ${department.name} (${department.code})`);
 
   // ============================================================================
-  // 3. Create Programme
+  // 3. Create Staff
+  // ============================================================================
+  const prof = await prisma.staff.create({
+    data: {
+      title: "PROF",
+      surname: "Oladele",
+      firstName: "James",
+      gender: "MALE",
+      highestQualification: "PHD",
+      academicRank: "PROFESSOR",
+      specialization: "Artificial Intelligence",
+      email: "james.oladele@university.edu",
+      type: "ACADEMIC",
+      isActive: true,
+      departmentId: department.id,
+    },
+  });
+  console.log(`✅ Staff: ${prof.title} ${prof.surname}`);
+
+  const lecturer = await prisma.staff.create({
+    data: {
+      title: "DR",
+      surname: "Adesina",
+      firstName: "Mary",
+      gender: "FEMALE",
+      highestQualification: "PHD",
+      academicRank: "SENIOR_LECTURER",
+      specialization: "Software Engineering",
+      email: "mary.adesina@university.edu",
+      type: "ACADEMIC",
+      isActive: true,
+      departmentId: department.id,
+    },
+  });
+  console.log(`✅ Staff: ${lecturer.title} ${lecturer.surname}`);
+
+  // ============================================================================
+  // 4. Create Master Courses
+  // ============================================================================
+  const course1 = await prisma.masterCourse.upsert({
+    where: { code: "COS 101" },
+    update: {},
+    create: {
+      code: "COS 101",
+      title: "Introduction to computing sciences",
+      units: 2,
+      type: "CORE",
+      ownership: "DEPARTMENT",
+      level: 100,
+      semester: 1,
+      ownerDeptId: department.id,
+    },
+  });
+
+  const course2 = await prisma.masterCourse.upsert({
+    where: { code: "GDS 101" },
+    update: {},
+    create: {
+      code: "GDS 101",
+      title: "Communication skills",
+      units: 2,
+      type: "GENERAL",
+      ownership: "INSTITUTIONAL",
+      level: 100,
+      semester: 1,
+    },
+  });
+  console.log(`✅ Master Courses created`);
+
+  // ============================================================================
+  // 5. Create Programme
   // ============================================================================
   const programme = await prisma.programme.upsert({
     where: { code: "BSC-SE" },
@@ -68,11 +137,23 @@ async function main() {
   console.log(`✅ Programme: ${programme.name} (${programme.code})`);
 
   // ============================================================================
-  // 4. Create Users
+  // 6. Link Courses to Programme
+  // ============================================================================
+  await prisma.programmeCourse.createMany({
+    data: [
+      { programmeId: programme.id, courseId: course1.id, isCore: true },
+      { programmeId: programme.id, courseId: course2.id, isCore: true },
+    ],
+    skipDuplicates: true,
+  });
+  console.log(`✅ Linked courses to programme`);
+
+  // ============================================================================
+  // 7. Create Users
   // ============================================================================
 
-  // Coordinator - linked to the Department (manages Programme submissions)
-  const coordinator = await prisma.user.upsert({
+  // Coordinator
+  await prisma.user.upsert({
     where: { email: "coordinator@university.edu" },
     update: {},
     create: {
@@ -86,12 +167,9 @@ async function main() {
       departmentId: department.id,
     },
   });
-  console.log(
-    `✅ User: ${coordinator.firstName} ${coordinator.lastName} (${coordinator.role})`
-  );
 
-  // HOD - linked to the Department
-  const hod = await prisma.user.upsert({
+  // HOD
+  await prisma.user.upsert({
     where: { email: "hod@university.edu" },
     update: {},
     create: {
@@ -105,10 +183,9 @@ async function main() {
       departmentId: department.id,
     },
   });
-  console.log(`✅ User: ${hod.firstName} ${hod.lastName} (${hod.role})`);
 
-  // Dean - linked to the School
-  const dean = await prisma.user.upsert({
+  // Dean
+  await prisma.user.upsert({
     where: { email: "dean@university.edu" },
     update: {},
     create: {
@@ -119,13 +196,12 @@ async function main() {
       role: UserRole.DEAN,
       isActive: true,
       schoolId: school.id,
-      departmentId: null, // Dean is at School level, not Department
+      departmentId: null,
     },
   });
-  console.log(`✅ User: ${dean.firstName} ${dean.lastName} (${dean.role})`);
 
-  // Admin - Academic Planning (no specific School/Department)
-  const admin = await prisma.user.upsert({
+  // Admin
+  await prisma.user.upsert({
     where: { email: "admin@university.edu" },
     update: {},
     create: {
@@ -135,28 +211,29 @@ async function main() {
       lastName: "Admin",
       role: UserRole.ADMIN,
       isActive: true,
-      schoolId: null, // Admin is university-wide
+      schoolId: null,
       departmentId: null,
     },
   });
-  console.log(`✅ User: ${admin.firstName} ${admin.lastName} (${admin.role})`);
 
-  // ============================================================================
-  // Summary
-  // ============================================================================
-  console.log("\n" + "=".repeat(50));
-  console.log("🎉 Database seeded successfully!");
-  console.log("=".repeat(50));
-  console.log(`
-  📊 Created:
-     • 1 School: ${school.name}
-     • 1 Department: ${department.name}
-     • 1 Programme: ${programme.name}
-     • 4 Users: Coordinator, HOD, Dean, Admin
-  
-  🔐 All users have the placeholder password hash.
-     Replace with real bcrypt hashes before production.
-  `);
+  // Super Admin
+  await prisma.user.upsert({
+    where: { email: "super@university.edu" },
+    update: {},
+    create: {
+      email: "super@university.edu",
+      passwordHash: PLACEHOLDER_PASSWORD_HASH,
+      firstName: "Super",
+      lastName: "Admin",
+      role: UserRole.SUPER_ADMIN,
+      isActive: true,
+      schoolId: null,
+      departmentId: null,
+    },
+  });
+
+  console.log("✅ Users created");
+  console.log("\n🌱 Database seeded successfully!");
 }
 
 main()
