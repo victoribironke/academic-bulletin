@@ -487,93 +487,97 @@ export function CourseTable({
 
       {/* Import from Registry Dialog */}
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Import Courses from Registry</DialogTitle>
           </DialogHeader>
 
-          {isLoadingMasterCourses ? (
-            <div className="flex items-center justify-center h-48">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : masterCourses.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No courses found in the registry for this department.
-              <br />
-              <span className="text-sm">
-                Ask an administrator to add courses to the Master Course
-                Registry.
-              </span>
-            </div>
-          ) : (
-            <ScrollArea className="h-[400px]">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12"></TableHead>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Units</TableHead>
-                    <TableHead>Level</TableHead>
-                    <TableHead>Sem</TableHead>
-                    <TableHead>Type</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {masterCourses.map((mc) => {
-                    // Check if already added
-                    const existingCodes = new Set<string>();
-                    LEVELS.forEach((level) => {
-                      (coursesByLevel[level] || []).forEach((c) => {
-                        existingCodes.add(c.code);
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {isLoadingMasterCourses ? (
+              <div className="flex items-center justify-center h-48">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : masterCourses.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No courses found in the registry for this department.
+                <br />
+                <span className="text-sm">
+                  Ask an administrator to add courses to the Master Course
+                  Registry.
+                </span>
+              </div>
+            ) : (
+              <ScrollArea className="h-full max-h-[50vh]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12"></TableHead>
+                      <TableHead className="whitespace-nowrap">Code</TableHead>
+                      <TableHead>Title</TableHead>
+                      <TableHead className="whitespace-nowrap">Units</TableHead>
+                      <TableHead className="whitespace-nowrap">Level</TableHead>
+                      <TableHead className="whitespace-nowrap">Sem</TableHead>
+                      <TableHead className="whitespace-nowrap">Type</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {masterCourses.map((mc) => {
+                      // Check if already added
+                      const existingCodes = new Set<string>();
+                      LEVELS.forEach((level) => {
+                        (coursesByLevel[level] || []).forEach((c) => {
+                          existingCodes.add(c.code);
+                        });
                       });
-                    });
-                    const isAlreadyAdded = existingCodes.has(mc.code);
+                      const isAlreadyAdded = existingCodes.has(mc.code);
 
-                    return (
-                      <TableRow
-                        key={mc.id}
-                        className={isAlreadyAdded ? "opacity-50" : ""}
-                      >
-                        <TableCell>
-                          <Checkbox
-                            checked={selectedMasterCourses.has(mc.id)}
-                            onCheckedChange={() =>
-                              toggleMasterCourseSelection(mc.id)
-                            }
-                            disabled={isAlreadyAdded}
-                          />
-                        </TableCell>
-                        <TableCell className="font-mono">{mc.code}</TableCell>
-                        <TableCell>{mc.title}</TableCell>
-                        <TableCell>{mc.units}</TableCell>
-                        <TableCell>{mc.level}</TableCell>
-                        <TableCell>{mc.semester}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={
-                              mc.type === "CORE"
-                                ? "bg-blue-50"
-                                : mc.type === "ELECTIVE"
-                                  ? "bg-purple-50"
-                                  : mc.type === "GENERAL"
-                                    ? "bg-green-50"
-                                    : ""
-                            }
-                          >
-                            {mc.type}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </ScrollArea>
-          )}
+                      return (
+                        <TableRow
+                          key={mc.id}
+                          className={isAlreadyAdded ? "opacity-50" : ""}
+                        >
+                          <TableCell className="p-2">
+                            <Checkbox
+                              checked={selectedMasterCourses.has(mc.id)}
+                              onCheckedChange={() =>
+                                toggleMasterCourseSelection(mc.id)
+                              }
+                              disabled={isAlreadyAdded}
+                            />
+                          </TableCell>
+                          <TableCell className="font-mono whitespace-nowrap p-2">
+                            {mc.code}
+                          </TableCell>
+                          <TableCell className="p-2">{mc.title}</TableCell>
+                          <TableCell className="p-2">{mc.units}</TableCell>
+                          <TableCell className="p-2">{mc.level}</TableCell>
+                          <TableCell className="p-2">{mc.semester}</TableCell>
+                          <TableCell className="p-2">
+                            <Badge
+                              variant="outline"
+                              className={
+                                mc.type === "CORE"
+                                  ? "bg-blue-50"
+                                  : mc.type === "ELECTIVE"
+                                    ? "bg-purple-50"
+                                    : mc.type === "GENERAL"
+                                      ? "bg-green-50"
+                                      : ""
+                              }
+                            >
+                              {mc.type}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            )}
+          </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex-shrink-0 border-t pt-4">
             <div className="flex items-center justify-between w-full">
               <span className="text-sm text-muted-foreground">
                 {selectedMasterCourses.size} course(s) selected
