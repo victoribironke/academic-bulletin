@@ -680,6 +680,11 @@ export default function SubmissionDetailPage({
                           {philosophyWordCount}/150-250 words
                         </span>
                       </div>
+                      <p className="text-xs text-muted-foreground">
+                        Ensure this philosophy statement is{" "}
+                        <strong>GRACE compliant</strong> as proposed by the Vice
+                        Chancellor.
+                      </p>
                       {canEdit ? (
                         <Textarea
                           value={philosophy}
@@ -687,7 +692,7 @@ export default function SubmissionDetailPage({
                             setPhilosophy(e.target.value);
                             setHasChanges(true);
                           }}
-                          placeholder="The philosophy of this programme is to provide broad and high quality education..."
+                          placeholder="The philosophy of this programme is to provide broad and high quality education... (GRACE compliant: clear, outcome-focused, and aligned with institutional goals)"
                           rows={4}
                           className={
                             !isPhilosophyValid && philosophyWordCount > 0

@@ -188,6 +188,10 @@ export function CourseDescriptionForm({
           <FileText className="h-5 w-5" />
           <CardTitle>Course Descriptions</CardTitle>
         </div>
+        <p className="text-xs text-muted-foreground mt-2">
+          All course descriptions should be <strong>GRACE compliant</strong> as
+          proposed by the Vice Chancellor.
+        </p>
       </CardHeader>
       <CardContent>
         {Object.entries(coursesByLevel)
@@ -280,11 +284,15 @@ export function CourseDescriptionForm({
 
                           <Separator />
 
-                          {/* Course Content */}
+                          {/* Course Description */}
                           <div className="space-y-2">
                             <label className="text-sm font-medium">
-                              Course Contents
+                              Course Description
                             </label>
+                            <p className="text-xs text-muted-foreground">
+                              Ensure this description is GRACE compliant (clear,
+                              concise, and outcome-focused).
+                            </p>
                             <Textarea
                               value={desc.courseContent}
                               onChange={(e) =>
@@ -294,7 +302,7 @@ export function CourseDescriptionForm({
                                   e.target.value,
                                 )
                               }
-                              placeholder="Describe the course content, topics covered, etc..."
+                              placeholder="Describe the course content, topics covered, and key learning areas. Keep the description GRACE compliant: clear, structured, and focused on student outcomes."
                               disabled={disabled}
                               rows={4}
                             />
