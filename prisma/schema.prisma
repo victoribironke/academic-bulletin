@@ -7,7 +7,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 // ============================================================================
@@ -277,6 +277,8 @@ model SubmissionContent {
 
   // Section 2: Philosophy & Objectives (structured with word count validation)
   philosophy     String? // 150-250 words
+  mission        String? // Programme mission statement
+  vision         String? // Programme vision statement
   objectives     Json? // Array of objective strings
   uniqueFeatures Json? // Array of feature strings
   employability  String?

@@ -222,6 +222,8 @@ export default function SubmissionDetailPage({
 
   // Form state for structured sections
   const [philosophy, setPhilosophy] = useState("");
+  const [mission, setMission] = useState("");
+  const [vision, setVision] = useState("");
   const [objectives, setObjectives] = useState<string[]>([""]);
   const [uniqueFeatures, setUniqueFeatures] = useState<string[]>([""]);
   const [employability, setEmployability] = useState("");
@@ -268,6 +270,8 @@ export default function SubmissionDetailPage({
         // Initialize form state from submission content
         if (data.content) {
           setPhilosophy(data.content.philosophy || "");
+          setMission(data.content.mission || "");
+          setVision(data.content.vision || "");
           setObjectives(
             data.content.objectives?.length ? data.content.objectives : [""],
           );
@@ -326,6 +330,8 @@ export default function SubmissionDetailPage({
       try {
         const contentToSave = {
           philosophy,
+          mission,
+          vision,
           objectives: objectives.filter((o) => o.trim()),
           uniqueFeatures: uniqueFeatures.filter((f) => f.trim()),
           employability,
@@ -370,6 +376,8 @@ export default function SubmissionDetailPage({
     canEdit,
     submission,
     philosophy,
+    mission,
+    vision,
     objectives,
     uniqueFeatures,
     employability,
@@ -392,6 +400,8 @@ export default function SubmissionDetailPage({
     try {
       const contentToSave = {
         philosophy,
+        mission,
+        vision,
         objectives: objectives.filter((o) => o.trim()),
         uniqueFeatures: uniqueFeatures.filter((f) => f.trim()),
         employability,
@@ -823,6 +833,54 @@ export default function SubmissionDetailPage({
                       ) : (
                         <p className="text-sm bg-muted p-3 rounded-md">
                           {philosophy || "Not provided"}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Mission */}
+                    <div className="space-y-2">
+                      <Label>Programme Mission</Label>
+                      <p className="text-xs text-muted-foreground">
+                        A concise statement defining the programme&apos;s
+                        purpose and core commitment.
+                      </p>
+                      {canEdit ? (
+                        <Textarea
+                          value={mission}
+                          onChange={(e) => {
+                            setMission(e.target.value);
+                            setHasChanges(true);
+                          }}
+                          placeholder="e.g., Our mission is to produce graduates who are competent, ethical, and innovative..."
+                          rows={3}
+                        />
+                      ) : (
+                        <p className="text-sm bg-muted p-3 rounded-md">
+                          {mission || "Not provided"}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Vision */}
+                    <div className="space-y-2">
+                      <Label>Programme Vision</Label>
+                      <p className="text-xs text-muted-foreground">
+                        A forward-looking statement describing the
+                        programme&apos;s aspirations.
+                      </p>
+                      {canEdit ? (
+                        <Textarea
+                          value={vision}
+                          onChange={(e) => {
+                            setVision(e.target.value);
+                            setHasChanges(true);
+                          }}
+                          placeholder="e.g., To be a leading programme recognized for excellence in teaching, research, and community impact..."
+                          rows={3}
+                        />
+                      ) : (
+                        <p className="text-sm bg-muted p-3 rounded-md">
+                          {vision || "Not provided"}
                         </p>
                       )}
                     </div>
