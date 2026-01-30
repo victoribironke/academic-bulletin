@@ -61,7 +61,23 @@ interface CourseTableProps {
   onValidationChange?: (isValid: boolean, errors: string[]) => void;
 }
 
-const LEVELS = [100, 200, 300, 400];
+// Add mandatory property to Course interface
+interface Course {
+  [key: string]: unknown;
+  id?: string;
+  code: string;
+  title: string;
+  units: number;
+  status: "CORE" | "ELECTIVE";
+  semester: number;
+  level: number;
+  prerequisites: string;
+  masterCourseId?: string;
+  isNew?: boolean;
+  isMandatory?: boolean; // New flag for locking
+}
+
+const LEVELS = [100, 200, 300, 400, 500, 600];
 
 export function CourseTable({
   submissionId,
@@ -76,6 +92,8 @@ export function CourseTable({
     200: [],
     300: [],
     400: [],
+    500: [],
+    600: [],
   });
   const [originalCourseIds, setOriginalCourseIds] = useState<Set<string>>(
     new Set(),
@@ -91,6 +109,8 @@ export function CourseTable({
     Set<string>
   >(new Set());
   const [isLoadingMasterCourses, setIsLoadingMasterCourses] = useState(false);
+  const [registryScope, setRegistryScope] = useState<"context" | "all">("context"); // Scope filter
+
 
   const fetchData = useCallback(async () => {
     try {
@@ -104,12 +124,13 @@ export function CourseTable({
 
       const courses = await coursesRes.json();
 
-      // Group courses by level
       const grouped: Record<number, Course[]> = {
         100: [],
         200: [],
         300: [],
         400: [],
+        500: [],
+        600: [],
       };
       const ids = new Set<string>();
       courses.forEach((course: Course) => {
@@ -123,12 +144,75 @@ export function CourseTable({
 
       setCoursesByLevel(grouped);
       setOriginalCourseIds(ids);
+      setOriginalCourseIds(ids);
+
+      // Check for mandatory courses to inject
+      if (departmentId) {
+        // Fetch all context courses including mandatory ones
+        const masterRes = await fetch(
+          `/api/master-courses?departmentId=${departmentId}`
+        );
+        if (masterRes.ok) {
+          const masterData: MasterCourse[] = await masterRes.json();
+          const mandatoryCourses = masterData.filter(
+            (mc) => mc.ownership === "INSTITUTIONAL"
+          );
+
+          // Inject missing mandatory courses
+          const newCoursesByLevel = { ...grouped };
+          let added = false;
+
+          mandatoryCourses.forEach(mc => {
+            // Check if already present in any level
+            let exists = false;
+            LEVELS.forEach(l => {
+              if (grouped[l]?.some(c => c.code === mc.code)) exists = true;
+            });
+
+            if (!exists) {
+              const level = mc.level as 100 | 200 | 300 | 400 | 500 | 600;
+              if (!newCoursesByLevel[level]) newCoursesByLevel[level] = [];
+
+              newCoursesByLevel[level].push({
+                code: mc.code,
+                title: mc.title,
+                units: mc.units,
+                status: "CORE", // Mandatory are always CORE
+                semester: mc.semester,
+                level: mc.level,
+                prerequisites: "",
+                masterCourseId: mc.id,
+                isNew: true,
+                isMandatory: true
+              });
+              added = true;
+            }
+          });
+
+          // Mark existing courses as mandatory if they match
+          LEVELS.forEach(l => {
+            newCoursesByLevel[l] = newCoursesByLevel[l].map(c => {
+              const match = mandatoryCourses.find(mc => mc.code === c.code);
+              if (match) return { ...c, isMandatory: true };
+              return c;
+            });
+          });
+
+          if (added) {
+            setCoursesByLevel(newCoursesByLevel);
+          } else {
+            // If we just mapped existing to mandatory without adding new ones, update state
+            setCoursesByLevel(newCoursesByLevel);
+          }
+        }
+      }
+
     } catch (error) {
       console.error("Failed to fetch data:", error);
     } finally {
       setIsLoading(false);
     }
-  }, [submissionId]);
+  }, [submissionId, departmentId]);
 
   useEffect(() => {
     if (submissionId && departmentId) {
@@ -173,8 +257,13 @@ export function CourseTable({
   const fetchMasterCourses = async () => {
     setIsLoadingMasterCourses(true);
     try {
-      // Fetch all available master courses (could filter by department/school)
-      const res = await fetch(`/api/master-courses?departmentId=${departmentId}`);
+      // Fetch based on scope
+      let url = `/api/master-courses?departmentId=${departmentId}`;
+      if (registryScope === "all") {
+        url = `/api/master-courses?scope=all`;
+      }
+
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setMasterCourses(data);
@@ -185,6 +274,13 @@ export function CourseTable({
       setIsLoadingMasterCourses(false);
     }
   };
+
+  // Effect to refetch when scope changes if dialog is open
+  useEffect(() => {
+    if (importDialogOpen) {
+      fetchMasterCourses();
+    }
+  }, [registryScope]);
 
   // Open import dialog and load courses
   const openImportDialog = async () => {
@@ -227,8 +323,8 @@ export function CourseTable({
       // Skip if already exists
       if (existingCodes.has(mc.code)) return;
 
-      const level = mc.level as 100 | 200 | 300 | 400;
-      if (!newCoursesByLevel[level]) return;
+      const level = mc.level as 100 | 200 | 300 | 400 | 500 | 600;
+      if (!newCoursesByLevel[level]) newCoursesByLevel[level] = [];
 
       const newCourse: Course = {
         code: mc.code,
@@ -467,6 +563,7 @@ export function CourseTable({
                   }
                   createEmptyRow={() => createEmptyCourse(level)}
                   disabled={disabled}
+                  isRowLocked={(row) => !!row.isMandatory} // Lock mandatory rows
                 />
 
                 <div className="mt-4 flex justify-end gap-4 text-sm text-muted-foreground">
@@ -492,6 +589,15 @@ export function CourseTable({
           <DialogHeader className="flex-shrink-0">
             <DialogTitle>Import Courses from Registry</DialogTitle>
           </DialogHeader>
+
+          <div className="px-6 py-2 border-b">
+            <Tabs value={registryScope} onValueChange={(v) => setRegistryScope(v as "context" | "all")}>
+              <TabsList className="w-full">
+                <TabsTrigger value="context" className="flex-1">Recommended</TabsTrigger>
+                <TabsTrigger value="all" className="flex-1">All Courses</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
 
           <div className="flex-1 min-h-0 overflow-hidden">
             {isLoadingMasterCourses ? (

@@ -70,6 +70,17 @@ const rankOptions = [
   { value: "GRADUATE_ASSISTANT", label: "Graduate Assistant" },
 ];
 
+// Non-Academic Rank/Title options
+const nonAcademicRankOptions = [
+  { value: "LAB_TECHNOLOGIST", label: "Lab Technologist" },
+  { value: "OFFICE_MANAGER", label: "Office Manager" },
+  { value: "SECRETARY", label: "Secretary" },
+  { value: "ADMINISTRATIVE_OFFICER", label: "Administrative Officer" },
+  { value: "CLERICAL_OFFICER", label: "Clerical Officer" },
+  { value: "TECHNICIAN", label: "Technician" },
+  { value: "OTHER", label: "Other" },
+];
+
 // Academic staff columns with structured name fields
 const academicColumns: Column<StaffMember>[] = [
   {
@@ -108,7 +119,7 @@ const academicColumns: Column<StaffMember>[] = [
   },
   {
     key: "highestQualification",
-    header: "Qualification",
+    header: "Highest Academic Qualification",
     type: "select",
     options: qualificationOptions,
     required: true,
@@ -166,16 +177,16 @@ const nonAcademicColumns: Column<StaffMember>[] = [
   },
   {
     key: "highestQualification",
-    header: "Qualification",
+    header: "Highest Academic Qualification",
     type: "select",
     options: qualificationOptions,
     required: true,
   },
   {
-    key: "academicRank",
-    header: "Rank",
+    key: "academicRank", // Reusing this field for Job Title to match schema
+    header: "Job Title",
     type: "select",
-    options: rankOptions,
+    options: nonAcademicRankOptions,
     required: true,
   },
   {

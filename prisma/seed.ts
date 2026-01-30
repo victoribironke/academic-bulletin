@@ -2,13 +2,11 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 import "dotenv/config";
-import { PrismaPg } from "@prisma/adapter-pg";
+import "dotenv/config";
 import { PrismaClient, UserRole } from "@prisma/client";
 
-// Initialize Prisma Client with adapter
-const connectionString = process.env.DATABASE_URL!;
-const adapter = new PrismaPg({ connectionString });
-const prisma = new PrismaClient({ adapter });
+// Initialize Prisma Client
+const prisma = new PrismaClient();
 
 // Placeholder password hash (represents "password123")
 const PLACEHOLDER_PASSWORD_HASH =

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useUser } from "@/contexts/user-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -90,6 +91,7 @@ const SEMESTERS = [1, 2];
 export function MasterCourseManager({
   departmentId,
 }: MasterCourseManagerProps) {
+  const { currentUser } = useUser();
   const [courses, setCourses] = useState<MasterCourse[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [programmes, setProgrammes] = useState<Programme[]>([]);
@@ -147,7 +149,10 @@ export function MasterCourseManager({
       const res = await fetch("/api/master-courses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newCourse),
+        body: JSON.stringify({
+          ...newCourse,
+          userRole: currentUser?.role,
+        }),
       });
 
       if (res.ok) {
@@ -284,7 +289,6 @@ export function MasterCourseManager({
                 </Select>
               </div>
               <div>
-                <Label>Ownership</Label>
                 <Select
                   value={newCourse.ownership}
                   onValueChange={(v) =>
@@ -295,11 +299,21 @@ export function MasterCourseManager({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {OWNERSHIP_TYPES.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>
-                        {o.label}
-                      </SelectItem>
-                    ))}
+                    {OWNERSHIP_TYPES.map((o) => {
+                      // Filter out INSTITUTIONAL if not Admin
+                      if (
+                        o.value === "INSTITUTIONAL" &&
+                        currentUser?.role !== "ADMIN" &&
+                        currentUser?.role !== "SUPER_ADMIN"
+                      ) {
+                        return null;
+                      }
+                      return (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>

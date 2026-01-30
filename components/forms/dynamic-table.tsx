@@ -40,6 +40,7 @@ interface DynamicTableProps<T extends Record<string, unknown>> {
   showRowNumbers?: boolean;
   allowDelete?: boolean;
   allowReorder?: boolean;
+  isRowLocked?: (row: T) => boolean;
 }
 
 export function DynamicTable<T extends Record<string, unknown>>({
@@ -51,6 +52,7 @@ export function DynamicTable<T extends Record<string, unknown>>({
   maxRows,
   showRowNumbers = true,
   allowDelete = true,
+  isRowLocked,
 }: DynamicTableProps<T>) {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
@@ -217,15 +219,22 @@ export function DynamicTable<T extends Record<string, unknown>>({
                   ))}
                   {allowDelete && !disabled && (
                     <TableCell className="p-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeRow(rowIndex)}
-                        disabled={data.length <= 1}
-                        className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {!isRowLocked?.(row) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeRow(rowIndex)}
+                          disabled={data.length <= 1}
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {isRowLocked?.(row) && (
+                        <div className="w-8 h-8 flex items-center justify-center">
+                          <span className="text-xs text-muted-foreground">Locked</span>
+                        </div>
+                      )}
                     </TableCell>
                   )}
                 </TableRow>

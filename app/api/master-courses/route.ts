@@ -29,14 +29,51 @@ export async function GET(request: Request) {
     const ownership = searchParams.get("ownership");
     const level = searchParams.get("level");
     const semester = searchParams.get("semester");
+    const scope = searchParams.get("scope"); // "all" = fetch everything (for borrowing)
 
     const where: Record<string, unknown> = {};
 
-    if (departmentId) where.ownerDeptId = departmentId;
-    if (schoolId) where.ownerSchoolId = schoolId;
+    // Logic for Course Visibility
+    if (scope === "all") {
+      // If scope is ALL, we don't restrict by ownerDeptId
+      // We still apply other filters if they exist
+    } else if (departmentId || schoolId) {
+      // Default behavior: Filter by Context (Dept + School + Institutional)
+      // This allows a department to see:
+      // 1. Their own courses
+      // 2. Courses owned by their School
+      // 3. Institutional courses (Compulsory)
+      const OR: Array<Record<string, unknown>> = [];
+
+      if (departmentId) {
+        OR.push({ ownerDeptId: departmentId });
+      }
+      if (schoolId) {
+        OR.push({ ownerSchoolId: schoolId });
+      }
+      // Always include INSTITUTIONAL courses when viewing in context
+      OR.push({ ownership: "INSTITUTIONAL" });
+
+      // Find the school for the department if only departmentId was passed
+      if (departmentId && !schoolId) {
+        const dept = await prisma.department.findUnique({
+          where: { id: departmentId },
+          select: { schoolId: true },
+        });
+        if (dept?.schoolId) {
+          OR.push({ ownerSchoolId: dept.schoolId });
+        }
+      }
+
+      where.OR = OR;
+    }
+
     if (type && VALID_COURSE_TYPES.includes(type)) where.type = type;
+    
+    // Explicit ownership filter overrides the composite logic above if provided
     if (ownership && VALID_OWNERSHIP.includes(ownership))
       where.ownership = ownership;
+      
     if (level) {
       const levelNum = parseInt(level);
       if (VALID_LEVELS.includes(levelNum)) where.level = levelNum;
@@ -126,6 +163,7 @@ export async function POST(request: Request) {
       ownerDeptId,
       ownerSchoolId,
       prerequisiteIds,
+      userRole, // Passed from client context for validation
     } = body;
 
     // Required field validation
@@ -135,6 +173,19 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    // Ownership Permission Check
+    // "INSTITUTIONAL" courses can only be created by ADMIN or SUPER_ADMIN
+    if (ownership === "INSTITUTIONAL") {
+      if (userRole !== "ADMIN" && userRole !== "SUPER_ADMIN") {
+        return NextResponse.json(
+          { error: "Only Administrators can create Institutional courses." },
+          { status: 403 }
+        );
+      }
+    }
+    
+    // "SCHOOL" courses restriction (optional, usually DEAN/ADMIN but we'll enforce basic role check on client)
 
     // Course code validation
     if (!isValidCourseCode(code)) {
@@ -198,17 +249,37 @@ export async function POST(request: Request) {
 
     // Ownership validation based on type
     const resolvedOwnership = ownership || "DEPARTMENT";
-    if (resolvedOwnership === "DEPARTMENT" && !ownerDeptId) {
+    const finalDeptId = resolvedOwnership === "INSTITUTIONAL" ? null : ownerDeptId;
+    const finalSchoolId = resolvedOwnership === "INSTITUTIONAL" ? null : ownerSchoolId;
+
+    if (resolvedOwnership === "DEPARTMENT" && !finalDeptId) {
       return NextResponse.json(
         { error: "ownerDeptId is required for department-owned courses" },
         { status: 400 },
       );
     }
-    if (resolvedOwnership === "SCHOOL" && !ownerSchoolId) {
-      return NextResponse.json(
-        { error: "ownerSchoolId is required for school-owned courses" },
-        { status: 400 },
-      );
+    // For INSTITUTIONAL, we force ownerDeptId to null
+    // For INSTITUTIONAL, we force ownerDeptId to null
+    // For INSTITUTIONAL, we force ownerDeptId to null
+
+
+    if (resolvedOwnership === "SCHOOL" && !finalSchoolId) {
+       // Try to resolve school from dept if missing
+       if (finalDeptId) {
+          const dept = await prisma.department.findUnique({ where: { id: finalDeptId }});
+          if (!dept?.schoolId) {
+             return NextResponse.json(
+              { error: "ownerSchoolId is required for school-owned courses" },
+              { status: 400 },
+            );
+          }
+           // Use the resolved school id if available
+       } else {
+          return NextResponse.json(
+            { error: "ownerSchoolId is required for school-owned courses" },
+            { status: 400 },
+          );
+       }
     }
 
     // Validate prerequisites exist
@@ -239,8 +310,8 @@ export async function POST(request: Request) {
         level,
         semester,
         description: description || null,
-        ownerDeptId: ownerDeptId || null,
-        ownerSchoolId: ownerSchoolId || null,
+        ownerDeptId: finalDeptId || null,
+        ownerSchoolId: finalSchoolId || null,
         prerequisites: prerequisiteIds?.length
           ? { connect: prerequisiteIds.map((id: string) => ({ id })) }
           : undefined,
@@ -251,6 +322,13 @@ export async function POST(request: Request) {
             id: true,
             name: true,
             code: true,
+            school: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+              },
+            },
           },
         },
         ownerSchool: {
