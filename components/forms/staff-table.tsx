@@ -357,7 +357,7 @@ export function StaffTable({
               </Badge>
             </TabsTrigger>
             <TabsTrigger value="adjunct" className="flex items-center gap-2">
-              Adjunct Staff
+              Adjunct Academic Staff
               <Badge variant="secondary" className="ml-1">
                 {adjunctStaff.length}
               </Badge>

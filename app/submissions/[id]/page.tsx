@@ -141,7 +141,7 @@ const sections = [
     key: "staff",
     title: "Staff Directory",
     icon: Users,
-    description: "Academic, Adjunct, and Non-Academic Staff",
+    description: "Academic, Adjunct Academic, and Non-Academic Staff",
   },
   {
     key: "overview",
@@ -551,10 +551,7 @@ export default function SubmissionDetailPage({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               {canEdit && (
-                <Button
-                  onClick={handleSave}
-                  disabled={!hasChanges || isSaving}
-                >
+                <Button onClick={handleSave} disabled={!hasChanges || isSaving}>
                   {isSaving ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (

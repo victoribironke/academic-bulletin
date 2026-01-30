@@ -67,7 +67,9 @@ export function BulletinProgrammeView({
                   <th className="border p-2 text-left">S/N</th>
                   <th className="border p-2 text-left">Name</th>
                   <th className="border p-2 text-left">Rank/Designation</th>
-                  <th className="border p-2 text-left">Qualification</th>
+                  <th className="border p-2 text-left">
+                    Highest Qualification
+                  </th>
                   <th className="border p-2 text-left">
                     Area of Specialization
                   </th>
@@ -90,14 +92,16 @@ export function BulletinProgrammeView({
 
         {adjunctStaff.length > 0 && (
           <div className="mb-4">
-            <h3 className="font-semibold mb-2">Adjunct Staff</h3>
+            <h3 className="font-semibold mb-2">Adjunct Academic Staff</h3>
             <table className="w-full border-collapse border text-xs">
               <thead>
                 <tr className="bg-muted">
                   <th className="border p-2 text-left">S/N</th>
                   <th className="border p-2 text-left">Name</th>
                   <th className="border p-2 text-left">Rank/Designation</th>
-                  <th className="border p-2 text-left">Qualification</th>
+                  <th className="border p-2 text-left">
+                    Highest Qualification
+                  </th>
                   <th className="border p-2 text-left">
                     Area of Specialization
                   </th>
