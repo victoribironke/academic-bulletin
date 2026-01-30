@@ -436,6 +436,9 @@ export default function SubmissionDetailPage({
       if (!isPhilosophyValid) {
         errors.push("Philosophy must be 150-250 words");
       }
+      if (!minimumDuration) {
+        errors.push("Programme duration must be selected (4-6 years)");
+      }
       if (validationErrors.length > 0) {
         errors.push(...validationErrors);
       }
@@ -1008,17 +1011,32 @@ export default function SubmissionDetailPage({
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Minimum Duration</Label>
+                      <Label>Programme Duration *</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Select the minimum programme duration (4-6 years as per
+                        NUC guidelines).
+                      </p>
                       {canEdit ? (
-                        <Textarea
+                        <Select
                           value={minimumDuration}
-                          onChange={(e) => {
-                            setMinimumDuration(e.target.value);
+                          onValueChange={(value) => {
+                            setMinimumDuration(value);
                             setHasChanges(true);
                           }}
-                          placeholder="The minimum duration is four (4) academic sessions..."
-                          rows={2}
-                        />
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select programme duration" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="4 years">
+                              4 Years (Minimum)
+                            </SelectItem>
+                            <SelectItem value="5 years">5 Years</SelectItem>
+                            <SelectItem value="6 years">
+                              6 Years (Maximum)
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
                       ) : (
                         <p className="text-sm bg-muted p-3 rounded-md">
                           {minimumDuration || "Not provided"}
