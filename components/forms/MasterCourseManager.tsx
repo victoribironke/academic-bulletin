@@ -206,6 +206,44 @@ export function MasterCourseManager({
     return <Badge className={colors[type] || ""}>{type}</Badge>;
   };
 
+  const getOwnershipBadge = (course: MasterCourse) => {
+    const isOwnedByCurrentDept = course.ownerDepartment?.id === departmentId;
+
+    const ownershipColors: Record<string, string> = {
+      DEPARTMENT: isOwnedByCurrentDept
+        ? "bg-green-100 text-green-800 border-green-300"
+        : "bg-amber-100 text-amber-800 border-amber-300",
+      SCHOOL: "bg-blue-100 text-blue-800 border-blue-300",
+      INSTITUTIONAL: "bg-purple-100 text-purple-800 border-purple-300",
+    };
+
+    const ownershipLabels: Record<string, string> = {
+      DEPARTMENT: isOwnedByCurrentDept ? "Owned" : "Borrowed",
+      SCHOOL: "School-wide",
+      INSTITUTIONAL: "University-wide",
+    };
+
+    const ownerName =
+      course.ownership === "DEPARTMENT" && course.ownerDepartment
+        ? course.ownerDepartment.code
+        : course.ownership === "SCHOOL" && course.ownerSchool
+          ? course.ownerSchool.code
+          : null;
+
+    return (
+      <div className="flex flex-col gap-1">
+        <Badge className={`${ownershipColors[course.ownership] || ""} border`}>
+          {ownershipLabels[course.ownership] || course.ownership}
+        </Badge>
+        {ownerName && !isOwnedByCurrentDept && (
+          <span className="text-xs text-muted-foreground">
+            from {ownerName}
+          </span>
+        )}
+      </div>
+    );
+  };
+
   if (isLoading) {
     return (
       <Card>
@@ -402,6 +440,7 @@ export function MasterCourseManager({
               <TableHead>Title</TableHead>
               <TableHead>Units</TableHead>
               <TableHead>Type</TableHead>
+              <TableHead>Ownership</TableHead>
               <TableHead>Level</TableHead>
               <TableHead>Sem</TableHead>
               <TableHead>Programmes</TableHead>
@@ -412,7 +451,7 @@ export function MasterCourseManager({
             {courses.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={8}
+                  colSpan={9}
                   className="text-center text-muted-foreground"
                 >
                   No master courses found. Create one to get started.
@@ -425,6 +464,7 @@ export function MasterCourseManager({
                   <TableCell>{course.title}</TableCell>
                   <TableCell>{course.units}</TableCell>
                   <TableCell>{getCourseTypeBadge(course.type)}</TableCell>
+                  <TableCell>{getOwnershipBadge(course)}</TableCell>
                   <TableCell>{course.level}</TableCell>
                   <TableCell>{course.semester}</TableCell>
                   <TableCell>
