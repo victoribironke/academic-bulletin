@@ -1,10 +1,9 @@
+import { User } from "@/lib/auth";
 import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
 
 export async function GET() {
   try {
-    // const users = await prisma.user.findMany({ ... });
-    const users: any[] = []; // Mock empty DB result to trigger fallback
+    const users: User[] = []; // Mock empty DB result to trigger fallback
     console.log("Skipping DB fetch, using hardcoded users");
 
     if (!users || users.length === 0) {
@@ -18,7 +17,7 @@ export async function GET() {
           role: "ADMIN",
           isActive: true,
           schoolId: null,
-          departmentId: null
+          departmentId: null,
         },
         {
           id: "user_super",
@@ -28,7 +27,7 @@ export async function GET() {
           role: "SUPER_ADMIN",
           isActive: true,
           schoolId: null,
-          departmentId: null
+          departmentId: null,
         },
         {
           id: "user_dean",
@@ -38,7 +37,7 @@ export async function GET() {
           role: "DEAN",
           isActive: true,
           schoolId: "school_soc",
-          departmentId: null
+          departmentId: null,
         },
         {
           id: "user_hod",
@@ -48,7 +47,7 @@ export async function GET() {
           role: "HOD",
           isActive: true,
           schoolId: "school_soc",
-          departmentId: "dept_cs"
+          departmentId: "dept_cs",
         },
         {
           id: "user_coord",
@@ -58,8 +57,8 @@ export async function GET() {
           role: "COORDINATOR",
           isActive: true,
           schoolId: "school_soc",
-          departmentId: "dept_cs"
-        }
+          departmentId: "dept_cs",
+        },
       ];
       return NextResponse.json(mockUsers);
     }
@@ -69,7 +68,7 @@ export async function GET() {
     console.error("Failed to fetch users:", error);
     return NextResponse.json(
       { error: "Failed to fetch users" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -26,19 +26,19 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Save, BookOpen, Import } from "lucide-react";
 
 // Updated Course interface - removed lecturerId, added prerequisites
-interface Course {
-  [key: string]: unknown;
-  id?: string;
-  code: string;
-  title: string;
-  units: number;
-  status: "CORE" | "ELECTIVE";
-  semester: number;
-  level: number;
-  prerequisites: string; // Text field for prerequisites
-  masterCourseId?: string;
-  isNew?: boolean;
-}
+// interface Course {
+//   [key: string]: unknown;
+//   id?: string;
+//   code: string;
+//   title: string;
+//   units: number;
+//   status: "CORE" | "ELECTIVE";
+//   semester: number;
+//   level: number;
+//   prerequisites: string; // Text field for prerequisites
+//   masterCourseId?: string;
+//   isNew?: boolean;
+// }
 
 // Master course from registry
 interface MasterCourse {
@@ -109,8 +109,9 @@ export function CourseTable({
     Set<string>
   >(new Set());
   const [isLoadingMasterCourses, setIsLoadingMasterCourses] = useState(false);
-  const [registryScope, setRegistryScope] = useState<"context" | "all">("context"); // Scope filter
-
+  const [registryScope, setRegistryScope] = useState<"context" | "all">(
+    "context",
+  ); // Scope filter
 
   const fetchData = useCallback(async () => {
     try {
@@ -150,23 +151,23 @@ export function CourseTable({
       if (departmentId) {
         // Fetch all context courses including mandatory ones
         const masterRes = await fetch(
-          `/api/master-courses?departmentId=${departmentId}`
+          `/api/master-courses?departmentId=${departmentId}`,
         );
         if (masterRes.ok) {
           const masterData: MasterCourse[] = await masterRes.json();
           const mandatoryCourses = masterData.filter(
-            (mc) => mc.ownership === "INSTITUTIONAL"
+            (mc) => mc.ownership === "INSTITUTIONAL",
           );
 
           // Inject missing mandatory courses
           const newCoursesByLevel = { ...grouped };
           let added = false;
 
-          mandatoryCourses.forEach(mc => {
+          mandatoryCourses.forEach((mc) => {
             // Check if already present in any level
             let exists = false;
-            LEVELS.forEach(l => {
-              if (grouped[l]?.some(c => c.code === mc.code)) exists = true;
+            LEVELS.forEach((l) => {
+              if (grouped[l]?.some((c) => c.code === mc.code)) exists = true;
             });
 
             if (!exists) {
@@ -183,16 +184,16 @@ export function CourseTable({
                 prerequisites: "",
                 masterCourseId: mc.id,
                 isNew: true,
-                isMandatory: true
+                isMandatory: true,
               });
               added = true;
             }
           });
 
           // Mark existing courses as mandatory if they match
-          LEVELS.forEach(l => {
-            newCoursesByLevel[l] = newCoursesByLevel[l].map(c => {
-              const match = mandatoryCourses.find(mc => mc.code === c.code);
+          LEVELS.forEach((l) => {
+            newCoursesByLevel[l] = newCoursesByLevel[l].map((c) => {
+              const match = mandatoryCourses.find((mc) => mc.code === c.code);
               if (match) return { ...c, isMandatory: true };
               return c;
             });
@@ -206,7 +207,6 @@ export function CourseTable({
           }
         }
       }
-
     } catch (error) {
       console.error("Failed to fetch data:", error);
     } finally {
@@ -440,7 +440,9 @@ export function CourseTable({
               );
               if (search.ok) {
                 const results = await search.json();
-                const match = results.find((m: MasterCourse) => m.code === course.code);
+                const match = results.find(
+                  (m: MasterCourse) => m.code === course.code,
+                );
                 if (match) masterCourseId = match.id;
               }
             } catch (e) {
@@ -591,10 +593,17 @@ export function CourseTable({
           </DialogHeader>
 
           <div className="px-6 py-2 border-b">
-            <Tabs value={registryScope} onValueChange={(v) => setRegistryScope(v as "context" | "all")}>
+            <Tabs
+              value={registryScope}
+              onValueChange={(v) => setRegistryScope(v as "context" | "all")}
+            >
               <TabsList className="w-full">
-                <TabsTrigger value="context" className="flex-1">Recommended</TabsTrigger>
-                <TabsTrigger value="all" className="flex-1">All Courses</TabsTrigger>
+                <TabsTrigger value="context" className="flex-1">
+                  Recommended
+                </TabsTrigger>
+                <TabsTrigger value="all" className="flex-1">
+                  All Courses
+                </TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
