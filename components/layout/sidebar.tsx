@@ -65,7 +65,7 @@ export function Sidebar() {
 
   // Filter nav items based on user permissions
   const visibleNavItems = navItems.filter(
-    (item) => !item.permission || hasPermission(item.permission)
+    (item) => !item.permission || hasPermission(item.permission),
   );
 
   return (
@@ -86,7 +86,12 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="space-y-1 p-4">
         {visibleNavItems.map((item) => {
-          const isActive = pathname === item.href;
+          // For root path "/", only match exactly
+          // For other paths, match if pathname starts with the href
+          const isActive =
+            item.href === "/"
+              ? pathname === "/"
+              : pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <Link
               key={item.href}
@@ -95,7 +100,7 @@ export function Sidebar() {
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                 isActive
                   ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
               {item.icon}
