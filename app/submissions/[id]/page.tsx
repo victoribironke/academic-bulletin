@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use, useCallback } from "react";
+import { useState, useEffect, use, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useUser, usePermission } from "@/contexts/user-context";
 import {
@@ -54,6 +54,8 @@ import {
   Building,
   Target,
   ClipboardList,
+  Cloud,
+  CloudOff,
 } from "lucide-react";
 
 interface Submission {
@@ -238,6 +240,13 @@ export default function SubmissionDetailPage({
   const [commentType, setCommentType] = useState<string>("SUGGESTION");
   const [isAddingComment, setIsAddingComment] = useState(false);
 
+  // Auto-save state
+  const [autoSaveStatus, setAutoSaveStatus] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const canEdit =
     hasPermission("edit:submission") && submission?.status === "DRAFT";
   const canComment =
@@ -300,6 +309,81 @@ export default function SubmissionDetailPage({
   const philosophyWordCount = getWordCount(philosophy);
   const isPhilosophyValid =
     philosophyWordCount >= 150 && philosophyWordCount <= 250;
+
+  // Auto-save effect - debounced save after 3 seconds of no changes
+  useEffect(() => {
+    // Only auto-save if there are changes, user can edit, and submission exists
+    if (!hasChanges || !canEdit || !submission) return;
+
+    // Clear any existing timeout
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    // Set a new timeout to save after 3 seconds
+    autoSaveTimeoutRef.current = setTimeout(async () => {
+      setAutoSaveStatus("saving");
+      try {
+        const contentToSave = {
+          philosophy,
+          objectives: objectives.filter((o) => o.trim()),
+          uniqueFeatures: uniqueFeatures.filter((f) => f.trim()),
+          employability,
+          utmeRequirements,
+          directEntryRequirements,
+          transferRequirements,
+          minimumDuration,
+          graduationRequirements,
+          minimumCGPA,
+          totalUnits,
+          sectionF: { content: regulations },
+          sectionG: { content: summaryOfChanges },
+        };
+
+        const response = await fetch(`/api/submissions/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: contentToSave }),
+        });
+
+        if (response.ok) {
+          setHasChanges(false);
+          setAutoSaveStatus("saved");
+          setLastSavedAt(new Date());
+        } else {
+          setAutoSaveStatus("error");
+        }
+      } catch (err) {
+        console.error("Auto-save failed:", err);
+        setAutoSaveStatus("error");
+      }
+    }, 3000); // 3 second debounce
+
+    // Cleanup timeout on unmount or when dependencies change
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [
+    hasChanges,
+    canEdit,
+    submission,
+    philosophy,
+    objectives,
+    uniqueFeatures,
+    employability,
+    utmeRequirements,
+    directEntryRequirements,
+    transferRequirements,
+    minimumDuration,
+    graduationRequirements,
+    minimumCGPA,
+    totalUnits,
+    regulations,
+    summaryOfChanges,
+    id,
+  ]);
 
   const handleSave = async () => {
     if (!submission) return;
@@ -559,6 +643,39 @@ export default function SubmissionDetailPage({
                   )}
                   Save Draft
                 </Button>
+              )}
+              {/* Auto-save status indicator */}
+              {canEdit && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  {autoSaveStatus === "saving" && (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  )}
+                  {autoSaveStatus === "saved" && (
+                    <>
+                      <Cloud className="h-3 w-3 text-green-600" />
+                      <span className="text-green-600">
+                        All changes saved
+                        {lastSavedAt && (
+                          <span className="ml-1 text-muted-foreground">
+                            ({lastSavedAt.toLocaleTimeString()})
+                          </span>
+                        )}
+                      </span>
+                    </>
+                  )}
+                  {autoSaveStatus === "error" && (
+                    <>
+                      <CloudOff className="h-3 w-3 text-red-600" />
+                      <span className="text-red-600">Save failed</span>
+                    </>
+                  )}
+                  {autoSaveStatus === "idle" && hasChanges && (
+                    <span className="text-amber-600">Unsaved changes</span>
+                  )}
+                </div>
               )}
               {canSubmit && (
                 <Button
