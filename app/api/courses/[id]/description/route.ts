@@ -48,7 +48,8 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { learningOutcomes, courseContent, labWork } = body;
+    const { learningOutcomes, courseContent, labWork, entrepreneurialAspect } =
+      body;
 
     // Check if course exists
     const course = await prisma.course.findUnique({
@@ -67,6 +68,7 @@ export async function PUT(
         learningOutcomes: learningOutcomes || null,
         courseContent: courseContent || null,
         labWork: labWork || null,
+        entrepreneurialAspect: entrepreneurialAspect || null,
       },
       create: {
         courseId: id,
@@ -74,6 +76,7 @@ export async function PUT(
         learningOutcomes: learningOutcomes || null,
         courseContent: courseContent || null,
         labWork: labWork || null,
+        entrepreneurialAspect: entrepreneurialAspect || null,
       },
       include: {
         course: {

@@ -47,3 +47,5 @@ prisma/migrations
 # local
 *.log
 *.db
+
+updates-2-feb-2026.md

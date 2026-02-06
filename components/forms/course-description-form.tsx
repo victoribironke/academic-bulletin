@@ -29,6 +29,7 @@ interface CourseDescription {
   learningOutcomes: string[];
   courseContent: string;
   labWork: string;
+  entrepreneurialAspect: string;
 }
 
 interface CourseWithDescription extends Course {
@@ -71,12 +72,15 @@ export function CourseDescriptionForm({
               : [],
             courseContent: course.description.courseContent || "",
             labWork: course.description.labWork || "",
+            entrepreneurialAspect:
+              course.description.entrepreneurialAspect || "",
           };
         } else {
           descs[course.id] = {
             learningOutcomes: [],
             courseContent: "",
             labWork: "",
+            entrepreneurialAspect: "",
           };
         }
       });
@@ -141,6 +145,7 @@ export function CourseDescriptionForm({
           learningOutcomes: desc.learningOutcomes.filter((o) => o.trim()),
           courseContent: desc.courseContent,
           labWork: desc.labWork,
+          entrepreneurialAspect: desc.entrepreneurialAspect,
         }),
       });
     } catch (error) {
@@ -186,7 +191,7 @@ export function CourseDescriptionForm({
       <CardHeader>
         <div className="flex items-center gap-2">
           <FileText className="h-5 w-5" />
-          <CardTitle>Course Descriptions</CardTitle>
+          <CardTitle>Course Details</CardTitle>
         </div>
         <p className="text-xs text-muted-foreground mt-2">
           All course descriptions should be <strong>GRACE compliant</strong> as
@@ -207,6 +212,7 @@ export function CourseDescriptionForm({
                       learningOutcomes: [],
                       courseContent: "",
                       labWork: "",
+                      entrepreneurialAspect: "",
                     };
 
                     return (
@@ -328,6 +334,34 @@ export function CourseDescriptionForm({
                               placeholder="Describe practical/lab work requirements..."
                               disabled={disabled}
                               rows={2}
+                            />
+                          </div>
+
+                          {/* Entrepreneurial/Practical Aspect */}
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium">
+                              Entrepreneurial/Practical Aspect{" "}
+                              <span className="text-muted-foreground">
+                                (if applicable)
+                              </span>
+                            </label>
+                            <p className="text-xs text-muted-foreground">
+                              Describe how students can apply this course
+                              commercially, in industry, or in real-world
+                              scenarios.
+                            </p>
+                            <Textarea
+                              value={desc.entrepreneurialAspect}
+                              onChange={(e) =>
+                                updateDescription(
+                                  course.id,
+                                  "entrepreneurialAspect",
+                                  e.target.value,
+                                )
+                              }
+                              placeholder="Describe entrepreneurial applications, practical industry use cases, or commercial opportunities related to this course..."
+                              disabled={disabled}
+                              rows={3}
                             />
                           </div>
 

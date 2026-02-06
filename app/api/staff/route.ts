@@ -28,6 +28,7 @@ const VALID_RANKS = [
   "LECTURER_II",
   "ASSISTANT_LECTURER",
   "GRADUATE_ASSISTANT",
+  "OTHER", // For non-academic staff with custom job titles
 ];
 const VALID_TYPES = ["ACADEMIC", "ADJUNCT", "NON_ACADEMIC"];
 
@@ -97,6 +98,7 @@ export async function POST(request: Request) {
       firstName,
       highestQualification,
       academicRank,
+      customJobTitle,
       specialization,
       email,
       type,
@@ -197,6 +199,10 @@ export async function POST(request: Request) {
         highestQualification,
         academicRank,
         specialization: specialization || null,
+        customJobTitle:
+          academicRank === "OTHER" && customJobTitle
+            ? toTitleCase(customJobTitle)
+            : null,
         email: email || null,
         type: type || "ACADEMIC",
         departmentId,

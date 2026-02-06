@@ -20,6 +20,7 @@ export type Permission =
   | "comment:submission" // New: Deans can only comment
   | "review:submission"
   | "approve:submission"
+  | "reject:submission"
   | "view:schools"
   | "manage:schools"
   | "view:departments"
@@ -69,12 +70,12 @@ const rolePermissions: Record<UserRole, Permission[]> = {
     "view:staff",
   ],
   ADMIN: [
+    // Admin can view, comment, review, reject, and approve - NOT create/edit/delete submissions
     "view:dashboard",
     "view:submissions",
-    "create:submission",
-    "edit:submission",
     "comment:submission",
     "review:submission",
+    "reject:submission",
     "approve:submission",
     "view:schools",
     "manage:schools",

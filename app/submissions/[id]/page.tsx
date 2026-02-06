@@ -171,7 +171,7 @@ const sections = [
   },
   {
     key: "descriptions",
-    title: "Course Descriptions",
+    title: "Course Details",
     icon: FileText,
     description: "Learning outcomes and content",
   },
@@ -255,10 +255,10 @@ export default function SubmissionDetailPage({
     hasPermission("comment:submission") || hasPermission("review:submission");
   const canReview = hasPermission("review:submission");
   const canApprove = hasPermission("approve:submission");
-  // Only HOD and above can officially submit (not coordinators)
+  // Only HOD and Super Admin can officially submit (not coordinators or regular admins)
   const canSubmit =
     currentUser &&
-    ["HOD", "ADMIN", "SUPER_ADMIN"].includes(currentUser.role) &&
+    ["HOD", "SUPER_ADMIN"].includes(currentUser.role) &&
     submission?.status === "DRAFT";
 
   const fetchSubmission = useCallback(async () => {

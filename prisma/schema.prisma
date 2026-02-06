@@ -85,6 +85,7 @@ enum AcademicRank {
   LECTURER_II
   ASSISTANT_LECTURER
   GRADUATE_ASSISTANT
+  OTHER // For non-academic staff with custom job titles
 }
 
 enum CourseType {
@@ -212,6 +213,7 @@ model Staff {
   firstName            String // Required
   highestQualification AcademicQualification // Required: PHD, MASTERS, etc.
   academicRank         AcademicRank // Required: PROFESSOR, SENIOR_LECTURER, etc.
+  customJobTitle       String? // Used when academicRank is OTHER (for non-academic staff)
   specialization       String?
   email                String?
   type                 StaffType             @default(ACADEMIC)
@@ -352,7 +354,8 @@ model CourseDescription {
   id               String   @id @default(cuid())
   learningOutcomes Json? // Array of learning outcome strings
   courseContent    String? // Rich text content
-  labWork          String? // Lab work description (if applicable)
+  labWork              String? // Lab work description (if applicable)
+  entrepreneurialAspect String? // Entrepreneurial/practical aspect of the course
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

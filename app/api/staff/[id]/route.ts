@@ -60,6 +60,7 @@ export async function PATCH(
       firstName,
       highestQualification,
       academicRank,
+      customJobTitle,
       specialization,
       email,
       type,
@@ -114,6 +115,12 @@ export async function PATCH(
     if (academicRank !== undefined) updateData.academicRank = academicRank;
     if (specialization !== undefined)
       updateData.specialization = specialization || null;
+    if (customJobTitle !== undefined) {
+      updateData.customJobTitle =
+        academicRank === "OTHER" && customJobTitle
+          ? toTitleCase(customJobTitle)
+          : null;
+    }
     if (email !== undefined) updateData.email = email || null;
     if (type !== undefined) {
       const validTypes = ["ACADEMIC", "ADJUNCT", "NON_ACADEMIC"];

@@ -22,6 +22,7 @@ interface StaffMember {
   specialization: string;
   email: string;
   type: "ACADEMIC" | "ADJUNCT" | "NON_ACADEMIC";
+  customJobTitle?: string; // Used when academicRank is OTHER
   isNew?: boolean;
   fullName?: string; // Computed from API
 }
@@ -188,6 +189,12 @@ const nonAcademicColumns: Column<StaffMember>[] = [
     type: "select",
     options: nonAcademicRankOptions,
     required: true,
+  },
+  {
+    key: "customJobTitle",
+    header: "Custom Title (if Other)",
+    type: "text",
+    placeholder: "e.g., Office Assistant",
   },
   {
     key: "email",
