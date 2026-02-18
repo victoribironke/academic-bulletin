@@ -106,9 +106,52 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     // Update content if provided
     if (content) {
-      await prisma.submissionContent.update({
+      await prisma.submissionContent.upsert({
         where: { submissionId: id },
-        data: {
+        update: {
+          // Structured fields
+          ...(content.philosophy !== undefined && {
+            philosophy: content.philosophy,
+          }),
+          ...(content.philosophyGracePass !== undefined && {
+            philosophyGracePass: content.philosophyGracePass,
+          }),
+          ...(content.philosophyGrace !== undefined && {
+            philosophyGrace: content.philosophyGrace,
+          }),
+          ...(content.mission !== undefined && { mission: content.mission }),
+          ...(content.vision !== undefined && { vision: content.vision }),
+          ...(content.objectives !== undefined && {
+            objectives: content.objectives,
+          }),
+          ...(content.uniqueFeatures !== undefined && {
+            uniqueFeatures: content.uniqueFeatures,
+          }),
+          ...(content.employability !== undefined && {
+            employability: content.employability,
+          }),
+          ...(content.utmeRequirements !== undefined && {
+            utmeRequirements: content.utmeRequirements,
+          }),
+          ...(content.directEntryRequirements !== undefined && {
+            directEntryRequirements: content.directEntryRequirements,
+          }),
+          ...(content.transferRequirements !== undefined && {
+            transferRequirements: content.transferRequirements,
+          }),
+          ...(content.minimumDuration !== undefined && {
+            minimumDuration: content.minimumDuration,
+          }),
+          ...(content.graduationRequirements !== undefined && {
+            graduationRequirements: content.graduationRequirements,
+          }),
+          ...(content.minimumCGPA !== undefined && {
+            minimumCGPA: content.minimumCGPA,
+          }),
+          ...(content.totalUnits !== undefined && {
+            totalUnits: content.totalUnits,
+          }),
+          // Legacy sections
           ...(content.sectionA !== undefined && { sectionA: content.sectionA }),
           ...(content.sectionB !== undefined && { sectionB: content.sectionB }),
           ...(content.sectionC !== undefined && { sectionC: content.sectionC }),
@@ -117,6 +160,26 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           ...(content.sectionF !== undefined && { sectionF: content.sectionF }),
           ...(content.sectionG !== undefined && { sectionG: content.sectionG }),
           ...(content.sectionH !== undefined && { sectionH: content.sectionH }),
+        },
+        create: {
+          submissionId: id,
+          philosophy: content.philosophy || null,
+          philosophyGracePass: content.philosophyGracePass || false,
+          philosophyGrace: content.philosophyGrace || null,
+          mission: content.mission || null,
+          vision: content.vision || null,
+          objectives: content.objectives || null,
+          uniqueFeatures: content.uniqueFeatures || null,
+          employability: content.employability || null,
+          utmeRequirements: content.utmeRequirements || null,
+          directEntryRequirements: content.directEntryRequirements || null,
+          transferRequirements: content.transferRequirements || null,
+          minimumDuration: content.minimumDuration || null,
+          graduationRequirements: content.graduationRequirements || null,
+          minimumCGPA: content.minimumCGPA || null,
+          totalUnits: content.totalUnits || null,
+          sectionF: content.sectionF || null,
+          sectionG: content.sectionG || null,
         },
       });
     }
