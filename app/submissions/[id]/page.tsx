@@ -56,6 +56,8 @@ import {
   ClipboardList,
   Cloud,
   CloudOff,
+  ShieldCheck,
+  AlertTriangle,
 } from "lucide-react";
 
 interface Submission {
@@ -236,6 +238,13 @@ export default function SubmissionDetailPage({
   const [totalUnits, setTotalUnits] = useState<number>(154);
   const [regulations, setRegulations] = useState("");
   const [summaryOfChanges, setSummaryOfChanges] = useState("");
+
+  // GRACE compliance check state
+  const [graceCheckingPhilosophy, setGraceCheckingPhilosophy] = useState(false);
+  const [gracePhilosophyResult, setGracePhilosophyResult] = useState<{
+    messages: string[];
+    passed: boolean;
+  } | null>(null);
 
   // Comments state
   const [newComment, setNewComment] = useState("");
@@ -493,6 +502,52 @@ export default function SubmissionDetailPage({
     } catch (err) {
       console.error("Failed to transition:", err);
       toast.error("Failed to complete action");
+    }
+  };
+
+  const checkPhilosophyGrace = async () => {
+    if (!philosophy.trim() || !submission) return;
+
+    setGraceCheckingPhilosophy(true);
+    setGracePhilosophyResult(null);
+
+    try {
+      const res = await fetch("https://santacl-grace.hf.space/check-grace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: `${submission.programme.name} - Programme Philosophy`,
+          content: philosophy,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        const messages =
+          errorData.detail?.map(
+            (d: { msg: string }) => d.msg || "Unknown error",
+          ) || ["Compliance check failed"];
+        setGracePhilosophyResult({ messages, passed: false });
+      } else {
+        const data = await res.json();
+        if (data.detail && Array.isArray(data.detail) && data.detail.length > 0) {
+          const messages = data.detail.map(
+            (d: { msg: string }) => d.msg || "Unknown issue",
+          );
+          setGracePhilosophyResult({ messages, passed: false });
+        } else {
+          setGracePhilosophyResult({ messages: [], passed: true });
+        }
+      }
+    } catch {
+      setGracePhilosophyResult({
+        messages: [
+          "Could not reach the GRACE compliance server. Please try again later.",
+        ],
+        passed: false,
+      });
+    } finally {
+      setGraceCheckingPhilosophy(false);
     }
   };
 
@@ -797,30 +852,55 @@ export default function SubmissionDetailPage({
                     {/* Philosophy */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <Label>Programme Philosophy *</Label>
-                        <span
-                          className={`text-xs ${
-                            isPhilosophyValid
-                              ? "text-green-600"
-                              : philosophyWordCount > 0
-                                ? "text-red-600"
-                                : "text-muted-foreground"
-                          }`}
-                        >
-                          {philosophyWordCount}/150-250 words
-                        </span>
+                        <div>
+                          <Label>Programme Philosophy *</Label>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Ensure this philosophy statement is{" "}
+                            <strong>GRACE compliant</strong> as proposed by the
+                            Vice Chancellor.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {canEdit && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={checkPhilosophyGrace}
+                              disabled={
+                                graceCheckingPhilosophy ||
+                                !philosophy.trim()
+                              }
+                            >
+                              {graceCheckingPhilosophy ? (
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              ) : (
+                                <ShieldCheck className="h-4 w-4 mr-1" />
+                              )}
+                              Check GRACE
+                            </Button>
+                          )}
+                          <span
+                            className={`text-xs ${
+                              isPhilosophyValid
+                                ? "text-green-600"
+                                : philosophyWordCount > 0
+                                  ? "text-red-600"
+                                  : "text-muted-foreground"
+                            }`}
+                          >
+                            {philosophyWordCount}/150-250 words
+                          </span>
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        Ensure this philosophy statement is{" "}
-                        <strong>GRACE compliant</strong> as proposed by the Vice
-                        Chancellor.
-                      </p>
                       {canEdit ? (
                         <Textarea
                           value={philosophy}
                           onChange={(e) => {
                             setPhilosophy(e.target.value);
                             setHasChanges(true);
+                            if (gracePhilosophyResult) {
+                              setGracePhilosophyResult(null);
+                            }
                           }}
                           placeholder="The philosophy of this programme is to provide broad and high quality education... (GRACE compliant: clear, outcome-focused, and aligned with institutional goals)"
                           rows={4}
@@ -834,6 +914,38 @@ export default function SubmissionDetailPage({
                         <p className="text-sm bg-muted p-3 rounded-md">
                           {philosophy || "Not provided"}
                         </p>
+                      )}
+
+                      {/* GRACE Compliance Feedback */}
+                      {gracePhilosophyResult && (
+                        <Alert
+                          variant={
+                            gracePhilosophyResult.passed
+                              ? "default"
+                              : "destructive"
+                          }
+                        >
+                          {gracePhilosophyResult.passed ? (
+                            <CheckCircle className="h-4 w-4" />
+                          ) : (
+                            <AlertTriangle className="h-4 w-4" />
+                          )}
+                          <AlertDescription>
+                            {gracePhilosophyResult.passed ? (
+                              <span className="text-green-700">
+                                This philosophy statement is GRACE compliant.
+                              </span>
+                            ) : (
+                              <div className="space-y-1">
+                                {gracePhilosophyResult.messages.map(
+                                  (msg, i) => (
+                                    <p key={i}>{msg}</p>
+                                  ),
+                                )}
+                              </div>
+                            )}
+                          </AlertDescription>
+                        </Alert>
                       )}
                     </div>
 
