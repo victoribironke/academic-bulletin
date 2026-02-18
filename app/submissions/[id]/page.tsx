@@ -581,7 +581,7 @@ export default function SubmissionDetailPage({
         if (coursesRes.ok) {
           const courses = await coursesRes.json();
           const failedCourses = courses.filter(
-            (c: { description?: { gracePass?: boolean }; code: string }) =>
+            (c: { description?: { gracePass?: boolean; courseContent?: string }; code: string }) =>
               c.description?.courseContent &&
               !c.description?.gracePass,
           );
