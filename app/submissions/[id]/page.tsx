@@ -206,6 +206,104 @@ const commentTypeColors: Record<string, string> = {
   APPROVAL: "bg-green-100 text-green-800",
 };
 
+const GRACE_PILLAR_LABELS: Record<string, string> = {
+  G: "Global Relevance",
+  R: "Research Focus",
+  A: "Adventist Rooted",
+  C: "Competent Community",
+  E: "Entrepreneurship",
+};
+
+function GraceResultPanel({
+  result,
+}: {
+  result: {
+    scores: Record<string, number>;
+    explanation: string;
+    recommendation: string;
+    passed: boolean;
+  };
+}) {
+  const hasScores = Object.keys(result.scores).length > 0;
+
+  const getScoreColor = (score: number) => {
+    if (score >= 4) return "bg-green-500";
+    if (score >= 3) return "bg-yellow-500";
+    return "bg-red-500";
+  };
+
+  const getScoreBgColor = (score: number) => {
+    if (score >= 4) return "bg-green-50 border-green-200";
+    if (score >= 3) return "bg-yellow-50 border-yellow-200";
+    return "bg-red-50 border-red-200";
+  };
+
+  return (
+    <div
+      className={`rounded-lg border p-4 space-y-3 ${
+        result.passed
+          ? "bg-green-50 border-green-200"
+          : "bg-amber-50 border-amber-200"
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        {result.passed ? (
+          <CheckCircle className="h-4 w-4 text-green-600" />
+        ) : (
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+        )}
+        <span
+          className={`text-sm font-medium ${
+            result.passed ? "text-green-700" : "text-amber-700"
+          }`}
+        >
+          {result.passed ? "GRACE Compliant" : "Improvements Needed"}
+        </span>
+      </div>
+
+      {hasScores && (
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(GRACE_PILLAR_LABELS).map(([key, label]) => {
+            const score = result.scores[key];
+            if (score === undefined) return null;
+            return (
+              <div
+                key={key}
+                className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs ${getScoreBgColor(score)}`}
+              >
+                <span className="font-semibold">{key}</span>
+                <span className="text-muted-foreground">{label}</span>
+                <span
+                  className={`ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full text-white text-xs font-bold ${getScoreColor(score)}`}
+                >
+                  {score}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {result.explanation && (
+        <div className="text-sm text-muted-foreground whitespace-pre-line leading-relaxed">
+          {result.explanation.replace(/\*\*/g, "").replace(/\* /g, "• ")}
+        </div>
+      )}
+
+      {result.recommendation && !result.passed && (
+        <div className="border-t pt-2 mt-2">
+          <p className="text-xs font-medium text-amber-700 mb-1">
+            Recommendations:
+          </p>
+          <div className="text-xs text-muted-foreground whitespace-pre-line leading-relaxed">
+            {result.recommendation.replace(/\*\*/g, "").replace(/\* /g, "• ")}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SubmissionDetailPage({
   params,
 }: {
@@ -242,7 +340,9 @@ export default function SubmissionDetailPage({
   // GRACE compliance check state
   const [graceCheckingPhilosophy, setGraceCheckingPhilosophy] = useState(false);
   const [gracePhilosophyResult, setGracePhilosophyResult] = useState<{
-    messages: string[];
+    scores: Record<string, number>;
+    explanation: string;
+    recommendation: string;
     passed: boolean;
   } | null>(null);
 
@@ -505,6 +605,37 @@ export default function SubmissionDetailPage({
     }
   };
 
+  const parseGraceAnalysis = (analysis: string) => {
+    let scores: Record<string, number> = {};
+    const jsonMatch = analysis.match(/```json\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[1]);
+        scores = parsed.GRACE_PILLARS || {};
+      } catch {
+        // If JSON parsing fails, leave scores empty
+      }
+    }
+
+    const explanationMatch = analysis.match(
+      /\*\*Explanation:\*\*\s*([\s\S]*?)(?=\*\*(?:Vision Alignment|Recommendation))/,
+    );
+    const explanation = explanationMatch ? explanationMatch[1].trim() : "";
+
+    const recommendationMatch = analysis.match(
+      /\*\*Recommendation:\*\*\s*([\s\S]*?)$/,
+    );
+    const recommendation = recommendationMatch
+      ? recommendationMatch[1].trim()
+      : "";
+
+    const scoreValues = Object.values(scores);
+    const passed =
+      scoreValues.length > 0 && scoreValues.every((s) => s >= 3);
+
+    return { scores, explanation, recommendation, passed };
+  };
+
   const checkPhilosophyGrace = async () => {
     if (!philosophy.trim() || !submission) return;
 
@@ -522,28 +653,31 @@ export default function SubmissionDetailPage({
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
-        const messages =
-          errorData.detail?.map(
-            (d: { msg: string }) => d.msg || "Unknown error",
-          ) || ["Compliance check failed"];
-        setGracePhilosophyResult({ messages, passed: false });
+        setGracePhilosophyResult({
+          scores: {},
+          explanation: "Compliance check failed. Please try again.",
+          recommendation: "",
+          passed: false,
+        });
       } else {
         const data = await res.json();
-        if (data.detail && Array.isArray(data.detail) && data.detail.length > 0) {
-          const messages = data.detail.map(
-            (d: { msg: string }) => d.msg || "Unknown issue",
-          );
-          setGracePhilosophyResult({ messages, passed: false });
+        if (data.analysis) {
+          setGracePhilosophyResult(parseGraceAnalysis(data.analysis));
         } else {
-          setGracePhilosophyResult({ messages: [], passed: true });
+          setGracePhilosophyResult({
+            scores: {},
+            explanation: "No analysis returned from server.",
+            recommendation: "",
+            passed: false,
+          });
         }
       }
     } catch {
       setGracePhilosophyResult({
-        messages: [
+        scores: {},
+        explanation:
           "Could not reach the GRACE compliance server. Please try again later.",
-        ],
+        recommendation: "",
         passed: false,
       });
     } finally {
@@ -918,34 +1052,7 @@ export default function SubmissionDetailPage({
 
                       {/* GRACE Compliance Feedback */}
                       {gracePhilosophyResult && (
-                        <Alert
-                          variant={
-                            gracePhilosophyResult.passed
-                              ? "default"
-                              : "destructive"
-                          }
-                        >
-                          {gracePhilosophyResult.passed ? (
-                            <CheckCircle className="h-4 w-4" />
-                          ) : (
-                            <AlertTriangle className="h-4 w-4" />
-                          )}
-                          <AlertDescription>
-                            {gracePhilosophyResult.passed ? (
-                              <span className="text-green-700">
-                                This philosophy statement is GRACE compliant.
-                              </span>
-                            ) : (
-                              <div className="space-y-1">
-                                {gracePhilosophyResult.messages.map(
-                                  (msg, i) => (
-                                    <p key={i}>{msg}</p>
-                                  ),
-                                )}
-                              </div>
-                            )}
-                          </AlertDescription>
-                        </Alert>
+                        <GraceResultPanel result={gracePhilosophyResult} />
                       )}
                     </div>
 
