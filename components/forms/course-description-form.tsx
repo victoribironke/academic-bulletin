@@ -13,7 +13,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Loader2,
   Save,
@@ -60,8 +59,8 @@ function GraceResultDisplay({
   return (
     <div
       className={`rounded-lg border p-4 space-y-3 ${result.passed
-          ? "bg-green-50 border-green-200"
-          : "bg-amber-50 border-amber-200"
+        ? "bg-green-50 border-green-200"
+        : "bg-amber-50 border-amber-200"
         }`}
     >
       {/* Header */}
