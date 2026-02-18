@@ -278,9 +278,11 @@ model SubmissionContent {
   programmeInfo Json? // { schoolName, deanName, deptName, hodName, coordinator, overview }
 
   // Section 2: Philosophy & Objectives (structured with word count validation)
-  philosophy     String? // 150-250 words
-  mission        String? // Programme mission statement
-  vision         String? // Programme vision statement
+  philosophy          String? // 150-250 words
+  philosophyGracePass Boolean  @default(false)
+  philosophyGrace     Json? // { scores: {G,R,A,C,E}, explanation, recommendation }
+  mission             String? // Programme mission statement
+  vision              String? // Programme vision statement
   objectives     Json? // Array of objective strings
   uniqueFeatures Json? // Array of feature strings
   employability  String?
@@ -356,6 +358,8 @@ model CourseDescription {
   courseContent    String? // Rich text content
   labWork              String? // Lab work description (if applicable)
   entrepreneurialAspect String? // Entrepreneurial/practical aspect of the course
+  gracePass        Boolean  @default(false)
+  graceResult      Json? // { scores: {G,R,A,C,E}, explanation, recommendation }
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
