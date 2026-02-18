@@ -13,7 +13,17 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Loader2, Save, FileText, Plus, Trash2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Loader2,
+  Save,
+  FileText,
+  Plus,
+  Trash2,
+  ShieldCheck,
+  AlertTriangle,
+  CheckCircle,
+} from "lucide-react";
 
 interface Course {
   id: string;
@@ -51,6 +61,12 @@ export function CourseDescriptionForm({
   >({});
   const [isLoading, setIsLoading] = useState(true);
   const [savingCourseId, setSavingCourseId] = useState<string | null>(null);
+
+  // GRACE compliance check state
+  const [graceChecking, setGraceChecking] = useState<string | null>(null);
+  const [graceResults, setGraceResults] = useState<
+    Record<string, { messages: string[]; passed: boolean }>
+  >({});
 
   const fetchCourses = useCallback(async () => {
     try {
@@ -152,6 +168,70 @@ export function CourseDescriptionForm({
       console.error("Failed to save description:", error);
     } finally {
       setSavingCourseId(null);
+    }
+  };
+
+  const checkGraceCompliance = async (courseId: string, courseTitle: string) => {
+    const desc = descriptions[courseId];
+    if (!desc?.courseContent?.trim()) return;
+
+    setGraceChecking(courseId);
+    // Clear previous result for this course
+    setGraceResults((prev) => {
+      const next = { ...prev };
+      delete next[courseId];
+      return next;
+    });
+
+    try {
+      const res = await fetch("https://santacl-grace.hf.space/check-grace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: courseTitle,
+          content: desc.courseContent,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        const messages =
+          errorData.detail?.map(
+            (d: { msg: string }) => d.msg || "Unknown error",
+          ) || ["Compliance check failed"];
+        setGraceResults((prev) => ({
+          ...prev,
+          [courseId]: { messages, passed: false },
+        }));
+      } else {
+        const data = await res.json();
+        if (data.detail && Array.isArray(data.detail) && data.detail.length > 0) {
+          const messages = data.detail.map(
+            (d: { msg: string }) => d.msg || "Unknown issue",
+          );
+          setGraceResults((prev) => ({
+            ...prev,
+            [courseId]: { messages, passed: false },
+          }));
+        } else {
+          setGraceResults((prev) => ({
+            ...prev,
+            [courseId]: { messages: [], passed: true },
+          }));
+        }
+      }
+    } catch (error) {
+      setGraceResults((prev) => ({
+        ...prev,
+        [courseId]: {
+          messages: [
+            "Could not reach the GRACE compliance server. Please try again later.",
+          ],
+          passed: false,
+        },
+      }));
+    } finally {
+      setGraceChecking(null);
     }
   };
 
@@ -292,26 +372,93 @@ export function CourseDescriptionForm({
 
                           {/* Course Description */}
                           <div className="space-y-2">
-                            <label className="text-sm font-medium">
-                              Course Description
-                            </label>
-                            <p className="text-xs text-muted-foreground">
-                              Ensure this description is GRACE compliant (clear,
-                              concise, and outcome-focused).
-                            </p>
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <label className="text-sm font-medium">
+                                  Course Description
+                                </label>
+                                <p className="text-xs text-muted-foreground">
+                                  Ensure this description is GRACE compliant
+                                  (clear, concise, and outcome-focused).
+                                </p>
+                              </div>
+                              {!disabled && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() =>
+                                    checkGraceCompliance(
+                                      course.id,
+                                      course.title,
+                                    )
+                                  }
+                                  disabled={
+                                    graceChecking === course.id ||
+                                    !desc.courseContent?.trim()
+                                  }
+                                >
+                                  {graceChecking === course.id ? (
+                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                  ) : (
+                                    <ShieldCheck className="h-4 w-4 mr-1" />
+                                  )}
+                                  Check GRACE
+                                </Button>
+                              )}
+                            </div>
                             <Textarea
                               value={desc.courseContent}
-                              onChange={(e) =>
+                              onChange={(e) => {
                                 updateDescription(
                                   course.id,
                                   "courseContent",
                                   e.target.value,
-                                )
-                              }
+                                );
+                                // Clear GRACE result when content changes
+                                if (graceResults[course.id]) {
+                                  setGraceResults((prev) => {
+                                    const next = { ...prev };
+                                    delete next[course.id];
+                                    return next;
+                                  });
+                                }
+                              }}
                               placeholder="Describe the course content, topics covered, and key learning areas. Keep the description GRACE compliant: clear, structured, and focused on student outcomes."
                               disabled={disabled}
                               rows={4}
                             />
+
+                            {/* GRACE Compliance Feedback */}
+                            {graceResults[course.id] && (
+                              <Alert
+                                variant={
+                                  graceResults[course.id].passed
+                                    ? "default"
+                                    : "destructive"
+                                }
+                              >
+                                {graceResults[course.id].passed ? (
+                                  <CheckCircle className="h-4 w-4" />
+                                ) : (
+                                  <AlertTriangle className="h-4 w-4" />
+                                )}
+                                <AlertDescription>
+                                  {graceResults[course.id].passed ? (
+                                    <span className="text-green-700">
+                                      This description is GRACE compliant.
+                                    </span>
+                                  ) : (
+                                    <div className="space-y-1">
+                                      {graceResults[course.id].messages.map(
+                                        (msg, i) => (
+                                          <p key={i}>{msg}</p>
+                                        ),
+                                      )}
+                                    </div>
+                                  )}
+                                </AlertDescription>
+                              </Alert>
+                            )}
                           </div>
 
                           {/* Lab Work (optional) */}
