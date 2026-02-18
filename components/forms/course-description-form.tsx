@@ -25,6 +25,114 @@ import {
   CheckCircle,
 } from "lucide-react";
 
+const GRACE_PILLAR_LABELS: Record<string, string> = {
+  G: "Global Relevance",
+  R: "Research Focus",
+  A: "Adventist Rooted",
+  C: "Competent Community",
+  E: "Entrepreneurship",
+};
+
+function getScoreColor(score: number) {
+  if (score >= 4) return "bg-green-500";
+  if (score >= 3) return "bg-yellow-500";
+  return "bg-red-500";
+}
+
+function getScoreBgColor(score: number) {
+  if (score >= 4) return "bg-green-50 border-green-200";
+  if (score >= 3) return "bg-yellow-50 border-yellow-200";
+  return "bg-red-50 border-red-200";
+}
+
+function GraceResultDisplay({
+  result,
+}: {
+  result: {
+    scores: Record<string, number>;
+    explanation: string;
+    recommendation: string;
+    passed: boolean;
+  };
+}) {
+  const hasScores = Object.keys(result.scores).length > 0;
+
+  return (
+    <div
+      className={`rounded-lg border p-4 space-y-3 ${result.passed
+          ? "bg-green-50 border-green-200"
+          : "bg-amber-50 border-amber-200"
+        }`}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        {result.passed ? (
+          <CheckCircle className="h-4 w-4 text-green-600" />
+        ) : (
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+        )}
+        <span
+          className={`text-sm font-medium ${result.passed ? "text-green-700" : "text-amber-700"
+            }`}
+        >
+          {result.passed
+            ? "GRACE Compliant"
+            : "Improvements Needed"}
+        </span>
+      </div>
+
+      {/* Pillar Scores */}
+      {hasScores && (
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(GRACE_PILLAR_LABELS).map(([key, label]) => {
+            const score = result.scores[key];
+            if (score === undefined) return null;
+            return (
+              <div
+                key={key}
+                className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs ${getScoreBgColor(score)}`}
+              >
+                <span className="font-semibold">{key}</span>
+                <span className="text-muted-foreground">
+                  {label}
+                </span>
+                <span
+                  className={`ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full text-white text-xs font-bold ${getScoreColor(score)}`}
+                >
+                  {score}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Explanation */}
+      {result.explanation && (
+        <div className="text-sm text-muted-foreground whitespace-pre-line leading-relaxed">
+          {result.explanation
+            .replace(/\*\*/g, "")
+            .replace(/\* /g, "• ")}
+        </div>
+      )}
+
+      {/* Recommendation */}
+      {result.recommendation && !result.passed && (
+        <div className="border-t pt-2 mt-2">
+          <p className="text-xs font-medium text-amber-700 mb-1">
+            Recommendations:
+          </p>
+          <div className="text-xs text-muted-foreground whitespace-pre-line leading-relaxed">
+            {result.recommendation
+              .replace(/\*\*/g, "")
+              .replace(/\* /g, "• ")}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface Course {
   id: string;
   code: string;
@@ -65,7 +173,15 @@ export function CourseDescriptionForm({
   // GRACE compliance check state
   const [graceChecking, setGraceChecking] = useState<string | null>(null);
   const [graceResults, setGraceResults] = useState<
-    Record<string, { messages: string[]; passed: boolean }>
+    Record<
+      string,
+      {
+        scores: Record<string, number>;
+        explanation: string;
+        recommendation: string;
+        passed: boolean;
+      }
+    >
   >({});
 
   const fetchCourses = useCallback(async () => {
@@ -171,12 +287,48 @@ export function CourseDescriptionForm({
     }
   };
 
+  const parseGraceAnalysis = (analysis: string) => {
+    // Extract JSON scores from the markdown code block
+    let scores: Record<string, number> = {};
+    const jsonMatch = analysis.match(/```json\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[1]);
+        scores = parsed.GRACE_PILLARS || {};
+      } catch {
+        // If JSON parsing fails, leave scores empty
+      }
+    }
+
+    // Extract explanation (between **Explanation:** and **Vision Alignment** or **Recommendation:**)
+    const explanationMatch = analysis.match(
+      /\*\*Explanation:\*\*\s*([\s\S]*?)(?=\*\*(?:Vision Alignment|Recommendation))/,
+    );
+    const explanation = explanationMatch
+      ? explanationMatch[1].trim()
+      : "";
+
+    // Extract recommendation
+    const recommendationMatch = analysis.match(
+      /\*\*Recommendation:\*\*\s*([\s\S]*?)$/,
+    );
+    const recommendation = recommendationMatch
+      ? recommendationMatch[1].trim()
+      : "";
+
+    // Consider "passed" if all scores are >= 3
+    const scoreValues = Object.values(scores);
+    const passed =
+      scoreValues.length > 0 && scoreValues.every((s) => s >= 3);
+
+    return { scores, explanation, recommendation, passed };
+  };
+
   const checkGraceCompliance = async (courseId: string, courseTitle: string) => {
     const desc = descriptions[courseId];
     if (!desc?.courseContent?.trim()) return;
 
     setGraceChecking(courseId);
-    // Clear previous result for this course
     setGraceResults((prev) => {
       const next = { ...prev };
       delete next[courseId];
@@ -194,39 +346,45 @@ export function CourseDescriptionForm({
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
-        const messages =
-          errorData.detail?.map(
-            (d: { msg: string }) => d.msg || "Unknown error",
-          ) || ["Compliance check failed"];
         setGraceResults((prev) => ({
           ...prev,
-          [courseId]: { messages, passed: false },
+          [courseId]: {
+            scores: {},
+            explanation: "Compliance check failed. Please try again.",
+            recommendation: "",
+            passed: false,
+          },
         }));
       } else {
         const data = await res.json();
-        if (data.detail && Array.isArray(data.detail) && data.detail.length > 0) {
-          const messages = data.detail.map(
-            (d: { msg: string }) => d.msg || "Unknown issue",
-          );
+        console.log(data)
+
+        if (data.analysis) {
+          const result = parseGraceAnalysis(data.analysis);
           setGraceResults((prev) => ({
             ...prev,
-            [courseId]: { messages, passed: false },
+            [courseId]: result,
           }));
         } else {
           setGraceResults((prev) => ({
             ...prev,
-            [courseId]: { messages: [], passed: true },
+            [courseId]: {
+              scores: {},
+              explanation: "No analysis returned from server.",
+              recommendation: "",
+              passed: false,
+            },
           }));
         }
       }
-    } catch (error) {
+    } catch {
       setGraceResults((prev) => ({
         ...prev,
         [courseId]: {
-          messages: [
+          scores: {},
+          explanation:
             "Could not reach the GRACE compliance server. Please try again later.",
-          ],
+          recommendation: "",
           passed: false,
         },
       }));
@@ -430,34 +588,9 @@ export function CourseDescriptionForm({
 
                             {/* GRACE Compliance Feedback */}
                             {graceResults[course.id] && (
-                              <Alert
-                                variant={
-                                  graceResults[course.id].passed
-                                    ? "default"
-                                    : "destructive"
-                                }
-                              >
-                                {graceResults[course.id].passed ? (
-                                  <CheckCircle className="h-4 w-4" />
-                                ) : (
-                                  <AlertTriangle className="h-4 w-4" />
-                                )}
-                                <AlertDescription>
-                                  {graceResults[course.id].passed ? (
-                                    <span className="text-green-700">
-                                      This description is GRACE compliant.
-                                    </span>
-                                  ) : (
-                                    <div className="space-y-1">
-                                      {graceResults[course.id].messages.map(
-                                        (msg, i) => (
-                                          <p key={i}>{msg}</p>
-                                        ),
-                                      )}
-                                    </div>
-                                  )}
-                                </AlertDescription>
-                              </Alert>
+                              <GraceResultDisplay
+                                result={graceResults[course.id]}
+                              />
                             )}
                           </div>
 
