@@ -401,6 +401,10 @@ export default function SubmissionDetailPage({
           setTotalUnits(data.content.totalUnits || 154);
           setRegulations(data.content.sectionF?.content || "");
           setSummaryOfChanges(data.content.sectionG?.content || "");
+          // Restore persisted GRACE result
+          if (data.content.philosophyGrace) {
+            setGracePhilosophyResult(data.content.philosophyGrace);
+          }
         }
       }
     } catch (err) {
@@ -439,6 +443,8 @@ export default function SubmissionDetailPage({
       try {
         const contentToSave = {
           philosophy,
+          philosophyGracePass: gracePhilosophyResult?.passed || false,
+          philosophyGrace: gracePhilosophyResult || null,
           mission,
           vision,
           objectives: objectives.filter((o) => o.trim()),
@@ -499,6 +505,7 @@ export default function SubmissionDetailPage({
     totalUnits,
     regulations,
     summaryOfChanges,
+    gracePhilosophyResult,
     id,
   ]);
 
@@ -509,6 +516,8 @@ export default function SubmissionDetailPage({
     try {
       const contentToSave = {
         philosophy,
+        philosophyGracePass: gracePhilosophyResult?.passed || false,
+        philosophyGrace: gracePhilosophyResult || null,
         mission,
         vision,
         objectives: objectives.filter((o) => o.trim()),
@@ -557,6 +566,48 @@ export default function SubmissionDetailPage({
       }
       if (!minimumDuration) {
         errors.push("Programme duration must be selected (4-6 years)");
+      }
+      // GRACE compliance checks
+      if (!gracePhilosophyResult?.passed) {
+        errors.push(
+          "Programme philosophy must pass GRACE compliance check",
+        );
+      }
+      // Check course description GRACE compliance
+      try {
+        const coursesRes = await fetch(
+          `/api/courses?submissionId=${submission.id}`,
+        );
+        if (coursesRes.ok) {
+          const courses = await coursesRes.json();
+          const failedCourses = courses.filter(
+            (c: { description?: { gracePass?: boolean }; code: string }) =>
+              c.description?.courseContent &&
+              !c.description?.gracePass,
+          );
+          if (failedCourses.length > 0) {
+            const codes = failedCourses
+              .map((c: { code: string }) => c.code)
+              .join(", ");
+            errors.push(
+              `Course descriptions not GRACE compliant: ${codes}`,
+            );
+          }
+          const missingDesc = courses.filter(
+            (c: { description?: { courseContent?: string } }) =>
+              !c.description?.courseContent,
+          );
+          if (missingDesc.length > 0) {
+            const codes = missingDesc
+              .map((c: { code: string }) => c.code)
+              .join(", ");
+            errors.push(
+              `Course descriptions missing: ${codes}`,
+            );
+          }
+        }
+      } catch {
+        errors.push("Could not verify course GRACE compliance");
       }
       if (validationErrors.length > 0) {
         errors.push(...validationErrors);
@@ -682,6 +733,7 @@ export default function SubmissionDetailPage({
       });
     } finally {
       setGraceCheckingPhilosophy(false);
+      setHasChanges(true);
     }
   };
 
