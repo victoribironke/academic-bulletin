@@ -588,7 +588,7 @@ export function CourseTable({
       {/* Import from Registry Dialog */}
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
-          <DialogHeader className="flex-shrink-0">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Import Courses from Registry</DialogTitle>
           </DialogHeader>
 
@@ -693,7 +693,7 @@ export function CourseTable({
             )}
           </div>
 
-          <DialogFooter className="flex-shrink-0 border-t pt-4">
+          <DialogFooter className="shrink-0 border-t pt-4">
             <div className="flex items-center justify-between w-full">
               <span className="text-sm text-muted-foreground">
                 {selectedMasterCourses.size} course(s) selected
