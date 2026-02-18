@@ -13,7 +13,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Eye, Printer, Download } from "lucide-react";
 import {
   BulletinData,
-  BulletinCourse,
 } from "@/lib/bulletin/generation";
 import { BulletinProgrammeView } from "@/components/preview/bulletin-programme-view";
 
