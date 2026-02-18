@@ -48,8 +48,14 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { learningOutcomes, courseContent, labWork, entrepreneurialAspect } =
-      body;
+    const {
+      learningOutcomes,
+      courseContent,
+      labWork,
+      entrepreneurialAspect,
+      gracePass,
+      graceResult,
+    } = body;
 
     // Check if course exists
     const course = await prisma.course.findUnique({
@@ -61,22 +67,23 @@ export async function PUT(
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
     }
 
+    const data = {
+      learningOutcomes: learningOutcomes || null,
+      courseContent: courseContent || null,
+      labWork: labWork || null,
+      entrepreneurialAspect: entrepreneurialAspect || null,
+      ...(gracePass !== undefined && { gracePass }),
+      ...(graceResult !== undefined && { graceResult }),
+    };
+
     // Upsert description
     const description = await prisma.courseDescription.upsert({
       where: { courseId: id },
-      update: {
-        learningOutcomes: learningOutcomes || null,
-        courseContent: courseContent || null,
-        labWork: labWork || null,
-        entrepreneurialAspect: entrepreneurialAspect || null,
-      },
+      update: data,
       create: {
         courseId: id,
         submissionId: course.submissionId,
-        learningOutcomes: learningOutcomes || null,
-        courseContent: courseContent || null,
-        labWork: labWork || null,
-        entrepreneurialAspect: entrepreneurialAspect || null,
+        ...data,
       },
       include: {
         course: {
