@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -142,12 +142,21 @@ interface Course {
   semester: number;
 }
 
+interface GraceResult {
+  scores: Record<string, number>;
+  explanation: string;
+  recommendation: string;
+  passed: boolean;
+}
+
 interface CourseDescription {
   id?: string;
   learningOutcomes: string[];
   courseContent: string;
   labWork: string;
   entrepreneurialAspect: string;
+  gracePass: boolean;
+  graceResult: GraceResult | null;
 }
 
 interface CourseWithDescription extends Course {
@@ -173,16 +182,14 @@ export function CourseDescriptionForm({
   // GRACE compliance check state
   const [graceChecking, setGraceChecking] = useState<string | null>(null);
   const [graceResults, setGraceResults] = useState<
-    Record<
-      string,
-      {
-        scores: Record<string, number>;
-        explanation: string;
-        recommendation: string;
-        passed: boolean;
-      }
-    >
+    Record<string, GraceResult>
   >({});
+
+  // Autosave state
+  const [dirtyDescriptions, setDirtyDescriptions] = useState<Set<string>>(
+    new Set(),
+  );
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchCourses = useCallback(async () => {
     try {
@@ -193,8 +200,9 @@ export function CourseDescriptionForm({
       const data: CourseWithDescription[] = await res.json();
       setCourses(data);
 
-      // Build descriptions map
+      // Build descriptions map and load persisted GRACE results
       const descs: Record<string, CourseDescription> = {};
+      const loadedGrace: Record<string, GraceResult> = {};
       data.forEach((course) => {
         if (course.description) {
           descs[course.id] = {
@@ -206,17 +214,26 @@ export function CourseDescriptionForm({
             labWork: course.description.labWork || "",
             entrepreneurialAspect:
               course.description.entrepreneurialAspect || "",
+            gracePass: course.description.gracePass || false,
+            graceResult: (course.description.graceResult as GraceResult) || null,
           };
+          if (course.description.graceResult) {
+            loadedGrace[course.id] =
+              course.description.graceResult as GraceResult;
+          }
         } else {
           descs[course.id] = {
             learningOutcomes: [],
             courseContent: "",
             labWork: "",
             entrepreneurialAspect: "",
+            gracePass: false,
+            graceResult: null,
           };
         }
       });
       setDescriptions(descs);
+      setGraceResults(loadedGrace);
     } catch (error) {
       console.error("Failed to fetch courses:", error);
     } finally {
@@ -242,7 +259,49 @@ export function CourseDescriptionForm({
         [field]: value,
       },
     }));
+    setDirtyDescriptions((prev) => new Set(prev).add(courseId));
   };
+
+  // Autosave: debounced save 3 seconds after last change
+  useEffect(() => {
+    if (dirtyDescriptions.size === 0 || disabled) return;
+
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    autoSaveTimerRef.current = setTimeout(async () => {
+      const toSave = Array.from(dirtyDescriptions);
+      for (const courseId of toSave) {
+        const desc = descriptions[courseId];
+        if (!desc) continue;
+
+        try {
+          await fetch(`/api/courses/${courseId}/description`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              learningOutcomes: desc.learningOutcomes.filter((o) => o.trim()),
+              courseContent: desc.courseContent,
+              labWork: desc.labWork,
+              entrepreneurialAspect: desc.entrepreneurialAspect,
+              gracePass: desc.gracePass,
+              graceResult: desc.graceResult,
+            }),
+          });
+        } catch (error) {
+          console.error(`Autosave failed for course ${courseId}:`, error);
+        }
+      }
+      setDirtyDescriptions(new Set());
+    }, 3000);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [dirtyDescriptions, descriptions, disabled]);
 
   const addLearningOutcome = (courseId: string) => {
     const current = descriptions[courseId]?.learningOutcomes || [];
@@ -278,7 +337,15 @@ export function CourseDescriptionForm({
           courseContent: desc.courseContent,
           labWork: desc.labWork,
           entrepreneurialAspect: desc.entrepreneurialAspect,
+          gracePass: desc.gracePass,
+          graceResult: desc.graceResult,
         }),
+      });
+      // Clear from dirty set since we just saved
+      setDirtyDescriptions((prev) => {
+        const next = new Set(prev);
+        next.delete(courseId);
+        return next;
       });
     } catch (error) {
       console.error("Failed to save description:", error);
@@ -324,6 +391,20 @@ export function CourseDescriptionForm({
     return { scores, explanation, recommendation, passed };
   };
 
+  // Persist GRACE result into the description state so autosave picks it up
+  const setGraceForCourse = (courseId: string, result: GraceResult) => {
+    setGraceResults((prev) => ({ ...prev, [courseId]: result }));
+    setDescriptions((prev) => ({
+      ...prev,
+      [courseId]: {
+        ...prev[courseId],
+        gracePass: result.passed,
+        graceResult: result,
+      },
+    }));
+    setDirtyDescriptions((prev) => new Set(prev).add(courseId));
+  };
+
   const checkGraceCompliance = async (courseId: string, courseTitle: string) => {
     const desc = descriptions[courseId];
     if (!desc?.courseContent?.trim()) return;
@@ -346,48 +427,37 @@ export function CourseDescriptionForm({
       });
 
       if (!res.ok) {
-        setGraceResults((prev) => ({
-          ...prev,
-          [courseId]: {
-            scores: {},
-            explanation: "Compliance check failed. Please try again.",
-            recommendation: "",
-            passed: false,
-          },
-        }));
+        const fallback: GraceResult = {
+          scores: {},
+          explanation: "Compliance check failed. Please try again.",
+          recommendation: "",
+          passed: false,
+        };
+        setGraceForCourse(courseId, fallback);
       } else {
         const data = await res.json();
-        console.log(data)
-
         if (data.analysis) {
           const result = parseGraceAnalysis(data.analysis);
-          setGraceResults((prev) => ({
-            ...prev,
-            [courseId]: result,
-          }));
+          setGraceForCourse(courseId, result);
         } else {
-          setGraceResults((prev) => ({
-            ...prev,
-            [courseId]: {
-              scores: {},
-              explanation: "No analysis returned from server.",
-              recommendation: "",
-              passed: false,
-            },
-          }));
+          const fallback: GraceResult = {
+            scores: {},
+            explanation: "No analysis returned from server.",
+            recommendation: "",
+            passed: false,
+          };
+          setGraceForCourse(courseId, fallback);
         }
       }
     } catch {
-      setGraceResults((prev) => ({
-        ...prev,
-        [courseId]: {
-          scores: {},
-          explanation:
-            "Could not reach the GRACE compliance server. Please try again later.",
-          recommendation: "",
-          passed: false,
-        },
-      }));
+      const fallback: GraceResult = {
+        scores: {},
+        explanation:
+          "Could not reach the GRACE compliance server. Please try again later.",
+        recommendation: "",
+        passed: false,
+      };
+      setGraceForCourse(courseId, fallback);
     } finally {
       setGraceChecking(null);
     }
@@ -579,6 +649,15 @@ export function CourseDescriptionForm({
                                     delete next[course.id];
                                     return next;
                                   });
+                                  // Also reset persisted GRACE state
+                                  setDescriptions((prev) => ({
+                                    ...prev,
+                                    [course.id]: {
+                                      ...prev[course.id],
+                                      gracePass: false,
+                                      graceResult: null,
+                                    },
+                                  }));
                                 }
                               }}
                               placeholder="Describe the course content, topics covered, and key learning areas. Keep the description GRACE compliant: clear, structured, and focused on student outcomes."
