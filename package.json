@@ -10,7 +10,7 @@
     "ts-lint": "tsc --noEmit --incremental",
     "lint": "eslint",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push",
+    "db:push": "cross-env NODE_OPTIONS=--dns-result-order=ipv4first prisma db push",
     "db:seed": "npx tsx prisma/seed.ts",
     "db:studio": "prisma studio"
   },
@@ -59,6 +59,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^5.1.2",
+    "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
     "jsdom": "^27.4.0",
