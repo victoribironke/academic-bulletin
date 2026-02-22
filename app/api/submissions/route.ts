@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
     console.error("Failed to fetch submissions:", error);
     return NextResponse.json(
       { error: "Failed to fetch submissions" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     if (!title || !academicYear || !programmeId || !createdById) {
       return NextResponse.json(
         { error: "Title, academic year, programme, and creator are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -142,20 +142,20 @@ export async function POST(request: NextRequest) {
             error:
               "A submission for this programme and academic year already exists",
           },
-          { status: 409 }
+          { status: 409 },
         );
       }
       if (error.code === "P2003") {
         return NextResponse.json(
           { error: "Programme or user not found" },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }
 
     return NextResponse.json(
       { error: "Failed to create submission" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
