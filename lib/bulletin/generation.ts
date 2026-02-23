@@ -17,6 +17,13 @@ import {
 // Types
 export type ExportLevel = "department" | "school" | "institution";
 
+export interface BulletinCourseDescription {
+  learningOutcomes?: string[];
+  courseContent?: string;
+  labWork?: string;
+  entrepreneurialAspect?: string;
+}
+
 export interface BulletinCourse {
   code: string;
   title: string;
@@ -27,6 +34,7 @@ export interface BulletinCourse {
   prerequisites?: string;
   ownership?: string;
   ownerDepartment?: string;
+  description?: BulletinCourseDescription;
 }
 
 export interface BulletinStaff {
@@ -53,10 +61,19 @@ export interface BulletinProgramme {
   staff: BulletinStaff[];
   content?: {
     philosophy?: string;
-    aims?: string[];
+    mission?: string;
+    vision?: string;
     objectives?: string[];
-    admissionRequirements?: string[];
+    uniqueFeatures?: string[];
+    employability?: string;
+    centurySkills?: string[];
+    utmeRequirements?: string;
+    directEntryRequirements?: string;
+    transferRequirements?: string;
+    minimumDuration?: string;
     graduationRequirements?: string;
+    minimumCGPA?: number;
+    totalUnits?: number;
   };
 }
 
@@ -116,10 +133,12 @@ export async function generateDepartmentBulletin(
               ownerDepartment: { select: { code: true } },
             },
           },
+          description: true,
         },
         orderBy: [{ level: "asc" }, { semester: "asc" }, { code: "asc" }],
       },
       content: true,
+      courseDescriptions: true,
     },
   });
 
@@ -154,6 +173,17 @@ export async function generateDepartmentBulletin(
       prerequisites: c.prerequisites || undefined,
       ownership: c.masterCourse?.ownership,
       ownerDepartment: c.masterCourse?.ownerDepartment?.code,
+      description: c.description
+        ? {
+            learningOutcomes: Array.isArray(c.description.learningOutcomes)
+              ? (c.description.learningOutcomes as string[])
+              : undefined,
+            courseContent: c.description.courseContent || undefined,
+            labWork: c.description.labWork || undefined,
+            entrepreneurialAspect:
+              c.description.entrepreneurialAspect || undefined,
+          }
+        : undefined,
     }),
   );
 
@@ -171,14 +201,28 @@ export async function generateDepartmentBulletin(
     content: submission?.content
       ? {
           philosophy: submission.content.philosophy || undefined,
+          mission: submission.content.mission || undefined,
+          vision: submission.content.vision || undefined,
           objectives: Array.isArray(submission.content.objectives)
             ? (submission.content.objectives as string[])
             : undefined,
-          admissionRequirements: submission.content.utmeRequirements
-            ? [submission.content.utmeRequirements]
+          uniqueFeatures: Array.isArray(submission.content.uniqueFeatures)
+            ? (submission.content.uniqueFeatures as string[])
             : undefined,
+          employability: submission.content.employability || undefined,
+          centurySkills: Array.isArray(submission.content.centurySkills)
+            ? (submission.content.centurySkills as string[])
+            : undefined,
+          utmeRequirements: submission.content.utmeRequirements || undefined,
+          directEntryRequirements:
+            submission.content.directEntryRequirements || undefined,
+          transferRequirements:
+            submission.content.transferRequirements || undefined,
+          minimumDuration: submission.content.minimumDuration || undefined,
           graduationRequirements:
             submission.content.graduationRequirements || undefined,
+          minimumCGPA: submission.content.minimumCGPA || undefined,
+          totalUnits: submission.content.totalUnits || undefined,
         }
       : undefined,
   };
