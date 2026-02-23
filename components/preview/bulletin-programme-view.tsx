@@ -186,14 +186,30 @@ export function BulletinProgrammeView({
           ADMISSION REQUIREMENTS
         </h2>
 
-        {programme.content?.admissionRequirements && (
+        {programme.content?.utmeRequirements && (
           <div className="mb-4">
-            <h3 className="font-semibold mb-2">Admission Requirements</h3>
-            {programme.content.admissionRequirements.map((req, i) => (
-              <p key={i} className="mb-2">
-                {req}
-              </p>
-            ))}
+            <h3 className="font-semibold mb-2">UTME Entry Requirements</h3>
+            <p className="text-justify">{programme.content.utmeRequirements}</p>
+          </div>
+        )}
+
+        {programme.content?.directEntryRequirements && (
+          <div className="mb-4">
+            <h3 className="font-semibold mb-2">Direct Entry Requirements</h3>
+            <p className="text-justify">
+              {programme.content.directEntryRequirements}
+            </p>
+          </div>
+        )}
+
+        {programme.content?.transferRequirements && (
+          <div className="mb-4">
+            <h3 className="font-semibold mb-2">
+              Inter-University Transfer Requirements
+            </h3>
+            <p className="text-justify">
+              {programme.content.transferRequirements}
+            </p>
           </div>
         )}
       </section>
