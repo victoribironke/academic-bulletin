@@ -10,10 +10,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Eye, Printer, Download } from "lucide-react";
-import {
-  BulletinData,
-} from "@/lib/bulletin/generation";
+import { Loader2, Eye, Printer, Download, FileText } from "lucide-react";
+import { BulletinData } from "@/lib/bulletin/generation";
 import { BulletinProgrammeView } from "@/components/preview/bulletin-programme-view";
 
 interface Submission {
@@ -49,7 +47,6 @@ interface Submission {
 
 interface BulletinPreviewProps {
   submission: Submission;
-  // departmentId prop is no longer needed but kept for compatibility if passed
   departmentId?: string;
 }
 
@@ -58,6 +55,7 @@ export function BulletinPreview({ submission }: BulletinPreviewProps) {
   const [data, setData] = useState<BulletinData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exportingFormat, setExportingFormat] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -96,21 +94,36 @@ export function BulletinPreview({ submission }: BulletinPreviewProps) {
     window.print();
   };
 
-  // Helper to group courses if data is loaded
-  // const getGroupedCourses = (courses: BulletinCourse[]) => {
-  //   return courses.reduce(
-  //     (acc, course) => {
-  //       if (!acc[course.level]) acc[course.level] = { sem1: [], sem2: [] };
-  //       if (course.semester === 1) {
-  //         acc[course.level].sem1.push(course);
-  //       } else {
-  //         acc[course.level].sem2.push(course);
-  //       }
-  //       return acc;
-  //     },
-  //     {} as Record<number, { sem1: BulletinCourse[]; sem2: BulletinCourse[] }>,
-  //   );
-  // };
+  const handleExport = async (format: "docx" | "pdf") => {
+    setExportingFormat(format);
+    try {
+      const params = new URLSearchParams({
+        submissionId: submission.id,
+        format,
+      });
+
+      const response = await fetch(`/api/bulletin/export?${params}`);
+
+      if (!response.ok) {
+        throw new Error("Export failed");
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${submission.title.replace(/[^a-zA-Z0-9\s]/g, "").replace(/\s+/g, "_")}_Bulletin.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error(`Failed to export ${format}:`, error);
+      alert(`Failed to export as ${format.toUpperCase()}. Please try again.`);
+    } finally {
+      setExportingFormat(null);
+    }
+  };
 
   if (!data && !isLoading && isOpen && error) {
     return (
@@ -129,15 +142,6 @@ export function BulletinPreview({ submission }: BulletinPreviewProps) {
   }
 
   const programmeData = data?.programmes[0];
-  // const academicStaff =
-  //   programmeData?.staff.filter((s) => s.type === "ACADEMIC") || [];
-  // const adjunctStaff =
-  //   programmeData?.staff.filter((s) => s.type === "ADJUNCT") || [];
-  // const nonAcademicStaff =
-  //   programmeData?.staff.filter((s) => s.type === "NON_ACADEMIC") || [];
-  // const groupedCourses = programmeData
-  //   ? getGroupedCourses(programmeData.courses)
-  //   : {};
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -156,8 +160,30 @@ export function BulletinPreview({ submission }: BulletinPreviewProps) {
                 <Printer className="h-4 w-4 mr-1" />
                 Print
               </Button>
-              <Button variant="outline" size="sm" disabled>
-                <Download className="h-4 w-4 mr-1" />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleExport("docx")}
+                disabled={exportingFormat !== null}
+              >
+                {exportingFormat === "docx" ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <FileText className="h-4 w-4 mr-1" />
+                )}
+                Export Word
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleExport("pdf")}
+                disabled={exportingFormat !== null}
+              >
+                {exportingFormat === "pdf" ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4 mr-1" />
+                )}
                 Export PDF
               </Button>
             </div>
