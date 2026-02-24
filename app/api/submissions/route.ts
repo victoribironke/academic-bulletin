@@ -70,11 +70,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { title, academicYear, programmeId, createdById } = body;
+    const { title, programmeId, createdById } = body;
 
-    if (!title || !academicYear || !programmeId || !createdById) {
+    if (!title || !programmeId || !createdById) {
       return NextResponse.json(
-        { error: "Title, academic year, programme, and creator are required" },
+        { error: "Title, programme, and creator are required" },
         { status: 400 },
       );
     }
@@ -83,7 +83,6 @@ export async function POST(request: NextRequest) {
     const submission = await prisma.submission.create({
       data: {
         title,
-        academicYear,
         programmeId,
         createdById,
         status: "DRAFT",
