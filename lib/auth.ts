@@ -35,16 +35,6 @@ export type Permission =
 
 // Role-based permission mapping
 const rolePermissions: Record<UserRole, Permission[]> = {
-  COORDINATOR: [
-    "view:dashboard",
-    "view:submissions",
-    "create:submission",
-    "edit:submission",
-    "view:programmes",
-    "view:departments",
-    "view:schools",
-    "view:staff",
-  ],
   HOD: [
     "view:dashboard",
     "view:submissions",
@@ -139,7 +129,6 @@ export function hasAnyPermission(
  */
 export function getRoleDisplayName(role: UserRole): string {
   const names: Record<UserRole, string> = {
-    COORDINATOR: "Programme Coordinator",
     HOD: "Head of Department",
     DEAN: "Dean",
     ADMIN: "Academic Planning Admin",
