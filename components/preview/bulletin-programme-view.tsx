@@ -6,12 +6,10 @@ import { BulletinProgramme, BulletinCourse } from "@/lib/bulletin/generation";
 
 interface BulletinProgrammeViewProps {
   programme: BulletinProgramme;
-  academicYear: string; // Passed down because programme doesn't store year at root
 }
 
 export function BulletinProgrammeView({
   programme,
-  academicYear,
 }: BulletinProgrammeViewProps) {
   const academicStaff = programme.staff.filter((s) => s.type === "ACADEMIC");
   const adjunctStaff = programme.staff.filter((s) => s.type === "ADJUNCT");
@@ -45,9 +43,6 @@ export function BulletinProgrammeView({
           Department of {programme.department}
         </h2>
         <h3 className="text-lg font-medium">{programme.name}</h3>
-        <div className="text-muted-foreground border border-input inline-block px-2 py-0.5 rounded-full text-xs">
-          {academicYear} Academic Session
-        </div>
       </div>
 
       <Separator />
