@@ -63,7 +63,7 @@ import {
 interface Submission {
   id: string;
   title: string;
-  academicYear: string;
+
   currentPhase: number;
   status: "DRAFT" | "IN_REVIEW" | "APPROVED" | "REJECTED";
   submittedAt: string | null;
@@ -569,9 +569,7 @@ export default function SubmissionDetailPage({
       }
       // GRACE compliance checks
       if (!gracePhilosophyResult?.passed) {
-        errors.push(
-          "Programme philosophy must pass GRACE compliance check",
-        );
+        errors.push("Programme philosophy must pass GRACE compliance check");
       }
       // Check course description GRACE compliance
       try {
@@ -581,17 +579,16 @@ export default function SubmissionDetailPage({
         if (coursesRes.ok) {
           const courses = await coursesRes.json();
           const failedCourses = courses.filter(
-            (c: { description?: { gracePass?: boolean; courseContent?: string }; code: string }) =>
-              c.description?.courseContent &&
-              !c.description?.gracePass,
+            (c: {
+              description?: { gracePass?: boolean; courseContent?: string };
+              code: string;
+            }) => c.description?.courseContent && !c.description?.gracePass,
           );
           if (failedCourses.length > 0) {
             const codes = failedCourses
               .map((c: { code: string }) => c.code)
               .join(", ");
-            errors.push(
-              `Course descriptions not GRACE compliant: ${codes}`,
-            );
+            errors.push(`Course descriptions not GRACE compliant: ${codes}`);
           }
           const missingDesc = courses.filter(
             (c: { description?: { courseContent?: string } }) =>
@@ -601,9 +598,7 @@ export default function SubmissionDetailPage({
             const codes = missingDesc
               .map((c: { code: string }) => c.code)
               .join(", ");
-            errors.push(
-              `Course descriptions missing: ${codes}`,
-            );
+            errors.push(`Course descriptions missing: ${codes}`);
           }
         }
       } catch {
@@ -681,8 +676,7 @@ export default function SubmissionDetailPage({
       : "";
 
     const scoreValues = Object.values(scores);
-    const passed =
-      scoreValues.length > 0 && scoreValues.every((s) => s >= 3);
+    const passed = scoreValues.length > 0 && scoreValues.every((s) => s >= 3);
 
     return { scores, explanation, recommendation, passed };
   };
@@ -865,7 +859,6 @@ export default function SubmissionDetailPage({
               <span>•</span>
               <span>{submission.programme.department.school.code}</span>
               <span>•</span>
-              <Badge variant="outline">{submission.academicYear}</Badge>
             </div>
           </div>
         </div>
@@ -1053,8 +1046,7 @@ export default function SubmissionDetailPage({
                               size="sm"
                               onClick={checkPhilosophyGrace}
                               disabled={
-                                graceCheckingPhilosophy ||
-                                !philosophy.trim()
+                                graceCheckingPhilosophy || !philosophy.trim()
                               }
                             >
                               {graceCheckingPhilosophy ? (
