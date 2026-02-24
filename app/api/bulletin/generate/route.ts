@@ -11,19 +11,14 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const level = searchParams.get("level") as ExportLevel;
-    const academicYear = searchParams.get("academicYear");
     const programmeId = searchParams.get("programmeId");
     const schoolId = searchParams.get("schoolId");
+    const submissionId = searchParams.get("submissionId");
 
     // Validate required params
-    if (!level || !academicYear) {
-      return NextResponse.json(
-        { error: "level and academicYear are required" },
-        { status: 400 },
-      );
+    if (!level) {
+      return NextResponse.json({ error: "level is required" }, { status: 400 });
     }
-
-    const submissionId = searchParams.get("submissionId");
 
     // Validate level
     if (!["department", "school", "institution"].includes(level)) {
@@ -45,7 +40,6 @@ export async function GET(request: Request) {
         }
         bulletinData = await generateDepartmentBulletin(
           programmeId,
-          academicYear,
           submissionId || undefined,
         );
         break;
@@ -57,11 +51,11 @@ export async function GET(request: Request) {
             { status: 400 },
           );
         }
-        bulletinData = await generateSchoolBulletin(schoolId, academicYear);
+        bulletinData = await generateSchoolBulletin(schoolId);
         break;
 
       case "institution":
-        bulletinData = await generateInstitutionBulletin(academicYear);
+        bulletinData = await generateInstitutionBulletin();
         break;
 
       default:
