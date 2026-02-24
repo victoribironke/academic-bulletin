@@ -80,7 +80,6 @@ export interface BulletinProgramme {
 export interface BulletinData {
   level: ExportLevel;
   title: string;
-  academicYear: string;
   generatedAt: Date;
   programmes: BulletinProgramme[];
   summary: {
@@ -96,7 +95,6 @@ export interface BulletinData {
 // Update signature
 export async function generateDepartmentBulletin(
   programmeId: string,
-  academicYear: string,
   submissionId?: string,
 ): Promise<BulletinData> {
   const programme = await prisma.programme.findUnique({
@@ -121,7 +119,6 @@ export async function generateDepartmentBulletin(
       ? { id: submissionId }
       : {
           programmeId,
-          academicYear,
           status: "APPROVED",
         },
     include: {
@@ -230,7 +227,6 @@ export async function generateDepartmentBulletin(
   return {
     level: "department",
     title: `${programme.name} - Academic Bulletin`,
-    academicYear,
     generatedAt: new Date(),
     programmes: [bulletinProgramme],
     summary: {
@@ -246,7 +242,6 @@ export async function generateDepartmentBulletin(
  */
 export async function generateSchoolBulletin(
   schoolId: string,
-  academicYear: string,
 ): Promise<BulletinData> {
   const school = await prisma.school.findUnique({
     where: { id: schoolId },
@@ -274,7 +269,6 @@ export async function generateSchoolBulletin(
       const submission = await prisma.submission.findFirst({
         where: {
           programmeId: prog.id,
-          academicYear,
           status: "APPROVED",
         },
         include: {
@@ -354,7 +348,6 @@ export async function generateSchoolBulletin(
   return {
     level: "school",
     title: `${school.name} - Academic Bulletin`,
-    academicYear,
     generatedAt: new Date(),
     programmes,
     summary: {
@@ -368,9 +361,7 @@ export async function generateSchoolBulletin(
 /**
  * Generate bulletin data for entire institution
  */
-export async function generateInstitutionBulletin(
-  academicYear: string,
-): Promise<BulletinData> {
+export async function generateInstitutionBulletin(): Promise<BulletinData> {
   const schools = await prisma.school.findMany({
     include: {
       departments: {
@@ -393,7 +384,6 @@ export async function generateInstitutionBulletin(
         const submission = await prisma.submission.findFirst({
           where: {
             programmeId: prog.id,
-            academicYear,
             status: "APPROVED",
           },
           include: {
@@ -471,7 +461,6 @@ export async function generateInstitutionBulletin(
   return {
     level: "institution",
     title: "Babcock University - Academic Bulletin",
-    academicYear,
     generatedAt: new Date(),
     programmes,
     summary: {
