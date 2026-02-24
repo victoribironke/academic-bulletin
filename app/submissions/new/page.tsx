@@ -54,19 +54,10 @@ export default function NewSubmissionPage() {
 
   const [formData, setFormData] = useState({
     programmeId: "",
-    academicYear: "",
     title: "",
   });
 
   const [filterSchoolId, setFilterSchoolId] = useState<string>("all");
-
-  // Generate academic year options (current year and next 2 years)
-  const currentYear = new Date().getFullYear();
-  const academicYearOptions = [
-    `${currentYear}/${currentYear + 1}`,
-    `${currentYear + 1}/${currentYear + 2}`,
-    `${currentYear + 2}/${currentYear + 3}`,
-  ];
 
   const fetchData = async () => {
     try {
@@ -96,16 +87,16 @@ export default function NewSubmissionPage() {
 
   // Auto-generate title when programme and year are selected
   useEffect(() => {
-    if (formData.programmeId && formData.academicYear) {
+    if (formData.programmeId) {
       const programme = programmes.find((p) => p.id === formData.programmeId);
       if (programme) {
         setFormData((prev) => ({
           ...prev,
-          title: `${programme.name} - Academic Bulletin ${formData.academicYear}`,
+          title: `${programme.name} - Academic Bulletin`,
         }));
       }
     }
-  }, [formData.programmeId, formData.academicYear, programmes]);
+  }, [formData.programmeId, programmes]);
 
   const filteredProgrammes =
     filterSchoolId === "all"
@@ -121,8 +112,8 @@ export default function NewSubmissionPage() {
       return;
     }
 
-    if (!formData.programmeId || !formData.academicYear) {
-      setError("Please select a programme and academic year");
+    if (!formData.programmeId) {
+      setError("Please select a programme");
       return;
     }
 
@@ -202,8 +193,8 @@ export default function NewSubmissionPage() {
             Submission Details
           </CardTitle>
           <CardDescription>
-            Select the programme and academic year for this submission. You can
-            edit the content after creating.
+            Select the programme for this submission. You can edit the content
+            after creating.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -255,30 +246,6 @@ export default function NewSubmissionPage() {
                           {prog.department.name} - {prog.department.school.code}
                         </span>
                       </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Academic Year */}
-            <div className="grid gap-2">
-              <Label htmlFor="academicYear">
-                Academic Year <span className="text-destructive">*</span>
-              </Label>
-              <Select
-                value={formData.academicYear}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, academicYear: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select academic year" />
-                </SelectTrigger>
-                <SelectContent>
-                  {academicYearOptions.map((year) => (
-                    <SelectItem key={year} value={year}>
-                      {year}
                     </SelectItem>
                   ))}
                 </SelectContent>
