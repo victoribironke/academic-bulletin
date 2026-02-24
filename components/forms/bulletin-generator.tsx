@@ -26,7 +26,6 @@ export function BulletinGenerator() {
   const [level, setLevel] = useState<"school" | "institution">("school");
   const [schools, setSchools] = useState<School[]>([]);
   const [selectedSchoolId, setSelectedSchoolId] = useState<string>("");
-  const [academicYear, setAcademicYear] = useState<string>("2025/2026");
   const [isLoading, setIsLoading] = useState(false);
   const [generatedData, setGeneratedData] = useState<BulletinData | null>(null);
 
@@ -60,7 +59,6 @@ export function BulletinGenerator() {
     try {
       const params = new URLSearchParams({
         level,
-        academicYear,
       });
 
       if (level === "school") {
@@ -142,20 +140,6 @@ export function BulletinGenerator() {
               </div>
             )}
 
-            <div className="space-y-2">
-              <Label>Academic Year</Label>
-              <Select value={academicYear} onValueChange={setAcademicYear}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="2025/2026">2025/2026</SelectItem>
-                  <SelectItem value="2026/2027">2026/2027</SelectItem>
-                  <SelectItem value="2027/2028">2027/2028</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
             <Button onClick={handleGenerate} disabled={isLoading}>
               {isLoading ? (
                 <>
@@ -195,9 +179,7 @@ export function BulletinGenerator() {
             <h1 className="text-4xl font-bold mb-4 uppercase">
               {generatedData.title}
             </h1>
-            <p className="text-2xl">
-              {generatedData.academicYear} Academic Year
-            </p>
+            <p className="text-2xl">Academic Bulletin</p>
             <p className="text-sm text-muted-foreground mt-8">
               Generated on{" "}
               {new Date(generatedData.generatedAt).toLocaleDateString()}
@@ -218,10 +200,7 @@ export function BulletinGenerator() {
           <div>
             {generatedData.programmes.map((prog, idx) => (
               <div key={prog.id || idx}>
-                <BulletinProgrammeView
-                  programme={prog}
-                  academicYear={generatedData.academicYear}
-                />
+                <BulletinProgrammeView programme={prog} />
               </div>
             ))}
           </div>
