@@ -148,22 +148,6 @@ async function main() {
   // 7. Create Users
   // ============================================================================
 
-  // Coordinator
-  await prisma.user.upsert({
-    where: { email: "coordinator@university.edu" },
-    update: {},
-    create: {
-      email: "coordinator@university.edu",
-      passwordHash: PLACEHOLDER_PASSWORD_HASH,
-      firstName: "John",
-      lastName: "Coordinator",
-      role: UserRole.COORDINATOR,
-      isActive: true,
-      schoolId: school.id,
-      departmentId: department.id,
-    },
-  });
-
   // HOD
   await prisma.user.upsert({
     where: { email: "hod@university.edu" },
