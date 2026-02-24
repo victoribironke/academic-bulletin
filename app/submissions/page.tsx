@@ -42,7 +42,6 @@ import {
 interface Submission {
   id: string;
   title: string;
-  academicYear: string;
   currentPhase: number;
   status: "DRAFT" | "IN_REVIEW" | "APPROVED" | "REJECTED";
   submittedAt: string | null;
@@ -256,7 +255,6 @@ export default function SubmissionsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Programme</TableHead>
-                  <TableHead>Academic Year</TableHead>
                   <TableHead>Phase</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Comments</TableHead>
@@ -279,11 +277,6 @@ export default function SubmissionsPage() {
                             {submission.programme.department.code}
                           </span>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {submission.academicYear}
-                        </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
