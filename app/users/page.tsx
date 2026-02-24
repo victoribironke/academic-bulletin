@@ -47,7 +47,7 @@ interface User {
   email: string;
   firstName: string;
   lastName: string;
-  role: "COORDINATOR" | "HOD" | "DEAN" | "ADMIN";
+  role: "HOD" | "DEAN" | "ADMIN";
   isActive: boolean;
   schoolId: string | null;
   departmentId: string | null;
@@ -185,7 +185,6 @@ export default function UsersPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Roles</SelectItem>
-                  <SelectItem value="COORDINATOR">Coordinator</SelectItem>
                   <SelectItem value="HOD">Head of Department</SelectItem>
                   <SelectItem value="DEAN">Dean</SelectItem>
                   <SelectItem value="ADMIN">Admin</SelectItem>
@@ -269,9 +268,6 @@ export default function UsersPage() {
                           </Badge>
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="COORDINATOR">
-                            {getRoleDisplayName("COORDINATOR")}
-                          </SelectItem>
                           <SelectItem value="HOD">
                             {getRoleDisplayName("HOD")}
                           </SelectItem>
