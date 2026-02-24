@@ -17,7 +17,6 @@ import { BulletinProgrammeView } from "@/components/preview/bulletin-programme-v
 interface Submission {
   id: string;
   title: string;
-  academicYear: string;
   programme: {
     id: string;
     name: string;
@@ -64,7 +63,6 @@ export function BulletinPreview({ submission }: BulletinPreviewProps) {
       const params = new URLSearchParams({
         level: "department",
         programmeId: submission.programme.id,
-        academicYear: submission.academicYear,
         submissionId: submission.id,
       });
 
@@ -82,7 +80,7 @@ export function BulletinPreview({ submission }: BulletinPreviewProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [submission.id, submission.programme.id, submission.academicYear]);
+  }, [submission.id, submission.programme.id]);
 
   useEffect(() => {
     if (isOpen) {
@@ -198,10 +196,7 @@ export function BulletinPreview({ submission }: BulletinPreviewProps) {
           <ScrollArea className="h-[70vh] pr-4">
             <div id="bulletin-preview">
               {programmeData && (
-                <BulletinProgrammeView
-                  programme={programmeData}
-                  academicYear={data?.academicYear || ""}
-                />
+                <BulletinProgrammeView programme={programmeData} />
               )}
             </div>
           </ScrollArea>
