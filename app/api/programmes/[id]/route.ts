@@ -29,7 +29,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           select: {
             id: true,
             title: true,
-            academicYear: true,
             currentPhase: true,
             status: true,
             createdAt: true,
@@ -44,7 +43,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!programme) {
       return NextResponse.json(
         { error: "Programme not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -53,7 +52,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     console.error("Failed to fetch programme:", error);
     return NextResponse.json(
       { error: "Failed to fetch programme" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -100,20 +99,20 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       if (error.code === "P2025") {
         return NextResponse.json(
           { error: "Programme not found" },
-          { status: 404 }
+          { status: 404 },
         );
       }
       if (error.code === "P2002") {
         return NextResponse.json(
           { error: "A programme with this code already exists" },
-          { status: 409 }
+          { status: 409 },
         );
       }
     }
 
     return NextResponse.json(
       { error: "Failed to update programme" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -139,13 +138,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     ) {
       return NextResponse.json(
         { error: "Programme not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     return NextResponse.json(
       { error: "Failed to delete programme" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
