@@ -16,7 +16,6 @@ datasource db {
 // ============================================================================
 
 enum UserRole {
-  COORDINATOR
   HOD
   DEAN
   ADMIN
@@ -178,7 +177,7 @@ model User {
   passwordHash String
   firstName    String
   lastName     String
-  role         UserRole @default(COORDINATOR)
+  role         UserRole @default(HOD)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -238,7 +237,6 @@ model Staff {
 model Submission {
   id           String           @id @default(cuid())
   title        String
-  academicYear String // e.g., "2025/2026"
   currentPhase Int              @default(1) // Phase 1-11
   status       SubmissionStatus @default(DRAFT)
   submittedAt  DateTime?
@@ -259,7 +257,7 @@ model Submission {
   courses            Course[]
   courseDescriptions CourseDescription[]
 
-  @@unique([programmeId, academicYear])
+  @@unique([programmeId])
   @@map("submissions")
 }
 
