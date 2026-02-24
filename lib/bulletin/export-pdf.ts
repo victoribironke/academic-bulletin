@@ -105,7 +105,6 @@ function drawTable(
 function generateTitlePage(
   doc: InstanceType<typeof PDFDocument>,
   prog: BulletinProgramme,
-  academicYear: string,
 ) {
   doc.moveDown(6);
   doc
@@ -120,11 +119,6 @@ function generateTitlePage(
   doc.fontSize(22).text(prog.name, { align: "center" });
   doc.moveDown(0.5);
   doc.fontSize(18).text("ACADEMIC BULLETIN", { align: "center" });
-  doc.moveDown(0.5);
-  doc
-    .fontSize(14)
-    .font("Helvetica")
-    .text(`${academicYear} Academic Session`, { align: "center" });
   doc.addPage();
 }
 
@@ -354,15 +348,16 @@ function generateCourseDescriptionsSection(
 // ── Main Export ──────────────────────────────────────────────────────────────
 
 export async function generateBulletinPdf(data: BulletinData): Promise<Buffer> {
-  const prog = data.programmes[0];
-  if (!prog) throw new Error("No programme data available for export");
+  if (data.programmes.length === 0)
+    throw new Error("No programme data available for export");
 
   return new Promise((resolve, reject) => {
+    const prog = data.programmes[0];
     const doc = new PDFDocument({
       size: "LETTER",
       margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
       info: {
-        Title: `${prog.name} - Academic Bulletin ${data.academicYear}`,
+        Title: `${prog.name} - Academic Bulletin`,
         Author: prog.school,
       },
     });
@@ -372,12 +367,16 @@ export async function generateBulletinPdf(data: BulletinData): Promise<Buffer> {
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    generateTitlePage(doc, prog, data.academicYear);
-    generateStaffSection(doc, prog);
-    generatePhilosophySection(doc, prog);
-    generateAdmissionSection(doc, prog);
-    generateCourseStructureSection(doc, prog.courses);
-    generateCourseDescriptionsSection(doc, prog.courses);
+    for (let i = 0; i < data.programmes.length; i++) {
+      const p = data.programmes[i];
+      if (i > 0) doc.addPage();
+      generateTitlePage(doc, p);
+      generateStaffSection(doc, p);
+      generatePhilosophySection(doc, p);
+      generateAdmissionSection(doc, p);
+      generateCourseStructureSection(doc, p.courses);
+      generateCourseDescriptionsSection(doc, p.courses);
+    }
 
     doc.end();
   });
