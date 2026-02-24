@@ -107,10 +107,7 @@ function cell(text: string, width?: number) {
 
 // ── Section Generators ───────────────────────────────────────────────────────
 
-function generateTitlePage(
-  prog: BulletinProgramme,
-  academicYear: string,
-): Paragraph[] {
+function generateTitlePage(prog: BulletinProgramme): Paragraph[] {
   return [
     new Paragraph({ spacing: { before: 2400 } }),
     new Paragraph({
@@ -138,22 +135,12 @@ function generateTitlePage(
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: 200 },
+      spacing: { after: 600 },
       children: [
         new TextRun({
           text: "ACADEMIC BULLETIN",
           bold: true,
           size: 32,
-        }),
-      ],
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 600 },
-      children: [
-        new TextRun({
-          text: `${academicYear} Academic Session`,
-          size: 28,
         }),
       ],
     }),
@@ -484,17 +471,22 @@ function generateCourseDescriptionsSection(
 export async function generateBulletinDocx(
   data: BulletinData,
 ): Promise<Buffer> {
-  const prog = data.programmes[0];
-  if (!prog) throw new Error("No programme data available for export");
+  if (data.programmes.length === 0)
+    throw new Error("No programme data available for export");
 
-  const children = [
-    ...generateTitlePage(prog, data.academicYear),
-    ...generateStaffSection(prog),
-    ...generatePhilosophySection(prog),
-    ...generateAdmissionSection(prog),
-    ...generateCourseStructureSection(prog.courses),
-    ...generateCourseDescriptionsSection(prog.courses),
-  ];
+  // Build children for all programmes with section breaks between them
+  const children: (Paragraph | Table)[] = [];
+
+  for (const prog of data.programmes) {
+    children.push(
+      ...generateTitlePage(prog),
+      ...generateStaffSection(prog),
+      ...generatePhilosophySection(prog),
+      ...generateAdmissionSection(prog),
+      ...generateCourseStructureSection(prog.courses),
+      ...generateCourseDescriptionsSection(prog.courses),
+    );
+  }
 
   const doc = new Document({
     styles: {
