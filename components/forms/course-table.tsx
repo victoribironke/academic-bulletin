@@ -220,22 +220,50 @@ export function CourseTable({
     }
   }, [submissionId, departmentId, fetchData]);
 
-  // Validate courses - basic validation
+  // Validate courses - basic and uniqueness validation
   useEffect(() => {
     const errors: string[] = [];
     let hasIncompleteCourses = false;
 
+    const seenCodes = new Set<string>();
+    const seenTitles = new Set<string>();
+    const duplicateCodes = new Set<string>();
+    const duplicateTitles = new Set<string>();
+
     LEVELS.forEach((level) => {
       const courses = coursesByLevel[level] || [];
       courses.forEach((course) => {
-        if (course.code && !course.title) {
-          hasIncompleteCourses = true;
+        const code = course.code?.trim().toUpperCase();
+        const title = course.title?.trim().toLowerCase();
+
+        if (code && !course.title?.trim()) hasIncompleteCourses = true;
+
+        if (code) {
+          if (seenCodes.has(code)) duplicateCodes.add(code);
+          seenCodes.add(code);
+        }
+
+        if (title) {
+          if (seenTitles.has(title)) duplicateTitles.add(title);
+          seenTitles.add(title);
         }
       });
     });
 
     if (hasIncompleteCourses) {
       errors.push("All courses must have both code and title");
+    }
+
+    if (duplicateCodes.size > 0) {
+      errors.push(
+        `Duplicate course codes found: ${Array.from(duplicateCodes).join(", ")}`,
+      );
+    }
+
+    if (duplicateTitles.size > 0) {
+      errors.push(
+        `Duplicate course titles found. Each course must have a unique title.`,
+      );
     }
 
     onValidationChange?.(errors.length === 0, errors);
