@@ -196,6 +196,8 @@ model User {
   phaseTransitions PhaseTransition[]
   // Comments made by this user
   comments         Comment[]
+  // Cycles created by this admin
+  reviewCycles     ReviewCycle[]
 
   @@map("users")
 }
@@ -234,6 +236,21 @@ model Staff {
 // SUBMISSION WORKFLOW
 // ============================================================================
 
+model ReviewCycle {
+  id          String   @id @default(cuid())
+  name        String   // e.g., "2025/2026 Bulletin Review"
+  description String?
+  isActive    Boolean  @default(true)
+  startedAt   DateTime @default(now())
+  closedAt    DateTime?
+  createdById String
+
+  createdBy   User         @relation(fields: [createdById], references: [id])
+  submissions Submission[]
+
+  @@map("review_cycles")
+}
+
 model Submission {
   id           String           @id @default(cuid())
   title        String
@@ -247,17 +264,19 @@ model Submission {
   // Foreign Keys
   programmeId String
   createdById String
+  cycleId     String?
 
   // Relations
   programme          Programme           @relation(fields: [programmeId], references: [id], onDelete: Cascade)
   createdBy          User                @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  cycle              ReviewCycle?        @relation(fields: [cycleId], references: [id])
   content            SubmissionContent?
   phaseTransitions   PhaseTransition[]
   comments           Comment[]
   courses            Course[]
   courseDescriptions CourseDescription[]
 
-  @@unique([programmeId])
+  @@unique([programmeId, cycleId])
   @@map("submissions")
 }
 
