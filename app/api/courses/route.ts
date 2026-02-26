@@ -122,14 +122,31 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check for duplicate course code in this submission
-    const existing = await prisma.course.findUnique({
+    const existingCode = await prisma.course.findUnique({
       where: { code_submissionId: { code: formattedCode, submissionId } },
     });
 
-    if (existing) {
+    if (existingCode) {
       return NextResponse.json(
         { error: "A course with this code already exists in this submission" },
+        { status: 409 },
+      );
+    }
+
+    // Check for duplicate course title in this submission
+    const existingTitle = await prisma.course.findFirst({
+      where: {
+        submissionId,
+        title: {
+          equals: formattedTitle,
+          mode: "insensitive",
+        },
+      },
+    });
+
+    if (existingTitle) {
+      return NextResponse.json(
+        { error: "A course with this title already exists in this submission" },
         { status: 409 },
       );
     }
