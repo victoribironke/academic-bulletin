@@ -51,6 +51,10 @@ export default function NewSubmissionPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [activeCycle, setActiveCycle] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   const [formData, setFormData] = useState({
     programmeId: "",
@@ -61,9 +65,10 @@ export default function NewSubmissionPage() {
 
   const fetchData = async () => {
     try {
-      const [programmesRes, schoolsRes] = await Promise.all([
+      const [programmesRes, schoolsRes, cyclesRes] = await Promise.all([
         fetch("/api/programmes"),
         fetch("/api/schools"),
+        fetch("/api/cycles"),
       ]);
 
       if (programmesRes.ok) {
@@ -73,6 +78,11 @@ export default function NewSubmissionPage() {
       if (schoolsRes.ok) {
         const data = await schoolsRes.json();
         setSchools(data);
+      }
+      if (cyclesRes.ok) {
+        const data = await cyclesRes.json();
+        const active = data.find((c: any) => c.isActive);
+        setActiveCycle(active || null);
       }
     } catch (err) {
       console.error("Failed to fetch data:", err);
@@ -112,6 +122,11 @@ export default function NewSubmissionPage() {
       return;
     }
 
+    if (!activeCycle) {
+      setError("No active review cycle found. An admin must create one.");
+      return;
+    }
+
     if (!formData.programmeId) {
       setError("Please select a programme");
       return;
@@ -126,6 +141,7 @@ export default function NewSubmissionPage() {
         body: JSON.stringify({
           ...formData,
           createdById: currentUser.id,
+          cycleId: activeCycle.id,
         }),
       });
 
@@ -149,6 +165,31 @@ export default function NewSubmissionPage() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!activeCycle) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Card className="w-96">
+          <CardHeader>
+            <CardTitle className="text-destructive">
+              No Active Review Cycle
+            </CardTitle>
+            <CardDescription>
+              An administrator must create and start a new Review Cycle before
+              any submissions can be created.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/submissions">
+              <Button variant="outline" className="w-full">
+                Back to Submissions
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
       </div>
     );
   }
