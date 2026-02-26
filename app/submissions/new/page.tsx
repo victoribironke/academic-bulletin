@@ -81,7 +81,9 @@ export default function NewSubmissionPage() {
       }
       if (cyclesRes.ok) {
         const data = await cyclesRes.json();
-        const active = data.find((c: any) => c.isActive);
+        const active = data.find(
+          (c: { id: string; name: string; isActive: boolean }) => c.isActive,
+        );
         setActiveCycle(active || null);
       }
     } catch (err) {
