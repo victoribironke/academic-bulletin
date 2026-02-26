@@ -288,7 +288,7 @@ export function CourseTable({
   });
 
   // Fetch master courses for import dialog
-  const fetchMasterCourses = async () => {
+  const fetchMasterCourses = useCallback(async () => {
     setIsLoadingMasterCourses(true);
     try {
       // Fetch based on scope
@@ -307,14 +307,14 @@ export function CourseTable({
     } finally {
       setIsLoadingMasterCourses(false);
     }
-  };
+  }, [registryScope, departmentId]);
 
   // Effect to refetch when scope changes if dialog is open
   useEffect(() => {
     if (importDialogOpen) {
       fetchMasterCourses();
     }
-  }, [registryScope]);
+  }, [registryScope, importDialogOpen, fetchMasterCourses]);
 
   // Open import dialog and load courses
   const openImportDialog = async () => {
