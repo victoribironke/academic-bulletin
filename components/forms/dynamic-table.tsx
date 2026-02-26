@@ -19,7 +19,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Trash2, GripVertical } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 export interface Column<T> {
   key: keyof T;
