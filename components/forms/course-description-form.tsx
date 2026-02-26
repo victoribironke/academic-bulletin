@@ -58,10 +58,11 @@ function GraceResultDisplay({
 
   return (
     <div
-      className={`rounded-lg border p-4 space-y-3 ${result.passed
-        ? "bg-green-50 border-green-200"
-        : "bg-amber-50 border-amber-200"
-        }`}
+      className={`rounded-lg border p-4 space-y-3 ${
+        result.passed
+          ? "bg-green-50 border-green-200"
+          : "bg-amber-50 border-amber-200"
+      }`}
     >
       {/* Header */}
       <div className="flex items-center gap-2">
@@ -71,12 +72,11 @@ function GraceResultDisplay({
           <AlertTriangle className="h-4 w-4 text-amber-600" />
         )}
         <span
-          className={`text-sm font-medium ${result.passed ? "text-green-700" : "text-amber-700"
-            }`}
+          className={`text-sm font-medium ${
+            result.passed ? "text-green-700" : "text-amber-700"
+          }`}
         >
-          {result.passed
-            ? "GRACE Compliant"
-            : "Improvements Needed"}
+          {result.passed ? "GRACE Compliant" : "Improvements Needed"}
         </span>
       </div>
 
@@ -92,9 +92,7 @@ function GraceResultDisplay({
                 className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs ${getScoreBgColor(score)}`}
               >
                 <span className="font-semibold">{key}</span>
-                <span className="text-muted-foreground">
-                  {label}
-                </span>
+                <span className="text-muted-foreground">{label}</span>
                 <span
                   className={`ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full text-white text-xs font-bold ${getScoreColor(score)}`}
                 >
@@ -109,9 +107,7 @@ function GraceResultDisplay({
       {/* Explanation */}
       {result.explanation && (
         <div className="text-sm text-muted-foreground whitespace-pre-line leading-relaxed">
-          {result.explanation
-            .replace(/\*\*/g, "")
-            .replace(/\* /g, "• ")}
+          {result.explanation.replace(/\*\*/g, "").replace(/\* /g, "• ")}
         </div>
       )}
 
@@ -122,9 +118,7 @@ function GraceResultDisplay({
             Recommendations:
           </p>
           <div className="text-xs text-muted-foreground whitespace-pre-line leading-relaxed">
-            {result.recommendation
-              .replace(/\*\*/g, "")
-              .replace(/\* /g, "• ")}
+            {result.recommendation.replace(/\*\*/g, "").replace(/\* /g, "• ")}
           </div>
         </div>
       )}
@@ -180,9 +174,9 @@ export function CourseDescriptionForm({
 
   // GRACE compliance check state
   const [graceChecking, setGraceChecking] = useState<string | null>(null);
-  const [graceResults, setGraceResults] = useState<
-    Record<string, GraceResult>
-  >({});
+  const [graceResults, setGraceResults] = useState<Record<string, GraceResult>>(
+    {},
+  );
 
   // Autosave state
   const [dirtyDescriptions, setDirtyDescriptions] = useState<Set<string>>(
@@ -214,11 +208,12 @@ export function CourseDescriptionForm({
             entrepreneurialAspect:
               course.description.entrepreneurialAspect || "",
             gracePass: course.description.gracePass || false,
-            graceResult: (course.description.graceResult as GraceResult) || null,
+            graceResult:
+              (course.description.graceResult as GraceResult) || null,
           };
           if (course.description.graceResult) {
-            loadedGrace[course.id] =
-              course.description.graceResult as GraceResult;
+            loadedGrace[course.id] = course.description
+              .graceResult as GraceResult;
           }
         } else {
           descs[course.id] = {
@@ -353,39 +348,56 @@ export function CourseDescriptionForm({
     }
   };
 
-  const parseGraceAnalysis = (analysis: string) => {
-    // Extract JSON scores from the markdown code block
+  const parseGraceAnalysis = (analysis: any) => {
     let scores: Record<string, number> = {};
-    const jsonMatch = analysis.match(/```json\s*([\s\S]*?)```/);
-    if (jsonMatch) {
+    let explanation = "";
+    let recommendation = "";
+
+    // If it's a string, it might be raw JSON string or markdown
+    if (typeof analysis === "string") {
       try {
-        const parsed = JSON.parse(jsonMatch[1]);
-        scores = parsed.GRACE_PILLARS || {};
+        // Try parsing it directly as JSON first
+        analysis = JSON.parse(analysis);
       } catch {
-        // If JSON parsing fails, leave scores empty
+        // Fallback: If it's markdown, extract the ```json part
+        const jsonMatch = analysis.match(/```json\s*([\s\S]*?)```/);
+        if (jsonMatch) {
+          try {
+            analysis = JSON.parse(jsonMatch[1]);
+          } catch {
+            // Leave analysis as string to fall back to regex
+          }
+        }
       }
     }
 
-    // Extract explanation (between **Explanation:** and **Vision Alignment** or **Recommendation:**)
-    const explanationMatch = analysis.match(
-      /\*\*Explanation:\*\*\s*([\s\S]*?)(?=\*\*(?:Vision Alignment|Recommendation))/,
-    );
-    const explanation = explanationMatch
-      ? explanationMatch[1].trim()
-      : "";
+    if (typeof analysis === "object" && analysis !== null) {
+      if (Array.isArray(analysis.GRACE_PILLARS)) {
+        analysis.GRACE_PILLARS.forEach((p: any) => {
+          if (p && p.pillar && typeof p.score === "number") {
+            scores[p.pillar] = p.score;
+          }
+        });
+      } else if (typeof analysis.GRACE_PILLARS === "object") {
+        scores = analysis.GRACE_PILLARS || {};
+      }
 
-    // Extract recommendation
-    const recommendationMatch = analysis.match(
-      /\*\*Recommendation:\*\*\s*([\s\S]*?)$/,
-    );
-    const recommendation = recommendationMatch
-      ? recommendationMatch[1].trim()
-      : "";
+      explanation = analysis.Vision_Alignment || analysis.Explanation || "";
+      recommendation = analysis.Recommendation || "";
+    } else if (typeof analysis === "string") {
+      const explanationMatch = analysis.match(
+        /\*\*Explanation:\*\*\s*([\s\S]*?)(?=\*\*(?:Vision Alignment|Recommendation))/,
+      );
+      explanation = explanationMatch ? explanationMatch[1].trim() : "";
 
-    // Consider "passed" if all scores are >= 3
+      const recommendationMatch = analysis.match(
+        /\*\*Recommendation:\*\*\s*([\s\S]*?)$/,
+      );
+      recommendation = recommendationMatch ? recommendationMatch[1].trim() : "";
+    }
+
     const scoreValues = Object.values(scores);
-    const passed =
-      scoreValues.length > 0 && scoreValues.every((s) => s >= 3);
+    const passed = scoreValues.length > 0 && scoreValues.every((s) => s >= 3);
 
     return { scores, explanation, recommendation, passed };
   };
@@ -404,7 +416,10 @@ export function CourseDescriptionForm({
     setDirtyDescriptions((prev) => new Set(prev).add(courseId));
   };
 
-  const checkGraceCompliance = async (courseId: string, courseTitle: string) => {
+  const checkGraceCompliance = async (
+    courseId: string,
+    courseTitle: string,
+  ) => {
     const desc = descriptions[courseId];
     if (!desc?.courseContent?.trim()) return;
 
@@ -435,8 +450,9 @@ export function CourseDescriptionForm({
         setGraceForCourse(courseId, fallback);
       } else {
         const data = await res.json();
-        if (data.analysis) {
-          const result = parseGraceAnalysis(data.analysis);
+        const analysisData = data.analysis || data;
+        if (analysisData) {
+          const result = parseGraceAnalysis(analysisData);
           setGraceForCourse(courseId, result);
         } else {
           const fallback: GraceResult = {
