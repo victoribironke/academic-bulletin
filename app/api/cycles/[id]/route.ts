@@ -74,7 +74,7 @@ export async function GET(
     }
 
     return NextResponse.json(cycle);
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: "Failed to fetch review cycle" },
       { status: 500 },
