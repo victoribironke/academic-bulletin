@@ -658,29 +658,53 @@ export default function SubmissionDetailPage({
     }
   };
 
-  const parseGraceAnalysis = (analysis: string) => {
+  const parseGraceAnalysis = (analysis: any) => {
     let scores: Record<string, number> = {};
-    const jsonMatch = analysis.match(/```json\s*([\s\S]*?)```/);
-    if (jsonMatch) {
+    let explanation = "";
+    let recommendation = "";
+
+    // If it's a string, it might be raw JSON string or markdown
+    if (typeof analysis === "string") {
       try {
-        const parsed = JSON.parse(jsonMatch[1]);
-        scores = parsed.GRACE_PILLARS || {};
+        // Try parsing it directly as JSON first
+        analysis = JSON.parse(analysis);
       } catch {
-        // If JSON parsing fails, leave scores empty
+        // Fallback: If it's markdown, extract the ```json part
+        const jsonMatch = analysis.match(/```json\s*([\s\S]*?)```/);
+        if (jsonMatch) {
+          try {
+            analysis = JSON.parse(jsonMatch[1]);
+          } catch {
+            // Leave analysis as string to fall back to regex
+          }
+        }
       }
     }
 
-    const explanationMatch = analysis.match(
-      /\*\*Explanation:\*\*\s*([\s\S]*?)(?=\*\*(?:Vision Alignment|Recommendation))/,
-    );
-    const explanation = explanationMatch ? explanationMatch[1].trim() : "";
+    if (typeof analysis === "object" && analysis !== null) {
+      if (Array.isArray(analysis.GRACE_PILLARS)) {
+        analysis.GRACE_PILLARS.forEach((p: any) => {
+          if (p && p.pillar && typeof p.score === "number") {
+            scores[p.pillar] = p.score;
+          }
+        });
+      } else if (typeof analysis.GRACE_PILLARS === "object") {
+        scores = analysis.GRACE_PILLARS || {};
+      }
 
-    const recommendationMatch = analysis.match(
-      /\*\*Recommendation:\*\*\s*([\s\S]*?)$/,
-    );
-    const recommendation = recommendationMatch
-      ? recommendationMatch[1].trim()
-      : "";
+      explanation = analysis.Vision_Alignment || analysis.Explanation || "";
+      recommendation = analysis.Recommendation || "";
+    } else if (typeof analysis === "string") {
+      const explanationMatch = analysis.match(
+        /\*\*Explanation:\*\*\s*([\s\S]*?)(?=\*\*(?:Vision Alignment|Recommendation))/,
+      );
+      explanation = explanationMatch ? explanationMatch[1].trim() : "";
+
+      const recommendationMatch = analysis.match(
+        /\*\*Recommendation:\*\*\s*([\s\S]*?)$/,
+      );
+      recommendation = recommendationMatch ? recommendationMatch[1].trim() : "";
+    }
 
     const scoreValues = Object.values(scores);
     const passed = scoreValues.length > 0 && scoreValues.every((s) => s >= 3);
@@ -713,8 +737,10 @@ export default function SubmissionDetailPage({
         });
       } else {
         const data = await res.json();
-        if (data.analysis) {
-          setGracePhilosophyResult(parseGraceAnalysis(data.analysis));
+
+        const analysisData = data.analysis || data;
+        if (analysisData) {
+          setGracePhilosophyResult(parseGraceAnalysis(analysisData));
         } else {
           setGracePhilosophyResult({
             scores: {},
