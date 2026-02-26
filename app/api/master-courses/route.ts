@@ -53,6 +53,8 @@ export async function GET(request: Request) {
       }
       // Always include INSTITUTIONAL courses when viewing in context
       OR.push({ ownership: "INSTITUTIONAL" });
+      // Always include GENERAL courses from anywhere so they can be borrowed
+      OR.push({ type: "GENERAL" });
 
       // Find the school for the department if only departmentId was passed
       if (departmentId && !schoolId) {
@@ -69,11 +71,11 @@ export async function GET(request: Request) {
     }
 
     if (type && VALID_COURSE_TYPES.includes(type)) where.type = type;
-    
+
     // Explicit ownership filter overrides the composite logic above if provided
     if (ownership && VALID_OWNERSHIP.includes(ownership))
       where.ownership = ownership;
-      
+
     if (level) {
       const levelNum = parseInt(level);
       if (VALID_LEVELS.includes(levelNum)) where.level = levelNum;
@@ -180,11 +182,11 @@ export async function POST(request: Request) {
       if (userRole !== "ADMIN" && userRole !== "SUPER_ADMIN") {
         return NextResponse.json(
           { error: "Only Administrators can create Institutional courses." },
-          { status: 403 }
+          { status: 403 },
         );
       }
     }
-    
+
     // "SCHOOL" courses restriction (optional, usually DEAN/ADMIN but we'll enforce basic role check on client)
 
     // Course code validation
@@ -249,8 +251,10 @@ export async function POST(request: Request) {
 
     // Ownership validation based on type
     const resolvedOwnership = ownership || "DEPARTMENT";
-    const finalDeptId = resolvedOwnership === "INSTITUTIONAL" ? null : ownerDeptId;
-    const finalSchoolId = resolvedOwnership === "INSTITUTIONAL" ? null : ownerSchoolId;
+    const finalDeptId =
+      resolvedOwnership === "INSTITUTIONAL" ? null : ownerDeptId;
+    const finalSchoolId =
+      resolvedOwnership === "INSTITUTIONAL" ? null : ownerSchoolId;
 
     if (resolvedOwnership === "DEPARTMENT" && !finalDeptId) {
       return NextResponse.json(
@@ -262,24 +266,25 @@ export async function POST(request: Request) {
     // For INSTITUTIONAL, we force ownerDeptId to null
     // For INSTITUTIONAL, we force ownerDeptId to null
 
-
     if (resolvedOwnership === "SCHOOL" && !finalSchoolId) {
-       // Try to resolve school from dept if missing
-       if (finalDeptId) {
-          const dept = await prisma.department.findUnique({ where: { id: finalDeptId }});
-          if (!dept?.schoolId) {
-             return NextResponse.json(
-              { error: "ownerSchoolId is required for school-owned courses" },
-              { status: 400 },
-            );
-          }
-           // Use the resolved school id if available
-       } else {
+      // Try to resolve school from dept if missing
+      if (finalDeptId) {
+        const dept = await prisma.department.findUnique({
+          where: { id: finalDeptId },
+        });
+        if (!dept?.schoolId) {
           return NextResponse.json(
             { error: "ownerSchoolId is required for school-owned courses" },
             { status: 400 },
           );
-       }
+        }
+        // Use the resolved school id if available
+      } else {
+        return NextResponse.json(
+          { error: "ownerSchoolId is required for school-owned courses" },
+          { status: 400 },
+        );
+      }
     }
 
     // Validate prerequisites exist
