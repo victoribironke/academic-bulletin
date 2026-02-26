@@ -93,7 +93,9 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   // Cycles Management
-  const [cycles, setCycles] = useState<any[]>([]);
+  const [cycles, setCycles] = useState<
+    { id: string; name: string; isActive: boolean; startedAt: string }[]
+  >([]);
   const [isCreatingCycle, setIsCreatingCycle] = useState(false);
   const [newCycleName, setNewCycleName] = useState("");
 
