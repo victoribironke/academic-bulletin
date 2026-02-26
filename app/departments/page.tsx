@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { usePermission } from "@/contexts/user-context";
 import { Button } from "@/components/ui/button";
 import {
@@ -72,7 +72,7 @@ export default function DepartmentsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(
-    null
+    null,
   );
   const [formData, setFormData] = useState({
     name: "",
@@ -86,7 +86,7 @@ export default function DepartmentsPage() {
 
   const canManage = hasPermission("manage:departments");
 
-  const fetchDepartments = async () => {
+  const fetchDepartments = useCallback(async () => {
     try {
       const url =
         filterSchoolId && filterSchoolId !== "all"
@@ -102,7 +102,7 @@ export default function DepartmentsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [filterSchoolId]);
 
   const fetchSchools = async () => {
     try {
@@ -122,7 +122,7 @@ export default function DepartmentsPage() {
 
   useEffect(() => {
     fetchDepartments();
-  }, [filterSchoolId]);
+  }, [fetchDepartments]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -175,7 +175,7 @@ export default function DepartmentsPage() {
   const handleDelete = async (department: Department) => {
     if (
       !confirm(
-        `Are you sure you want to delete "${department.name}"? This will also delete all associated programmes.`
+        `Are you sure you want to delete "${department.name}"? This will also delete all associated programmes.`,
       )
     ) {
       return;
