@@ -71,6 +71,17 @@ interface Submission {
     comments: number;
     phaseTransitions: number;
   };
+  cycle: {
+    id: string;
+    name: string;
+    isActive: boolean;
+  } | null;
+}
+
+interface Cycle {
+  id: string;
+  name: string;
+  isActive: boolean;
 }
 
 const phaseNames: Record<number, string> = {
@@ -108,18 +119,41 @@ const statusConfig = {
 
 export default function SubmissionsPage() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [cycles, setCycles] = useState<Cycle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterPhase, setFilterPhase] = useState<string>("all");
+  const [filterCycle, setFilterCycle] = useState<string>("all");
   const { hasPermission } = usePermission();
 
   const canCreate = hasPermission("create:submission");
+
+  const fetchCycles = async () => {
+    try {
+      const res = await fetch("/api/cycles");
+      if (res.ok) {
+        const data = await res.json();
+        setCycles(data);
+        const activeCycle = data.find((c: Cycle) => c.isActive);
+        if (activeCycle) {
+          setFilterCycle(activeCycle.id);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch cycles:", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchCycles();
+  }, []);
 
   const fetchSubmissions = async () => {
     try {
       const params = new URLSearchParams();
       if (filterStatus !== "all") params.set("status", filterStatus);
       if (filterPhase !== "all") params.set("phase", filterPhase);
+      if (filterCycle !== "all") params.set("cycleId", filterCycle);
 
       const url = `/api/submissions${
         params.toString() ? `?${params.toString()}` : ""
@@ -138,7 +172,7 @@ export default function SubmissionsPage() {
 
   useEffect(() => {
     fetchSubmissions();
-  }, [filterStatus, filterPhase]);
+  }, [filterStatus, filterPhase, filterCycle]);
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "—";
@@ -181,6 +215,24 @@ export default function SubmissionsPage() {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="filter-cycle" className="whitespace-nowrap">
+                Review Cycle:
+              </Label>
+              <Select value={filterCycle} onValueChange={setFilterCycle}>
+                <SelectTrigger className="w-56">
+                  <SelectValue placeholder="All Cycles" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Cycles</SelectItem>
+                  {cycles.map((cycle) => (
+                    <SelectItem key={cycle.id} value={cycle.id}>
+                      {cycle.name} {cycle.isActive && "(Active)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex items-center gap-2">
               <Label htmlFor="filter-status" className="whitespace-nowrap">
                 Status:
@@ -255,6 +307,7 @@ export default function SubmissionsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Programme</TableHead>
+                  <TableHead>Review Cycle</TableHead>
                   <TableHead>Phase</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Comments</TableHead>
@@ -276,6 +329,21 @@ export default function SubmissionsPage() {
                             {submission.programme.department.school.code} /{" "}
                             {submission.programme.department.code}
                           </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="text-sm font-medium">
+                            {submission.cycle?.name || "—"}
+                          </span>
+                          {submission.cycle?.isActive && (
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] px-1.5 py-0 font-normal"
+                            >
+                              Active
+                            </Badge>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
