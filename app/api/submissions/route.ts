@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const departmentId = searchParams.get("departmentId");
     const schoolId = searchParams.get("schoolId");
     const createdById = searchParams.get("createdById");
+    const cycleId = searchParams.get("cycleId");
 
     const submissions = await prisma.submission.findMany({
       where: {
@@ -22,6 +23,7 @@ export async function GET(request: NextRequest) {
         ...(departmentId && { programme: { departmentId } }),
         ...(schoolId && { programme: { department: { schoolId } } }),
         ...(createdById && { createdById }),
+        ...(cycleId && { cycleId }),
       },
       include: {
         programme: {
@@ -52,6 +54,9 @@ export async function GET(request: NextRequest) {
         _count: {
           select: { comments: true, phaseTransitions: true },
         },
+        cycle: {
+          select: { id: true, name: true, isActive: true },
+        },
       },
       orderBy: { updatedAt: "desc" },
     });
@@ -70,11 +75,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { title, programmeId, createdById } = body;
+    const { title, programmeId, createdById, cycleId } = body;
 
-    if (!title || !programmeId || !createdById) {
+    if (!title || !programmeId || !createdById || !cycleId) {
       return NextResponse.json(
-        { error: "Title, programme, and creator are required" },
+        { error: "Title, programme, creator, and cycle are required" },
         { status: 400 },
       );
     }
@@ -85,6 +90,7 @@ export async function POST(request: NextRequest) {
         title,
         programmeId,
         createdById,
+        cycleId,
         status: "DRAFT",
         currentPhase: 1,
         content: {
@@ -139,7 +145,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             error:
-              "A submission for this programme and academic year already exists",
+              "A submission for this programme already exists in this review cycle",
           },
           { status: 409 },
         );
