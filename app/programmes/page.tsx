@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { usePermission } from "@/contexts/user-context";
 import { Button } from "@/components/ui/button";
 import {
@@ -74,7 +74,7 @@ export default function ProgrammesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProgramme, setEditingProgramme] = useState<Programme | null>(
-    null
+    null,
   );
   const [formData, setFormData] = useState({
     name: "",
@@ -91,7 +91,7 @@ export default function ProgrammesPage() {
 
   const canManage = hasPermission("manage:programmes");
 
-  const fetchProgrammes = async () => {
+  const fetchProgrammes = useCallback(async () => {
     try {
       let url = "/api/programmes";
       const params = new URLSearchParams();
@@ -114,7 +114,7 @@ export default function ProgrammesPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [filterDepartmentId, filterSchoolId]);
 
   const fetchDepartments = async () => {
     try {
@@ -147,7 +147,7 @@ export default function ProgrammesPage() {
 
   useEffect(() => {
     fetchProgrammes();
-  }, [filterSchoolId, filterDepartmentId]);
+  }, [fetchProgrammes]);
 
   // Reset department filter when school changes
   useEffect(() => {
@@ -222,7 +222,7 @@ export default function ProgrammesPage() {
   const handleDelete = async (programme: Programme) => {
     if (
       !confirm(
-        `Are you sure you want to delete "${programme.name}"? This will also delete all associated submissions.`
+        `Are you sure you want to delete "${programme.name}"? This will also delete all associated submissions.`,
       )
     ) {
       return;
