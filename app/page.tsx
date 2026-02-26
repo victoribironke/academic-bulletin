@@ -40,7 +40,11 @@ import {
   School,
   MessageSquare,
   BookOpen,
+  Calendar,
+  Power,
 } from "lucide-react";
+
+import { Input } from "@/components/ui/input";
 
 interface DashboardStats {
   submissions: {
@@ -88,6 +92,11 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Cycles Management
+  const [cycles, setCycles] = useState<any[]>([]);
+  const [isCreatingCycle, setIsCreatingCycle] = useState(false);
+  const [newCycleName, setNewCycleName] = useState("");
+
   const fetchStats = async () => {
     try {
       const response = await fetch("/api/dashboard/stats");
@@ -102,9 +111,59 @@ export default function DashboardPage() {
     }
   };
 
+  const fetchCycles = async () => {
+    try {
+      const response = await fetch("/api/cycles");
+      if (response.ok) {
+        setCycles(await response.json());
+      }
+    } catch (err) {
+      console.error("Failed to fetch cycles:", err);
+    }
+  };
+
   useEffect(() => {
     fetchStats();
-  }, []);
+    if (currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN") {
+      fetchCycles();
+    }
+  }, [currentUser]);
+
+  const handleCreateCycle = async () => {
+    if (!newCycleName.trim() || !currentUser) return;
+    setIsCreatingCycle(true);
+    try {
+      const res = await fetch("/api/cycles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newCycleName,
+          createdById: currentUser.id,
+        }),
+      });
+      if (res.ok) {
+        setNewCycleName("");
+        fetchCycles();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsCreatingCycle(false);
+    }
+  };
+
+  const handleToggleCycle = async (id: string, currentActive: boolean) => {
+    try {
+      await fetch(`/api/cycles/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !currentActive }),
+      });
+      fetchCycles();
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   if (userLoading || isLoading) {
     return (
@@ -474,6 +533,94 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Admin Cycle Management */}
+      {(currentUser?.role === "ADMIN" ||
+        currentUser?.role === "SUPER_ADMIN") && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5" />
+              Review Cycles Management
+            </CardTitle>
+            <CardDescription>
+              Create and manage academic bulletin review cycles. Only one cycle
+              can be active at a time.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              <div className="flex gap-3">
+                <Input
+                  placeholder="Cycle Name (e.g. 2024-2028 Academic Bulletin)"
+                  value={newCycleName}
+                  onChange={(e) => setNewCycleName(e.target.value)}
+                  className="max-w-sm"
+                />
+                <Button
+                  onClick={handleCreateCycle}
+                  disabled={isCreatingCycle || !newCycleName.trim()}
+                >
+                  {isCreatingCycle ? "Creating..." : "Start New Cycle"}
+                </Button>
+              </div>
+
+              {cycles.length > 0 ? (
+                <div className="rounded-md border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50 text-left text-muted-foreground">
+                        <th className="p-3 font-medium">Name</th>
+                        <th className="p-3 font-medium">Status</th>
+                        <th className="p-3 font-medium">Started At</th>
+                        <th className="p-3 font-medium text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cycles.map((cycle) => (
+                        <tr
+                          key={cycle.id}
+                          className="border-b last:border-0 hover:bg-muted/50"
+                        >
+                          <td className="p-3 font-medium">{cycle.name}</td>
+                          <td className="p-3">
+                            {cycle.isActive ? (
+                              <Badge className="bg-green-500">Active</Badge>
+                            ) : (
+                              <Badge variant="secondary">Closed</Badge>
+                            )}
+                          </td>
+                          <td className="p-3 text-muted-foreground">
+                            {new Date(cycle.startedAt).toLocaleDateString()}
+                          </td>
+                          <td className="p-3 text-right">
+                            <Button
+                              variant={
+                                cycle.isActive ? "destructive" : "outline"
+                              }
+                              size="sm"
+                              onClick={() =>
+                                handleToggleCycle(cycle.id, cycle.isActive)
+                              }
+                            >
+                              <Power className="mr-2 h-3 w-3" />
+                              {cycle.isActive ? "Close Cycle" : "Reopen Cycle"}
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground border-t pt-4">
+                  No review cycles have been created yet.
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
