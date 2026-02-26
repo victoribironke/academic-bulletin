@@ -990,7 +990,7 @@ export default function SubmissionDetailPage({
                 </SheetTrigger>
                 <SheetContent
                   side="right"
-                  className="w-[400px] sm:w-[540px] overflow-y-auto"
+                  className="w-[400px] sm:w-[540px] overflow-y-auto p-6 sm:p-8"
                 >
                   <SheetHeader className="mb-4">
                     <SheetTitle className="flex items-center gap-2">
@@ -1137,7 +1137,7 @@ export default function SubmissionDetailPage({
                       >
                         <Icon className="h-4 w-4" />
                         <span className="hidden xl:inline text-xs">
-                          {section.title.split(" ")[0]}
+                          {section.title}
                         </span>
                       </TabsTrigger>
                     );
