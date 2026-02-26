@@ -41,6 +41,7 @@ interface DynamicTableProps<T extends Record<string, unknown>> {
   allowDelete?: boolean;
   allowReorder?: boolean;
   isRowLocked?: (row: T) => boolean;
+  isRowEditable?: (row: T) => boolean;
 }
 
 export function DynamicTable<T extends Record<string, unknown>>({
@@ -53,6 +54,7 @@ export function DynamicTable<T extends Record<string, unknown>>({
   showRowNumbers = true,
   allowDelete = true,
   isRowLocked,
+  isRowEditable,
 }: DynamicTableProps<T>) {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
@@ -96,8 +98,19 @@ export function DynamicTable<T extends Record<string, unknown>>({
 
   const renderCell = (row: T, rowIndex: number, column: Column<T>) => {
     const value = row[column.key];
+    const rowEditable = isRowEditable ? isRowEditable(row) : true;
 
-    if (disabled || column.type === "readonly") {
+    if (disabled || column.type === "readonly" || !rowEditable) {
+      if (column.type === "select") {
+        const option = column.options?.find(
+          (o) => String(o.value) === String(value),
+        );
+        return (
+          <span className="text-sm text-gray-600">
+            {option ? option.label : (value as string)}
+          </span>
+        );
+      }
       return <span className="text-sm text-gray-600">{value as string}</span>;
     }
 
@@ -127,7 +140,8 @@ export function DynamicTable<T extends Record<string, unknown>>({
 
       case "select":
         // Convert value to string for comparison (handles number values from DB)
-        const stringValue = value !== undefined && value !== null ? String(value) : "";
+        const stringValue =
+          value !== undefined && value !== null ? String(value) : "";
         return (
           <Select
             value={stringValue}
@@ -232,7 +246,9 @@ export function DynamicTable<T extends Record<string, unknown>>({
                       )}
                       {isRowLocked?.(row) && (
                         <div className="w-8 h-8 flex items-center justify-center">
-                          <span className="text-xs text-muted-foreground">Locked</span>
+                          <span className="text-xs text-muted-foreground">
+                            Locked
+                          </span>
                         </div>
                       )}
                     </TableCell>
