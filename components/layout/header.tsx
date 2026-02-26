@@ -59,11 +59,11 @@ export function Header() {
                       {getInitials(currentUser.firstName, currentUser.lastName)}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex flex-col items-start text-left">
-                    <span className="text-sm font-medium">
+                  <div className="flex flex-col items-start text-left max-w-[150px]">
+                    <span className="text-sm font-medium truncate w-full">
                       {currentUser.firstName} {currentUser.lastName}
                     </span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-muted-foreground truncate w-full">
                       {getRoleDisplayName(currentUser.role)}
                     </span>
                   </div>
@@ -78,7 +78,10 @@ export function Header() {
               )}
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-64">
+          <DropdownMenuContent
+            align="end"
+            className="w-64 max-h-[60vh] overflow-y-auto"
+          >
             <DropdownMenuLabel className="flex items-center gap-2">
               <span>Switch User</span>
               <Badge variant="outline" className="text-xs">
@@ -92,17 +95,17 @@ export function Header() {
                 onClick={() => setCurrentUser(user)}
                 className="flex items-center justify-between cursor-pointer"
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
                   <Avatar className="h-6 w-6">
                     <AvatarFallback className="text-xs">
                       {getInitials(user.firstName, user.lastName)}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex flex-col">
-                    <span className="text-sm">
+                  <div className="flex flex-col min-w-0 flex-1">
+                    <span className="text-sm truncate">
                       {user.firstName} {user.lastName}
                     </span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-muted-foreground truncate">
                       {user.email}
                     </span>
                   </div>
