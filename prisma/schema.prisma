@@ -344,6 +344,7 @@ model Course {
   description  CourseDescription?
 
   @@unique([code, submissionId])
+  @@unique([title, submissionId])
   @@map("courses")
 }
 
