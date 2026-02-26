@@ -11,7 +11,7 @@ export async function PUT(
     const { name, description, isActive } = body;
 
     // Build update data safely
-    const dataToUpdate: any = {};
+    const dataToUpdate: Record<string, unknown> = {};
     if (name !== undefined) dataToUpdate.name = name;
     if (description !== undefined) dataToUpdate.description = description;
 
