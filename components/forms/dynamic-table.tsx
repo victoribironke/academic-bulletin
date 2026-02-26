@@ -19,11 +19,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Trash2, GripVertical } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export interface Column<T> {
   key: keyof T;
   header: string;
-  type: "text" | "number" | "select" | "readonly";
+  type: "text" | "number" | "select" | "readonly" | "combobox";
   placeholder?: string;
   options?: { value: string; label: string }[];
   width?: string;
@@ -42,6 +43,7 @@ interface DynamicTableProps<T extends Record<string, unknown>> {
   allowReorder?: boolean;
   isRowLocked?: (row: T) => boolean;
   isRowEditable?: (row: T) => boolean;
+  onRowUpdate?: (row: T, key: keyof T, value: unknown) => T;
 }
 
 export function DynamicTable<T extends Record<string, unknown>>({
@@ -55,6 +57,7 @@ export function DynamicTable<T extends Record<string, unknown>>({
   allowDelete = true,
   isRowLocked,
   isRowEditable,
+  onRowUpdate,
 }: DynamicTableProps<T>) {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
@@ -72,7 +75,13 @@ export function DynamicTable<T extends Record<string, unknown>>({
 
   const updateCell = (index: number, key: keyof T, value: unknown) => {
     const newData = [...data];
-    newData[index] = { ...newData[index], [key]: value };
+    let updatedRow = { ...newData[index], [key]: value };
+
+    if (onRowUpdate) {
+      updatedRow = onRowUpdate(updatedRow, key, value);
+    }
+
+    newData[index] = updatedRow;
     onChange(newData);
   };
 
@@ -101,7 +110,7 @@ export function DynamicTable<T extends Record<string, unknown>>({
     const rowEditable = isRowEditable ? isRowEditable(row) : true;
 
     if (disabled || column.type === "readonly" || !rowEditable) {
-      if (column.type === "select") {
+      if (column.type === "select" || column.type === "combobox") {
         const option = column.options?.find(
           (o) => String(o.value) === String(value),
         );
@@ -158,6 +167,29 @@ export function DynamicTable<T extends Record<string, unknown>>({
               ))}
             </SelectContent>
           </Select>
+        );
+
+      case "combobox":
+        const listId = `datalist-${String(column.key)}-${rowIndex}`;
+        return (
+          <>
+            <Input
+              value={(value as string) || ""}
+              onChange={(e) => updateCell(rowIndex, column.key, e.target.value)}
+              placeholder={column.placeholder}
+              className="h-8 text-sm"
+              list={listId}
+            />
+            {column.options && (
+              <datalist id={listId}>
+                {column.options.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </datalist>
+            )}
+          </>
         );
 
       default:
