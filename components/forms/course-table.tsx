@@ -591,6 +591,7 @@ export function CourseTable({
                     createEmptyRow={() => createEmptyCourse(level)}
                     disabled={disabled}
                     isRowLocked={(row) => !!row.isMandatory} // Lock mandatory rows
+                    isRowEditable={(row) => !row.masterCourseId} // Registry courses are read-only
                   />
                 </div>
 
