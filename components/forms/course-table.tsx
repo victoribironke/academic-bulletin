@@ -535,38 +535,36 @@ export function CourseTable({
       </CardHeader>
       <CardContent className="space-y-4">
         <Tabs value={activeLevel} onValueChange={setActiveLevel}>
-          <TabsList className="mb-4">
-            {LEVELS.map((level) => {
-              const totals = getTotals(level);
-              return (
+          <div className="overflow-x-auto">
+            <TabsList className="mb-4 w-max">
+              {LEVELS.map((level) => (
                 <TabsTrigger
                   key={level}
                   value={level.toString()}
                   className="flex items-center gap-2"
                 >
                   {level} Level
-                  <Badge variant="secondary" className="ml-1">
-                    {totals.total} units
-                  </Badge>
                 </TabsTrigger>
-              );
-            })}
-          </TabsList>
+              ))}
+            </TabsList>
+          </div>
 
           {LEVELS.map((level) => {
             const totals = getTotals(level);
             return (
               <TabsContent key={level} value={level.toString()}>
-                <DynamicTable<Course>
-                  columns={getColumns()}
-                  data={coursesByLevel[level] || []}
-                  onChange={(courses) =>
-                    handleLevelChange(level, courses as Course[])
-                  }
-                  createEmptyRow={() => createEmptyCourse(level)}
-                  disabled={disabled}
-                  isRowLocked={(row) => !!row.isMandatory} // Lock mandatory rows
-                />
+                <div className="overflow-x-auto">
+                  <DynamicTable<Course>
+                    columns={getColumns()}
+                    data={coursesByLevel[level] || []}
+                    onChange={(courses) =>
+                      handleLevelChange(level, courses as Course[])
+                    }
+                    createEmptyRow={() => createEmptyCourse(level)}
+                    disabled={disabled}
+                    isRowLocked={(row) => !!row.isMandatory} // Lock mandatory rows
+                  />
+                </div>
 
                 <div className="mt-4 flex justify-end gap-4 text-sm text-muted-foreground">
                   <span>
