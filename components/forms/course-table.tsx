@@ -112,6 +112,7 @@ export function CourseTable({
   const [registryScope, setRegistryScope] = useState<"context" | "all">(
     "context",
   ); // Scope filter
+  const [allMasterCourses, setAllMasterCourses] = useState<MasterCourse[]>([]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -145,7 +146,12 @@ export function CourseTable({
 
       setCoursesByLevel(grouped);
       setOriginalCourseIds(ids);
-      setOriginalCourseIds(ids);
+
+      // Fetch all master courses into memory for combobox selection
+      const allMasterRes = await fetch(`/api/master-courses?scope=all`);
+      if (allMasterRes.ok) {
+        setAllMasterCourses(await allMasterRes.json());
+      }
 
       // Check for mandatory courses to inject
       if (departmentId) {
@@ -379,10 +385,14 @@ export function CourseTable({
     {
       key: "code",
       header: "Course Code",
-      type: "text",
-      placeholder: "e.g., COS 101",
+      type: "combobox",
+      placeholder: "Search course code...",
+      options: allMasterCourses.map((mc) => ({
+        value: mc.code,
+        label: mc.code,
+      })),
       required: true,
-      width: "120px",
+      width: "150px",
     },
     {
       key: "title",
@@ -579,6 +589,31 @@ export function CourseTable({
 
           {LEVELS.map((level) => {
             const totals = getTotals(level);
+
+            const handleRowUpdate = (
+              row: Course,
+              key: keyof Course,
+              value: unknown,
+            ) => {
+              if (key === "code") {
+                const match = allMasterCourses.find((mc) => mc.code === value);
+                if (match) {
+                  return {
+                    ...row,
+                    code: match.code,
+                    title: match.title,
+                    units: match.units,
+                    status: (match.type === "ELECTIVE"
+                      ? "ELECTIVE"
+                      : "CORE") as "CORE" | "ELECTIVE",
+                    semester: match.semester,
+                    masterCourseId: match.id,
+                  };
+                }
+              }
+              return row;
+            };
+
             return (
               <TabsContent key={level} value={level.toString()}>
                 <div className="overflow-x-auto">
@@ -592,6 +627,7 @@ export function CourseTable({
                     disabled={disabled}
                     isRowLocked={(row) => !!row.isMandatory} // Lock mandatory rows
                     isRowEditable={(row) => !row.masterCourseId} // Registry courses are read-only
+                    onRowUpdate={handleRowUpdate}
                   />
                 </div>
 
