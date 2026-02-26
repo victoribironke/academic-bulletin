@@ -36,6 +36,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import {
   ArrowLeft,
   Save,
   Send,
@@ -973,15 +980,149 @@ export default function SubmissionDetailPage({
                   )}
                 </>
               )}
+
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="outline" className="ml-2 bg-muted/50">
+                    <MessageSquare className="mr-2 h-4 w-4" />
+                    Comments ({submission.comments.length})
+                  </Button>
+                </SheetTrigger>
+                <SheetContent
+                  side="right"
+                  className="w-[400px] sm:w-[540px] overflow-y-auto"
+                >
+                  <SheetHeader className="mb-4">
+                    <SheetTitle className="flex items-center gap-2">
+                      <MessageSquare className="h-5 w-5" />
+                      Comments
+                      <Badge variant="secondary" className="ml-2">
+                        {currentSection?.title.split(" ")[0]}
+                      </Badge>
+                    </SheetTitle>
+                  </SheetHeader>
+
+                  <div className="space-y-4">
+                    {/* Validation Errors */}
+                    {validationErrors.length > 0 && (
+                      <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>
+                          {validationErrors.map((error, i) => (
+                            <div key={i}>{error}</div>
+                          ))}
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {/* Add Comment Form */}
+                    {canComment && (
+                      <div className="space-y-3 pb-4 border-b">
+                        <Textarea
+                          placeholder="Add a comment..."
+                          value={newComment}
+                          onChange={(e) => setNewComment(e.target.value)}
+                          rows={3}
+                        />
+                        <div className="flex items-center gap-2">
+                          <Select
+                            value={commentType}
+                            onValueChange={setCommentType}
+                          >
+                            <SelectTrigger className="w-32">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="SUGGESTION">
+                                Suggestion
+                              </SelectItem>
+                              <SelectItem value="ISSUE">Issue</SelectItem>
+                              <SelectItem value="QUESTION">Question</SelectItem>
+                              <SelectItem value="APPROVAL">Approval</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            size="sm"
+                            onClick={handleAddComment}
+                            disabled={!newComment.trim() || isAddingComment}
+                          >
+                            {isAddingComment ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Plus className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Comments List */}
+                    <div className="space-y-3">
+                      {sectionComments.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground text-sm">
+                          No comments for this section
+                        </div>
+                      ) : (
+                        sectionComments.map((comment) => (
+                          <div
+                            key={comment.id}
+                            className={`p-3 rounded-lg border ${
+                              comment.status === "RESOLVED" ? "opacity-50" : ""
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-sm">
+                                  {comment.author.firstName}{" "}
+                                  {comment.author.lastName}
+                                </span>
+                                <Badge
+                                  variant="secondary"
+                                  className={`text-xs ${
+                                    commentTypeColors[comment.type]
+                                  }`}
+                                >
+                                  {comment.type}
+                                </Badge>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 text-xs"
+                                onClick={() =>
+                                  handleResolveComment(
+                                    comment.id,
+                                    comment.status,
+                                  )
+                                }
+                              >
+                                {comment.status === "OPEN"
+                                  ? "Resolve"
+                                  : "Reopen"}
+                              </Button>
+                            </div>
+                            <p className="text-sm mt-1">{comment.content}</p>
+                            <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                              <Clock className="h-3 w-3" />
+                              {new Date(comment.createdAt).toLocaleDateString()}
+                              <span>• Phase {comment.phase}</span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </SheetContent>
+              </Sheet>
             </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="w-full">
         {/* Editor Panel */}
-        <div className="lg:col-span-2">
+        <div className="w-full">
           <Card>
             <CardHeader className="pb-3">
               <Tabs value={activeSection} onValueChange={setActiveSection}>
@@ -1500,125 +1641,6 @@ export default function SubmissionDetailPage({
                   </div>
                 )}
               </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Comments Panel */}
-        <div>
-          <Card className="h-fit">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5" />
-                  Comments
-                </span>
-                <Badge variant="secondary">
-                  {currentSection?.title.split(" ")[0]}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Validation Errors */}
-              {validationErrors.length > 0 && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    {validationErrors.map((error, i) => (
-                      <div key={i}>{error}</div>
-                    ))}
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {/* Add Comment Form */}
-              {canComment && (
-                <div className="space-y-3 pb-4 border-b">
-                  <Textarea
-                    placeholder="Add a comment..."
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    rows={3}
-                  />
-                  <div className="flex items-center gap-2">
-                    <Select value={commentType} onValueChange={setCommentType}>
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="SUGGESTION">Suggestion</SelectItem>
-                        <SelectItem value="ISSUE">Issue</SelectItem>
-                        <SelectItem value="QUESTION">Question</SelectItem>
-                        <SelectItem value="APPROVAL">Approval</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      size="sm"
-                      onClick={handleAddComment}
-                      disabled={!newComment.trim() || isAddingComment}
-                    >
-                      {isAddingComment ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Plus className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {/* Comments List */}
-              <ScrollArea className="h-[400px]">
-                {sectionComments.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground text-sm">
-                    No comments for this section
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {sectionComments.map((comment) => (
-                      <div
-                        key={comment.id}
-                        className={`p-3 rounded-lg border ${
-                          comment.status === "RESOLVED" ? "opacity-50" : ""
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm">
-                              {comment.author.firstName}{" "}
-                              {comment.author.lastName}
-                            </span>
-                            <Badge
-                              variant="secondary"
-                              className={`text-xs ${
-                                commentTypeColors[comment.type]
-                              }`}
-                            >
-                              {comment.type}
-                            </Badge>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 text-xs"
-                            onClick={() =>
-                              handleResolveComment(comment.id, comment.status)
-                            }
-                          >
-                            {comment.status === "OPEN" ? "Resolve" : "Reopen"}
-                          </Button>
-                        </div>
-                        <p className="text-sm mt-1">{comment.content}</p>
-                        <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          {new Date(comment.createdAt).toLocaleDateString()}
-                          <span>• Phase {comment.phase}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </ScrollArea>
             </CardContent>
           </Card>
         </div>
