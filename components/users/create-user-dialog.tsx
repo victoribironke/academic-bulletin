@@ -85,7 +85,7 @@ export function CreateUserDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password">Temporary Password</Label>
+            <Label htmlFor="password">Password</Label>
             <Input id="password" name="password" type="password" required />
           </div>
 
