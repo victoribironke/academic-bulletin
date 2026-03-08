@@ -82,7 +82,7 @@ export function Header() {
           <DropdownMenuContent align="end" className="w-56">
             {currentUser && (
               <>
-                <DropdownMenuLabel className="font-normal relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50">
+                <DropdownMenuLabel className="font-normal relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50">
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium leading-none">
                       {currentUser.firstName} {currentUser.lastName}
@@ -98,7 +98,7 @@ export function Header() {
             <form action={logOut}>
               <button
                 type="submit"
-                className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 text-destructive hover:text-destructive"
+                className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent data-disabled:pointer-events-none data-disabled:opacity-50 text-destructive hover:text-destructive"
               >
                 Log out
               </button>
