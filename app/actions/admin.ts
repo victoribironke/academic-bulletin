@@ -34,8 +34,11 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
   const role = formData.get("role") as string;
-  const schoolId = formData.get("schoolId") as string | null;
-  const departmentId = formData.get("departmentId") as string | null;
+  let schoolId = formData.get("schoolId") as string | null;
+  let departmentId = formData.get("departmentId") as string | null;
+
+  if (schoolId === "none") schoolId = null;
+  if (departmentId === "none") departmentId = null;
 
   if (!firstName || !lastName || !email || !password || !role) {
     return {
