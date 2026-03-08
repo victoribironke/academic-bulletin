@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
 
-export async function logIn(formData: FormData) {
+export async function logIn(prevState: any, formData: FormData) {
   const supabase = await createClient();
 
   const email = formData.get("email") as string;
@@ -28,7 +28,7 @@ export async function logIn(formData: FormData) {
   redirect("/programmes");
 }
 
-export async function signUp(formData: FormData) {
+export async function signUp(prevState: any, formData: FormData) {
   const supabase = await createClient();
 
   const email = formData.get("email") as string;
