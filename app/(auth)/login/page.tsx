@@ -1,7 +1,14 @@
+"use client";
+
 import { logIn } from "@/app/actions/auth";
 import Link from "next/link";
+import { useActionState } from "react";
+
+const initialState = { error: "" };
 
 export default function LoginPage() {
+  const [state, formAction, isPending] = useActionState(logIn, initialState);
+
   return (
     <div className="flex bg-background min-h-screen items-center justify-center p-4">
       <div className="w-full max-w-md p-8 space-y-8 bg-card rounded-xl border shadow-sm">
@@ -14,7 +21,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <form action={logIn} className="space-y-6">
+        <form action={formAction} className="space-y-6">
           <div className="space-y-4">
             <div className="space-y-2">
               <label
@@ -49,11 +56,18 @@ export default function LoginPage() {
             </div>
           </div>
 
+          {state?.error && (
+            <div className="text-sm font-medium text-destructive">
+              {state.error}
+            </div>
+          )}
+
           <button
             type="submit"
+            disabled={isPending}
             className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full"
           >
-            Sign In
+            {isPending ? "Signing in..." : "Sign In"}
           </button>
         </form>
 
