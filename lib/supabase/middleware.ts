@@ -32,13 +32,25 @@ export async function updateSession(request: NextRequest) {
   // Refreshing the auth token
   await supabase.auth.getUser();
 
-  // Protect routes - Example pattern
-  // const { data: { user } } = await supabase.auth.getUser()
-  // if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
-  //   const url = request.nextUrl.clone()
-  //   url.pathname = '/login'
-  //   return NextResponse.redirect(url)
-  // }
+  // Protect routes
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const isAuthRoute = request.nextUrl.pathname.startsWith("/login");
+  const isApiRoute = request.nextUrl.pathname.startsWith("/api");
+
+  if (!user && !isAuthRoute && !isApiRoute) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+
+  if (user && isAuthRoute) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/dashboard";
+    return NextResponse.redirect(url);
+  }
 
   return supabaseResponse;
 }
