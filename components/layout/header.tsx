@@ -2,6 +2,7 @@
 
 import { useUser } from "@/contexts/user-context";
 import { getRoleDisplayName } from "@/lib/auth";
+import { logOut } from "@/app/actions/auth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { ChevronDown, User as UserIcon } from "lucide-react";
 
 export function Header() {
-  const { currentUser, availableUsers, setCurrentUser, isLoading } = useUser();
+  const { currentUser, isLoading } = useUser();
 
   const getInitials = (firstName: string, lastName: string) => {
     return `${firstName[0]}${lastName[0]}`.toUpperCase();
@@ -78,51 +79,30 @@ export function Header() {
               )}
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="w-64 max-h-[60vh] overflow-y-auto"
-          >
-            <DropdownMenuLabel className="flex items-center gap-2">
-              <span>Switch User</span>
-              <Badge variant="outline" className="text-xs">
-                Mock Auth
-              </Badge>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {availableUsers.map((user) => (
-              <DropdownMenuItem
-                key={user.id}
-                onClick={() => setCurrentUser(user)}
-                className="flex items-center justify-between cursor-pointer"
-              >
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <Avatar className="h-6 w-6">
-                    <AvatarFallback className="text-xs">
-                      {getInitials(user.firstName, user.lastName)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex flex-col min-w-0 flex-1">
-                    <span className="text-sm truncate">
-                      {user.firstName} {user.lastName}
-                    </span>
-                    <span className="text-xs text-muted-foreground truncate">
-                      {user.email}
-                    </span>
+          <DropdownMenuContent align="end" className="w-56">
+            {currentUser && (
+              <>
+                <DropdownMenuLabel className="font-normal relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">
+                      {currentUser.firstName} {currentUser.lastName}
+                    </p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                      {currentUser.email}
+                    </p>
                   </div>
-                </div>
-                <Badge
-                  variant={getRoleBadgeVariant(user.role)}
-                  className="text-xs"
-                >
-                  {user.role}
-                </Badge>
-              </DropdownMenuItem>
-            ))}
-            {availableUsers.length === 0 && !isLoading && (
-              <div className="p-2 text-center text-sm text-muted-foreground">
-                No users found. Run seed script.
-              </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+              </>
             )}
+            <form action={logOut}>
+              <button
+                type="submit"
+                className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent data-disabled:pointer-events-none data-disabled:opacity-50 text-destructive hover:text-destructive"
+              >
+                Log out
+              </button>
+            </form>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

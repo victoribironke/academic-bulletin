@@ -172,9 +172,8 @@ model Programme {
 // ============================================================================
 
 model User {
-  id           String   @id @default(cuid())
+  id           String   @id
   email        String   @unique
-  passwordHash String
   firstName    String
   lastName     String
   role         UserRole @default(HOD)

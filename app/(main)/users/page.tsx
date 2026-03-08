@@ -29,6 +29,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Users, UserCheck, UserX } from "lucide-react";
+import { CreateUserDialog } from "@/components/users/create-user-dialog";
 
 interface School {
   id: string;
@@ -40,6 +41,7 @@ interface Department {
   id: string;
   name: string;
   code: string;
+  schoolId: string;
 }
 
 interface User {
@@ -57,28 +59,44 @@ interface User {
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
+  const [schools, setSchools] = useState<School[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterRole, setFilterRole] = useState<string>("all");
   const { hasPermission } = usePermission();
 
   const canManage = hasPermission("manage:users");
 
-  const fetchUsers = async () => {
+  const fetchData = async () => {
     try {
-      const response = await fetch("/api/users/full");
-      if (response.ok) {
-        const data = await response.json();
-        setUsers(data);
+      const [usersRes, schoolsRes, deptsRes] = await Promise.all([
+        fetch("/api/users/full"),
+        fetch("/api/schools"),
+        fetch("/api/departments"),
+      ]);
+
+      if (usersRes.ok) {
+        setUsers(await usersRes.json());
+      }
+      if (schoolsRes.ok) {
+        setSchools(await schoolsRes.json());
+      }
+      if (deptsRes.ok) {
+        const data = await deptsRes.json();
+        // The API returns nested 'school' objects, we just need basic fields plus schoolId
+        // which might not be at the top level in GET /api/departments natively, but wait...
+        // let's just use what's returned.
+        setDepartments(data);
       }
     } catch (err) {
-      console.error("Failed to fetch users:", err);
+      console.error("Failed to fetch data:", err);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchUsers();
+    fetchData();
   }, []);
 
   const handleToggleActive = async (user: User) => {
@@ -92,7 +110,7 @@ export default function UsersPage() {
       });
 
       if (response.ok) {
-        fetchUsers();
+        fetchData();
       }
     } catch (err) {
       console.error("Failed to toggle user status:", err);
@@ -110,7 +128,7 @@ export default function UsersPage() {
       });
 
       if (response.ok) {
-        fetchUsers();
+        fetchData();
       }
     } catch (err) {
       console.error("Failed to update user role:", err);
@@ -171,6 +189,9 @@ export default function UsersPage() {
             Manage user accounts and roles
           </p>
         </div>
+        {canManage && (
+          <CreateUserDialog schools={schools} departments={departments} />
+        )}
       </div>
 
       {/* Filter */}

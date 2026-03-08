@@ -1,70 +1,76 @@
 "use client";
 
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-} from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
 import { User, hasPermission, hasAnyPermission, Permission } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/client";
 
 interface UserContextType {
   currentUser: User | null;
   setCurrentUser: (user: User | null) => void;
-  availableUsers: User[];
   isLoading: boolean;
-  refreshUsers: () => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [availableUsers, setAvailableUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const supabase = createClient();
 
-  const refreshUsers = useCallback(async () => {
-    try {
-      const response = await fetch("/api/users");
-      if (response.ok) {
-        const users = await response.json();
-        setAvailableUsers(users);
+  useEffect(() => {
+    let mounted = true;
 
-        // If no current user is set, default to the first user
-        if (!currentUser && users.length > 0) {
-          // Try to restore from localStorage
-          const savedUserId = localStorage.getItem("currentUserId");
-          const savedUser = users.find((u: User) => u.id === savedUserId);
-          setCurrentUser(savedUser || users[0]);
+    const fetchUser = async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (user) {
+          const response = await fetch(`/api/users/${user.id}`);
+          if (response.ok) {
+            const fullUser = await response.json();
+            if (mounted) {
+              setCurrentUser(fullUser);
+            }
+          } else {
+            if (mounted) setCurrentUser(null);
+          }
+        } else {
+          if (mounted) setCurrentUser(null);
+        }
+      } catch (error) {
+        console.error("Failed to fetch user:", error);
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
         }
       }
-    } catch (error) {
-      console.error("Failed to fetch users:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentUser]);
+    };
 
-  useEffect(() => {
-    refreshUsers();
-  }, [refreshUsers]);
+    fetchUser();
 
-  // Persist current user selection to localStorage
-  useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem("currentUserId", currentUser.id);
-    }
-  }, [currentUser]);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        setCurrentUser(null);
+      } else if (event === "SIGNED_IN") {
+        fetchUser();
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [supabase.auth]);
 
   return (
     <UserContext.Provider
       value={{
         currentUser,
         setCurrentUser,
-        availableUsers,
         isLoading,
-        refreshUsers,
       }}
     >
       {children}

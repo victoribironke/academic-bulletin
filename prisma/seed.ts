@@ -6,9 +6,7 @@ import "dotenv/config";
 import { UserRole } from "@prisma/client";
 import prisma from "../lib/prisma";
 
-// Placeholder password hash (represents "password123")
-const PLACEHOLDER_PASSWORD_HASH =
-  "$2b$10$placeholder.hash.for.testing.only.do.not.use.in.production";
+import crypto from "crypto";
 
 async function main() {
   console.log("🌱 Starting database seed...\n");
@@ -154,7 +152,7 @@ async function main() {
     update: {},
     create: {
       email: "hod@university.edu",
-      passwordHash: PLACEHOLDER_PASSWORD_HASH,
+      id: crypto.randomUUID(),
       firstName: "Jane",
       lastName: "HeadOfDepartment",
       role: UserRole.HOD,
@@ -170,7 +168,7 @@ async function main() {
     update: {},
     create: {
       email: "dean@university.edu",
-      passwordHash: PLACEHOLDER_PASSWORD_HASH,
+      id: crypto.randomUUID(),
       firstName: "Robert",
       lastName: "Dean",
       role: UserRole.DEAN,
@@ -186,7 +184,7 @@ async function main() {
     update: {},
     create: {
       email: "admin@university.edu",
-      passwordHash: PLACEHOLDER_PASSWORD_HASH,
+      id: crypto.randomUUID(),
       firstName: "Sarah",
       lastName: "Admin",
       role: UserRole.ADMIN,
@@ -202,7 +200,7 @@ async function main() {
     update: {},
     create: {
       email: "super@university.edu",
-      passwordHash: PLACEHOLDER_PASSWORD_HASH,
+      id: crypto.randomUUID(),
       firstName: "Super",
       lastName: "Admin",
       role: UserRole.SUPER_ADMIN,
