@@ -9,17 +9,17 @@ export default function MainLayout({
 }) {
   return (
     <UserProvider>
-      <div className="flex min-h-screen">
+      <div className="flex h-screen overflow-hidden">
         {/* Sidebar */}
         <Sidebar />
 
         {/* Main content area */}
-        <div className="flex-1 pl-64">
+        <div className="flex flex-1 flex-col pl-64 h-screen overflow-hidden">
           {/* Header */}
           <Header />
 
-          {/* Page content */}
-          <main className="p-6">{children}</main>
+          {/* Page content - this is the only scrollable area */}
+          <main className="flex-1 overflow-y-auto p-6">{children}</main>
         </div>
       </div>
     </UserProvider>
