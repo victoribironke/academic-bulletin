@@ -37,7 +37,7 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background px-6">
+    <header className="z-30 flex h-16 shrink-0 items-center justify-between border-b bg-background px-6">
       {/* Left side - Page title area (can be used by pages) */}
       <div className="flex items-center gap-4">
         {/* Placeholder for breadcrumbs or page title */}
