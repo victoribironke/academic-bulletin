@@ -69,9 +69,9 @@ export function Sidebar() {
   );
 
   return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r bg-card">
+    <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r bg-card">
       {/* Logo/Brand */}
-      <div className="flex h-16 items-center border-b px-6">
+      <div className="flex h-16 shrink-0 items-center border-b px-6">
         <Link href="/" className="flex items-center gap-2">
           <GraduationCap className="h-8 w-8 text-primary" />
           <div className="flex flex-col">
@@ -84,10 +84,8 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="space-y-1 p-4">
+      <nav className="flex-1 space-y-1 overflow-y-auto p-4">
         {visibleNavItems.map((item) => {
-          // For root path "/", only match exactly
-          // For other paths, match if pathname starts with the href
           const isActive =
             item.href === "/"
               ? pathname === "/"
@@ -111,7 +109,7 @@ export function Sidebar() {
       </nav>
 
       {/* Footer - Phase indicator */}
-      <div className="absolute bottom-0 left-0 right-0 border-t p-4">
+      <div className="shrink-0 border-t p-4">
         <div className="text-xs text-muted-foreground">
           <p className="font-medium">Review Cycle</p>
           <p>2027-2031</p>
