@@ -23,7 +23,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   {
     title: "Dashboard",
-    href: "/",
+    href: "/dashboard",
     icon: <LayoutDashboard className="h-5 w-5" />,
     permission: "view:dashboard",
   },
@@ -72,7 +72,7 @@ export function Sidebar() {
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r bg-card">
       {/* Logo/Brand */}
       <div className="flex h-16 shrink-0 items-center border-b px-6">
-        <Link href="/" className="flex items-center gap-2">
+        <Link href="/dashboard" className="flex items-center gap-2">
           <GraduationCap className="h-8 w-8 text-primary" />
           <div className="flex flex-col">
             <span className="text-sm font-bold leading-none">Academic</span>
@@ -87,9 +87,7 @@ export function Sidebar() {
       <nav className="flex-1 space-y-1 overflow-y-auto p-4">
         {visibleNavItems.map((item) => {
           const isActive =
-            item.href === "/"
-              ? pathname === "/"
-              : pathname === item.href || pathname.startsWith(`${item.href}/`);
+            pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <Link
               key={item.href}
