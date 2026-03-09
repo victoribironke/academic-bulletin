@@ -1,7 +1,6 @@
 "use client";
 
 import { logIn } from "@/app/actions/auth";
-import Link from "next/link";
 import { useActionState } from "react";
 
 const initialState = { error: "" };

@@ -8,12 +8,10 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
 import { ChevronDown, User as UserIcon } from "lucide-react";
 
 export function Header() {
@@ -23,18 +21,18 @@ export function Header() {
     return `${firstName[0]}${lastName[0]}`.toUpperCase();
   };
 
-  const getRoleBadgeVariant = (role: string) => {
-    switch (role) {
-      case "ADMIN":
-        return "destructive";
-      case "DEAN":
-        return "default";
-      case "HOD":
-        return "secondary";
-      default:
-        return "outline";
-    }
-  };
+  // const getRoleBadgeVariant = (role: string) => {
+  //   switch (role) {
+  //     case "ADMIN":
+  //       return "destructive";
+  //     case "DEAN":
+  //       return "default";
+  //     case "HOD":
+  //       return "secondary";
+  //     default:
+  //       return "outline";
+  //   }
+  // };
 
   return (
     <header className="z-30 flex h-16 shrink-0 items-center justify-between border-b bg-background px-6">
