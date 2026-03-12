@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { usePermission } from "@/contexts/user-context";
+import { usePermission, useUser } from "@/contexts/user-context";
 import { getRoleDisplayName } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
@@ -64,8 +64,10 @@ export default function UsersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [filterRole, setFilterRole] = useState<string>("all");
   const { hasPermission } = usePermission();
+  const { currentUser } = useUser();
 
   const canManage = hasPermission("manage:users");
+  const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
 
   const fetchData = async () => {
     try {
@@ -190,7 +192,11 @@ export default function UsersPage() {
           </p>
         </div>
         {canManage && (
-          <CreateUserDialog schools={schools} departments={departments} />
+          <CreateUserDialog
+            schools={schools}
+            departments={departments}
+            isSuperAdmin={isSuperAdmin}
+          />
         )}
       </div>
 
