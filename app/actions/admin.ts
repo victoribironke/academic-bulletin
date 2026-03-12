@@ -46,6 +46,13 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
     };
   }
 
+  // Only SUPER_ADMINs can create other SUPER_ADMINs
+  if (role === "SUPER_ADMIN" && requestingUser.role !== "SUPER_ADMIN") {
+    return {
+      error: "Only Super Administrators can create other Super Administrators.",
+    };
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
