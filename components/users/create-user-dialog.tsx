@@ -26,9 +26,11 @@ import { Plus } from "lucide-react";
 export function CreateUserDialog({
   schools,
   departments,
+  isSuperAdmin = false,
 }: {
   schools: { id: string; name: string }[];
   departments: { id: string; name: string; schoolId: string }[];
+  isSuperAdmin?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [selectedSchool, setSelectedSchool] = useState<string>("none");
@@ -99,7 +101,11 @@ export function CreateUserDialog({
                 <SelectItem value="HOD">Head of Department (HOD)</SelectItem>
                 <SelectItem value="DEAN">Dean</SelectItem>
                 <SelectItem value="ADMIN">Academic Planning Admin</SelectItem>
-                <SelectItem value="SUPER_ADMIN">Super Administrator</SelectItem>
+                {isSuperAdmin && (
+                  <SelectItem value="SUPER_ADMIN">
+                    Super Administrator
+                  </SelectItem>
+                )}
               </SelectContent>
             </Select>
           </div>
