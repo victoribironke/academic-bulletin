@@ -58,8 +58,8 @@ export function CreateUserDialog({
         <DialogHeader>
           <DialogTitle>Create New User</DialogTitle>
           <DialogDescription>
-            Add a new user to the system. An email will not be sent, so provide
-            the credentials directly to the user.
+            Add a new user to the system. They will receive an invite email to
+            set their own password.
           </DialogDescription>
         </DialogHeader>
 
@@ -84,11 +84,6 @@ export function CreateUserDialog({
               placeholder="user@university.edu"
               required
             />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input id="password" name="password" type="password" required />
           </div>
 
           <div className="space-y-2">
