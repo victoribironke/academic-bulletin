@@ -1,5 +1,6 @@
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { HelpButton } from "@/components/layout/help-button";
 import { UserProvider } from "@/contexts/user-context";
 
 export default function MainLayout({
@@ -21,6 +22,7 @@ export default function MainLayout({
           {/* Page content - this is the only scrollable area */}
           <main className="flex-1 overflow-y-auto p-6">{children}</main>
         </div>
+        <HelpButton />
       </div>
     </UserProvider>
   );
