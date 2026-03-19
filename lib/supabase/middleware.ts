@@ -29,15 +29,14 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // Refreshing the auth token
-  await supabase.auth.getUser();
-
   // Protect routes
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isAuthRoute = request.nextUrl.pathname.startsWith("/login");
+  const isAuthRoute =
+    request.nextUrl.pathname.startsWith("/login") ||
+    request.nextUrl.pathname.startsWith("/confirm");
   const isApiRoute = request.nextUrl.pathname.startsWith("/api");
 
   if (!user && !isAuthRoute && !isApiRoute) {
