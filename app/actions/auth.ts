@@ -24,7 +24,7 @@ export async function logIn(prevState: any, formData: FormData) {
   }
 
   revalidatePath("/", "layout");
-  redirect("/programmes");
+  redirect("/dashboard");
 }
 
 // User registration has been disabled and users will be managed manually
