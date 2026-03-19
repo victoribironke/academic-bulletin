@@ -291,7 +291,7 @@ export default function UsersPage() {
                       >
                         <SelectTrigger className="w-40">
                           <Badge variant={getRoleBadgeVariant(user.role)}>
-                            {user.role}
+                            {user.role.split("_").join(" ")}
                           </Badge>
                         </SelectTrigger>
                         <SelectContent>
