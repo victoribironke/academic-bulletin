@@ -32,7 +32,6 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
   const firstName = formData.get("firstName") as string;
   const lastName = formData.get("lastName") as string;
   const email = formData.get("email") as string;
-  const password = formData.get("password") as string;
   const role = formData.get("role") as string;
   let schoolId = formData.get("schoolId") as string | null;
   let departmentId = formData.get("departmentId") as string | null;
@@ -40,9 +39,9 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
   if (schoolId === "none") schoolId = null;
   if (departmentId === "none") departmentId = null;
 
-  if (!firstName || !lastName || !email || !password || !role) {
+  if (!firstName || !lastName || !email || !role) {
     return {
-      error: "First Name, Last Name, Email, Password, and Role are required.",
+      error: "First Name, Last Name, Email, and Role are required.",
     };
   }
 
@@ -70,25 +69,26 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
   });
 
   try {
-    // 4. Create User in Supabase directly
-    const { data: authData, error: createError } =
-      await adminAuthClient.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true, // Auto-confirm
-        user_metadata: {
+    // 4. Invite User via Supabase (sends invite email automatically)
+    const siteUrl = process.env.NODE_ENV === "production"
+      ? "https://academic-bulletin.vercel.app"
+      : "http://localhost:3000";
+    const { data: authData, error: inviteError } =
+      await adminAuthClient.auth.admin.inviteUserByEmail(email, {
+        data: {
           firstName,
           lastName,
         },
+        redirectTo: `${siteUrl}/confirm`,
       });
 
-    if (createError) {
-      console.error("Supabase Admin Create Error:", createError);
-      return { error: createError.message };
+    if (inviteError) {
+      console.error("Supabase Invite Error:", inviteError);
+      return { error: inviteError.message };
     }
 
     if (!authData.user) {
-      return { error: "Failed to create user in authentication provider." };
+      return { error: "Failed to invite user." };
     }
 
     // 5. Create Profile in Prisma
