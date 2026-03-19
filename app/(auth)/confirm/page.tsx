@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function ConfirmPage() {
@@ -33,7 +33,7 @@ export default function ConfirmPage() {
             setIsVerifying(false);
           } else {
             setError(
-              "Invalid or expired invite link. Please contact your administrator."
+              "Invalid or expired invite link. Please contact your administrator.",
             );
             setIsVerifying(false);
           }
