@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Users, UserCheck, UserX } from "lucide-react";
+import { Users, UserCheck, UserX, Loader2 } from "lucide-react";
 import { CreateUserDialog } from "@/components/users/create-user-dialog";
 
 interface School {
@@ -57,11 +57,23 @@ interface User {
   department?: Department | null;
 }
 
+const ROLE_TIERS: Record<string, number> = {
+  HOD: 1,
+  DEAN: 2,
+  ADMIN: 3,
+  SUPER_ADMIN: 4,
+};
+
+function getRoleTier(role: string): number {
+  return ROLE_TIERS[role] ?? 0;
+}
+
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [schools, setSchools] = useState<School[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
   const [filterRole, setFilterRole] = useState<string>("all");
   const { hasPermission } = usePermission();
   const { currentUser } = useUser();
@@ -102,8 +114,9 @@ export default function UsersPage() {
   }, []);
 
   const handleToggleActive = async (user: User) => {
-    if (!canManage) return;
+    if (!isSuperAdmin) return;
 
+    setTogglingUserId(user.id);
     try {
       const response = await fetch(`/api/users/${user.id}`, {
         method: "PATCH",
@@ -116,6 +129,8 @@ export default function UsersPage() {
       }
     } catch (err) {
       console.error("Failed to toggle user status:", err);
+    } finally {
+      setTogglingUserId(null);
     }
   };
 
@@ -285,27 +300,44 @@ export default function UsersPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Select
-                        value={user.role}
-                        onValueChange={(value) => handleRoleChange(user, value)}
-                      >
-                        <SelectTrigger className="w-40">
-                          <Badge variant={getRoleBadgeVariant(user.role)}>
-                            {user.role.split("_").join(" ")}
-                          </Badge>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="HOD">
-                            {getRoleDisplayName("HOD")}
-                          </SelectItem>
-                          <SelectItem value="DEAN">
-                            {getRoleDisplayName("DEAN")}
-                          </SelectItem>
-                          <SelectItem value="ADMIN">
-                            {getRoleDisplayName("ADMIN")}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
+                      {canManage &&
+                      (isSuperAdmin ||
+                        getRoleTier(currentUser!.role) > getRoleTier(user.role)) ? (
+                        <Select
+                          value={user.role}
+                          onValueChange={(value) =>
+                            handleRoleChange(user, value)
+                          }
+                        >
+                          <SelectTrigger className="w-40 cursor-pointer">
+                            <SelectValue>
+                              <Badge variant={getRoleBadgeVariant(user.role)}>
+                                {user.role.split("_").join(" ")}
+                              </Badge>
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="HOD">
+                              {getRoleDisplayName("HOD")}
+                            </SelectItem>
+                            <SelectItem value="DEAN">
+                              {getRoleDisplayName("DEAN")}
+                            </SelectItem>
+                            <SelectItem value="ADMIN">
+                              {getRoleDisplayName("ADMIN")}
+                            </SelectItem>
+                            {isSuperAdmin && (
+                              <SelectItem value="SUPER_ADMIN">
+                                Super Admin
+                              </SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Badge variant={getRoleBadgeVariant(user.role)}>
+                          {user.role.split("_").join(" ")}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       {user.school ? (
@@ -331,23 +363,32 @@ export default function UsersPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleToggleActive(user)}
-                      >
-                        {user.isActive ? (
-                          <>
-                            <UserX className="mr-1 h-4 w-4" />
-                            Deactivate
-                          </>
-                        ) : (
-                          <>
-                            <UserCheck className="mr-1 h-4 w-4" />
-                            Activate
-                          </>
-                        )}
-                      </Button>
+                      {isSuperAdmin && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleToggleActive(user)}
+                          disabled={togglingUserId === user.id}
+                          className="cursor-pointer"
+                        >
+                          {togglingUserId === user.id ? (
+                            <>
+                              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                              Processing...
+                            </>
+                          ) : user.isActive ? (
+                            <>
+                              <UserX className="mr-1 h-4 w-4" />
+                              Deactivate
+                            </>
+                          ) : (
+                            <>
+                              <UserCheck className="mr-1 h-4 w-4" />
+                              Activate
+                            </>
+                          )}
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
