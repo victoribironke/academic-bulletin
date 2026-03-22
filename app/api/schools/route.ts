@@ -36,11 +36,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Basic HTML sanitization to prevent XSS
+    const sanitize = (str: string) => str?.replace(/<[^>]*>?/gm, "");
+
     const school = await prisma.school.create({
       data: {
-        name,
-        code: code.toUpperCase(),
-        description,
+        name: sanitize(name),
+        code: sanitize(code).toUpperCase(),
+        description: description ? sanitize(description) : description,
       },
     });
 
