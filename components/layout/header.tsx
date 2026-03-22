@@ -2,8 +2,9 @@
 
 import { useUser } from "@/contexts/user-context";
 import { getRoleDisplayName } from "@/lib/auth";
-import { logOut } from "@/app/actions/auth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,6 +17,13 @@ import { ChevronDown, User as UserIcon } from "lucide-react";
 
 export function Header() {
   const { currentUser, isLoading } = useUser();
+  const router = useRouter();
+  const supabase = createClient();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
 
   const getInitials = (firstName: string, lastName: string) => {
     return `${firstName[0]}${lastName[0]}`.toUpperCase();
@@ -93,14 +101,12 @@ export function Header() {
                 <DropdownMenuSeparator />
               </>
             )}
-            <form action={logOut}>
-              <button
-                type="submit"
-                className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent data-disabled:pointer-events-none data-disabled:opacity-50 text-destructive hover:text-destructive"
-              >
-                Log out
-              </button>
-            </form>
+            <button
+              onClick={handleLogout}
+              className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent data-disabled:pointer-events-none data-disabled:opacity-50 text-destructive hover:text-destructive"
+            >
+              Log out
+            </button>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
