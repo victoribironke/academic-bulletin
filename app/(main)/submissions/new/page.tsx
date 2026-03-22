@@ -110,6 +110,11 @@ export default function NewSubmissionPage() {
     }
   }, [formData.programmeId, programmes]);
 
+  // Reset programme selection when school filter changes
+  useEffect(() => {
+    setFormData((prev) => ({ ...prev, programmeId: "" }));
+  }, [filterSchoolId]);
+
   const filteredProgrammes =
     filterSchoolId === "all"
       ? programmes
