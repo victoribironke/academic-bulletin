@@ -32,6 +32,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2, School, Building2 } from "lucide-react";
+import { toast } from "sonner";
 
 interface School {
   id: string;
@@ -87,10 +88,17 @@ export default function SchoolsPage() {
         : "/api/schools";
       const method = editingSchool ? "PUT" : "POST";
 
+      const sanitize = (str: string) => str.replace(/<[^>]*>?/gm, "");
+      const sanitizedData = {
+        name: sanitize(formData.name),
+        code: sanitize(formData.code),
+        description: sanitize(formData.description),
+      };
+
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(sanitizedData),
       });
 
       if (!response.ok) {
@@ -103,6 +111,7 @@ export default function SchoolsPage() {
       setEditingSchool(null);
       setFormData({ name: "", code: "", description: "" });
       fetchSchools();
+      toast.success(editingSchool ? "School updated successfully" : "School created successfully");
     } catch (err) {
       console.error("Failed to save school:", err);
       setError("Failed to save school");
@@ -140,6 +149,7 @@ export default function SchoolsPage() {
       }
 
       fetchSchools();
+      toast.success("School deleted successfully");
     } catch (err) {
       console.error("Failed to delete school:", err);
       alert("Failed to delete school");
