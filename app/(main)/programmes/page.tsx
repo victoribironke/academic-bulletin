@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { usePermission } from "@/contexts/user-context";
+import { usePermission, useUser } from "@/contexts/user-context";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -39,6 +39,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2, GraduationCap, FileText } from "lucide-react";
+import { toast } from "sonner";
 
 interface School {
   id: string;
@@ -88,15 +89,21 @@ export default function ProgrammesPage() {
   const [filterDepartmentId, setFilterDepartmentId] = useState<string>("all");
   const [error, setError] = useState("");
   const { hasPermission } = usePermission();
+  const { currentUser } = useUser();
 
   const canManage = hasPermission("manage:programmes");
+  const isHOD = currentUser?.role === "HOD";
+  const hodDepartmentId = currentUser?.departmentId;
 
   const fetchProgrammes = useCallback(async () => {
     try {
       let url = "/api/programmes";
       const params = new URLSearchParams();
-      if (filterDepartmentId !== "all") {
-        params.set("departmentId", filterDepartmentId);
+
+      const effectiveDepartmentId = isHOD && hodDepartmentId ? hodDepartmentId : filterDepartmentId;
+
+      if (effectiveDepartmentId !== "all") {
+        params.set("departmentId", effectiveDepartmentId);
       } else if (filterSchoolId !== "all") {
         params.set("schoolId", filterSchoolId);
       }
@@ -159,6 +166,10 @@ export default function ProgrammesPage() {
       ? departments.filter((d) => d.school.id === filterSchoolId)
       : departments;
 
+  const displayDepartments = isHOD && hodDepartmentId
+    ? departments.filter((d) => d.id === hodDepartmentId)
+    : filteredDepartments;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -200,6 +211,7 @@ export default function ProgrammesPage() {
         departmentId: "",
       });
       fetchProgrammes();
+      toast.success(editingProgramme ? "Programme updated successfully" : "Programme created successfully");
     } catch (err) {
       console.error("Failed to save programme:", err);
       setError("Failed to save programme");
@@ -254,7 +266,11 @@ export default function ProgrammesPage() {
       description: "",
       degreeType: "",
       duration: "",
-      departmentId: filterDepartmentId !== "all" ? filterDepartmentId : "",
+      departmentId: isHOD && hodDepartmentId
+        ? hodDepartmentId
+        : filterDepartmentId !== "all"
+        ? filterDepartmentId
+        : "",
     });
     setError("");
     setIsDialogOpen(true);
@@ -309,12 +325,13 @@ export default function ProgrammesPage() {
                       onValueChange={(value) =>
                         setFormData({ ...formData, departmentId: value })
                       }
+                      disabled={isHOD}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select a department" />
                       </SelectTrigger>
                       <SelectContent>
-                        {departments.map((dept) => (
+                        {displayDepartments.map((dept) => (
                           <SelectItem key={dept.id} value={dept.id}>
                             {dept.name} ({dept.school.code})
                           </SelectItem>
@@ -449,15 +466,16 @@ export default function ProgrammesPage() {
                 Department:
               </Label>
               <Select
-                value={filterDepartmentId}
+                value={isHOD && hodDepartmentId ? hodDepartmentId : filterDepartmentId}
                 onValueChange={setFilterDepartmentId}
+                disabled={isHOD}
               >
                 <SelectTrigger className="w-48">
                   <SelectValue placeholder="All Departments" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Departments</SelectItem>
-                  {filteredDepartments.map((dept) => (
+                  {!isHOD && <SelectItem value="all">All Departments</SelectItem>}
+                  {displayDepartments.map((dept) => (
                     <SelectItem key={dept.id} value={dept.id}>
                       {dept.name}
                     </SelectItem>
