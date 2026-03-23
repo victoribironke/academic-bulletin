@@ -1151,7 +1151,7 @@ export default function SubmissionDetailPage({
           <Card>
             <CardHeader className="pb-3">
               <Tabs value={activeSection} onValueChange={setActiveSection}>
-                <TabsList className="grid grid-cols-7 w-full">
+                <TabsList className="flex flex-wrap h-auto w-full justify-start gap-1">
                   {sections.map((section) => {
                     const Icon = section.icon;
                     return (
