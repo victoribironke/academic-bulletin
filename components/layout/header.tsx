@@ -59,7 +59,15 @@ export function Header() {
               className="flex items-center gap-2"
               disabled={isLoading}
             >
-              {currentUser ? (
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-full bg-muted animate-pulse" />
+                  <div className="flex flex-col items-start gap-1">
+                    <div className="h-4 w-24 bg-muted animate-pulse rounded" />
+                    <div className="h-3 w-16 bg-muted animate-pulse rounded" />
+                  </div>
+                </div>
+              ) : currentUser ? (
                 <>
                   <Avatar className="h-8 w-8">
                     <AvatarFallback className="bg-primary text-primary-foreground text-xs">
