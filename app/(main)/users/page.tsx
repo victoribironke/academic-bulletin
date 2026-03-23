@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { usePermission, useUser } from "@/contexts/user-context";
+import { useRouter } from "next/navigation";
 import { getRoleDisplayName } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Users, UserCheck, UserX, Loader2 } from "lucide-react";
 import { CreateUserDialog } from "@/components/users/create-user-dialog";
+import { EditUserDialog } from "@/components/users/edit-user-dialog";
 
 interface School {
   id: string;
@@ -80,6 +82,13 @@ export default function UsersPage() {
 
   const canManage = hasPermission("manage:users");
   const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isLoading && !canManage) {
+      router.replace("/dashboard");
+    }
+  }, [isLoading, canManage, router]);
 
   const fetchData = async () => {
     try {
@@ -180,20 +189,9 @@ export default function UsersPage() {
     );
   }
 
+  // Optional: Return null since the useEffect will handle the redirect
   if (!canManage) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Card className="w-96">
-          <CardHeader>
-            <CardTitle>Access Restricted</CardTitle>
-            <CardDescription>
-              You don&apos;t have permission to manage users. Please contact an
-              administrator.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -363,14 +361,23 @@ export default function UsersPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      {isSuperAdmin && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleToggleActive(user)}
-                          disabled={togglingUserId === user.id}
-                          className="cursor-pointer"
-                        >
+                      <div className="flex items-center justify-end gap-2">
+                        {canManage && (
+                          <EditUserDialog
+                            user={user}
+                            schools={schools}
+                            departments={departments}
+                            onSuccess={fetchData}
+                          />
+                        )}
+                        {isSuperAdmin && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleToggleActive(user)}
+                            disabled={togglingUserId === user.id}
+                            className="cursor-pointer"
+                          >
                           {togglingUserId === user.id ? (
                             <>
                               <Loader2 className="mr-1 h-4 w-4 animate-spin" />
@@ -389,6 +396,7 @@ export default function UsersPage() {
                           )}
                         </Button>
                       )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
