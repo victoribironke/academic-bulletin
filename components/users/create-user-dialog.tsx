@@ -34,6 +34,7 @@ export function CreateUserDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [selectedSchool, setSelectedSchool] = useState<string>("none");
+  const [selectedRole, setSelectedRole] = useState<string>("HOD");
   const [state, formAction, isPending] = useActionState(adminCreateUser, null);
 
   // Close dialog on success
@@ -88,7 +89,8 @@ export function CreateUserDialog({
 
           <div className="space-y-2">
             <Label htmlFor="role">System Role</Label>
-            <Select name="role" defaultValue="HOD" required>
+            <input type="hidden" name="role" value={selectedRole} />
+            <Select defaultValue="HOD" onValueChange={setSelectedRole} required>
               <SelectTrigger>
                 <SelectValue placeholder="Select a role" />
               </SelectTrigger>
