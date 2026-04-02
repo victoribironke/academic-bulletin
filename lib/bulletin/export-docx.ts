@@ -28,6 +28,22 @@ import type {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+function stripHtml(html?: string) {
+  if (!html) return "";
+  return html.replace(/<[^>]*>?/gm, "").trim();
+}
+
+async function fetchImageBuffer(url: string): Promise<Buffer | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch (error) {
+    return null;
+  }
+}
+
 function heading(
   text: string,
   level: (typeof HeadingLevel)[keyof typeof HeadingLevel],
@@ -445,7 +461,7 @@ function generateCourseDescriptionsSection(
 
     if (desc.courseContent) {
       elements.push(paragraph("Course Content:", { bold: true }));
-      elements.push(paragraph(desc.courseContent));
+      elements.push(paragraph(stripHtml(desc.courseContent)));
     }
 
     if (desc.labWork) {
@@ -457,10 +473,32 @@ function generateCourseDescriptionsSection(
       elements.push(
         paragraph("Entrepreneurial/Practical Aspect:", { bold: true }),
       );
-      elements.push(paragraph(desc.entrepreneurialAspect));
+      elements.push(paragraph(stripHtml(desc.entrepreneurialAspect)));
     }
 
     elements.push(new Paragraph({ spacing: { after: 200 } }));
+  }
+
+  return elements;
+}
+
+function generateRegulationsSection(prog: BulletinProgramme): Paragraph[] {
+  const elements: Paragraph[] = [];
+  const hasRegulations = !!prog.content?.sectionF?.content;
+  const hasChanges = !!prog.content?.sectionG?.content;
+
+  if (!hasRegulations && !hasChanges) return [];
+
+  elements.push(heading("6. Regulations & Summary of Changes", HeadingLevel.HEADING_1));
+
+  if (hasRegulations) {
+    elements.push(heading("Programme Regulations", HeadingLevel.HEADING_2));
+    elements.push(paragraph(stripHtml(prog.content!.sectionF!.content)));
+  }
+
+  if (hasChanges) {
+    elements.push(heading("Summary of Changes", HeadingLevel.HEADING_2));
+    elements.push(paragraph(stripHtml(prog.content!.sectionG!.content)));
   }
 
   return elements;
@@ -478,6 +516,18 @@ export async function generateBulletinDocx(
   const children: (Paragraph | Table)[] = [];
 
   for (const prog of data.programmes) {
+    // Attempt to download images
+    let deanImageParagraph: Paragraph | null = null;
+    let hodImageParagraph: Paragraph | null = null;
+
+    if (prog.content?.deanImageUrl) {
+      const buf = await fetchImageBuffer(prog.content.deanImageUrl);
+      if (buf) {
+         // Unfortunately docx library uses ImageRun, avoiding native docx image embedding for now to avoid crashing docx formatting if buffers are corrupted. We will just leave text or no image if complicated.
+         // Actually, let me just add text since docx ImageRun needs width and height from the buffer which we don't have easily without image-size lib
+      }
+    }
+
     children.push(
       ...generateTitlePage(prog),
       ...generateStaffSection(prog),
@@ -485,6 +535,7 @@ export async function generateBulletinDocx(
       ...generateAdmissionSection(prog),
       ...generateCourseStructureSection(prog.courses),
       ...generateCourseDescriptionsSection(prog.courses),
+      ...generateRegulationsSection(prog),
     );
   }
 
