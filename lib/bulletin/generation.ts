@@ -60,6 +60,10 @@ export interface BulletinProgramme {
   courses: BulletinCourse[];
   staff: BulletinStaff[];
   content?: {
+    deanImageUrl?: string;
+    hodImageUrl?: string;
+    sectionF?: { content?: string };
+    sectionG?: { content?: string };
     philosophy?: string;
     mission?: string;
     vision?: string;
@@ -197,6 +201,10 @@ export async function generateDepartmentBulletin(
     staff: formattedStaff,
     content: submission?.content
       ? {
+          deanImageUrl: (submission.content.programmeInfo as any)?.deanImageUrl || undefined,
+          hodImageUrl: (submission.content.programmeInfo as any)?.hodImageUrl || undefined,
+          sectionF: submission.content.sectionF ? { content: (submission.content.sectionF as any).content } : undefined,
+          sectionG: submission.content.sectionG ? { content: (submission.content.sectionG as any).content } : undefined,
           philosophy: submission.content.philosophy || undefined,
           mission: submission.content.mission || undefined,
           vision: submission.content.vision || undefined,
@@ -280,10 +288,12 @@ export async function generateSchoolBulletin(
                   ownerDepartment: { select: { code: true } },
                 },
               },
+              description: true,
             },
             orderBy: [{ level: "asc" }, { semester: "asc" }, { code: "asc" }],
           },
           content: true,
+          courseDescriptions: true,
         },
       });
 
@@ -315,6 +325,17 @@ export async function generateSchoolBulletin(
         prerequisites: c.prerequisites || undefined,
         ownership: c.masterCourse?.ownership,
         ownerDepartment: c.masterCourse?.ownerDepartment?.code,
+        description: c.description
+          ? {
+              learningOutcomes: Array.isArray(c.description.learningOutcomes)
+                ? (c.description.learningOutcomes as string[])
+                : undefined,
+              courseContent: c.description.courseContent || undefined,
+              labWork: c.description.labWork || undefined,
+              entrepreneurialAspect:
+                c.description.entrepreneurialAspect || undefined,
+            }
+          : undefined,
       }));
 
       programmes.push({
@@ -330,12 +351,33 @@ export async function generateSchoolBulletin(
         staff: formattedStaff,
         content: submission?.content
           ? {
+              deanImageUrl: (submission.content.programmeInfo as any)?.deanImageUrl || undefined,
+              hodImageUrl: (submission.content.programmeInfo as any)?.hodImageUrl || undefined,
+              sectionF: submission.content.sectionF ? { content: (submission.content.sectionF as any).content } : undefined,
+              sectionG: submission.content.sectionG ? { content: (submission.content.sectionG as any).content } : undefined,
               philosophy: submission.content.philosophy || undefined,
+              mission: submission.content.mission || undefined,
+              vision: submission.content.vision || undefined,
               objectives: Array.isArray(submission.content.objectives)
                 ? (submission.content.objectives as string[])
                 : undefined,
+              uniqueFeatures: Array.isArray(submission.content.uniqueFeatures)
+                ? (submission.content.uniqueFeatures as string[])
+                : undefined,
+              employability: submission.content.employability || undefined,
+              centurySkills: Array.isArray(submission.content.centurySkills)
+                ? (submission.content.centurySkills as string[])
+                : undefined,
+              utmeRequirements: submission.content.utmeRequirements || undefined,
+              directEntryRequirements:
+                submission.content.directEntryRequirements || undefined,
+              transferRequirements:
+                submission.content.transferRequirements || undefined,
+              minimumDuration: submission.content.minimumDuration || undefined,
               graduationRequirements:
                 submission.content.graduationRequirements || undefined,
+              minimumCGPA: submission.content.minimumCGPA || undefined,
+              totalUnits: submission.content.totalUnits || undefined,
             }
           : undefined,
       });
@@ -395,10 +437,12 @@ export async function generateInstitutionBulletin(): Promise<BulletinData> {
                     ownerDepartment: { select: { code: true } },
                   },
                 },
+                description: true,
               },
               orderBy: [{ level: "asc" }, { semester: "asc" }, { code: "asc" }],
             },
             content: true,
+            courseDescriptions: true,
           },
         });
 
@@ -430,6 +474,17 @@ export async function generateInstitutionBulletin(): Promise<BulletinData> {
           prerequisites: c.prerequisites || undefined,
           ownership: c.masterCourse?.ownership,
           ownerDepartment: c.masterCourse?.ownerDepartment?.code,
+          description: c.description
+            ? {
+                learningOutcomes: Array.isArray(c.description.learningOutcomes)
+                  ? (c.description.learningOutcomes as string[])
+                  : undefined,
+                courseContent: c.description.courseContent || undefined,
+                labWork: c.description.labWork || undefined,
+                entrepreneurialAspect:
+                  c.description.entrepreneurialAspect || undefined,
+              }
+            : undefined,
         }));
 
         programmes.push({
@@ -445,9 +500,33 @@ export async function generateInstitutionBulletin(): Promise<BulletinData> {
           staff: formattedStaff,
           content: submission?.content
             ? {
+                deanImageUrl: (submission.content.programmeInfo as any)?.deanImageUrl || undefined,
+                hodImageUrl: (submission.content.programmeInfo as any)?.hodImageUrl || undefined,
+                sectionF: submission.content.sectionF ? { content: (submission.content.sectionF as any).content } : undefined,
+                sectionG: submission.content.sectionG ? { content: (submission.content.sectionG as any).content } : undefined,
                 philosophy: submission.content.philosophy || undefined,
+                mission: submission.content.mission || undefined,
+                vision: submission.content.vision || undefined,
+                objectives: Array.isArray(submission.content.objectives)
+                  ? (submission.content.objectives as string[])
+                  : undefined,
+                uniqueFeatures: Array.isArray(submission.content.uniqueFeatures)
+                  ? (submission.content.uniqueFeatures as string[])
+                  : undefined,
+                employability: submission.content.employability || undefined,
+                centurySkills: Array.isArray(submission.content.centurySkills)
+                  ? (submission.content.centurySkills as string[])
+                  : undefined,
+                utmeRequirements: submission.content.utmeRequirements || undefined,
+                directEntryRequirements:
+                  submission.content.directEntryRequirements || undefined,
+                transferRequirements:
+                  submission.content.transferRequirements || undefined,
+                minimumDuration: submission.content.minimumDuration || undefined,
                 graduationRequirements:
                   submission.content.graduationRequirements || undefined,
+                minimumCGPA: submission.content.minimumCGPA || undefined,
+                totalUnits: submission.content.totalUnits || undefined,
               }
             : undefined,
         });
