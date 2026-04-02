@@ -39,7 +39,7 @@ async function fetchImageBuffer(url: string): Promise<Buffer | null> {
     if (!response.ok) return null;
     const arrayBuffer = await response.arrayBuffer();
     return Buffer.from(arrayBuffer);
-  } catch (error) {
+  } catch (err) {
     return null;
   }
 }
@@ -516,10 +516,6 @@ export async function generateBulletinDocx(
   const children: (Paragraph | Table)[] = [];
 
   for (const prog of data.programmes) {
-    // Attempt to download images
-    let deanImageParagraph: Paragraph | null = null;
-    let hodImageParagraph: Paragraph | null = null;
-
     if (prog.content?.deanImageUrl) {
       const buf = await fetchImageBuffer(prog.content.deanImageUrl);
       if (buf) {
