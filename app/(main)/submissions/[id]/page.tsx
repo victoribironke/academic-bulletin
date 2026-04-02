@@ -537,6 +537,8 @@ export default function SubmissionDetailPage({
     regulations,
     summaryOfChanges,
     gracePhilosophyResult,
+    deanImageUrl,
+    hodImageUrl,
     id,
   ]);
 
@@ -1218,23 +1220,29 @@ export default function SubmissionDetailPage({
                   <div className="space-y-6">
                     <div className="space-y-2">
                        <Label>Dean Image URL</Label>
-                       <p className="text-xs text-muted-foreground">Provide a direct external URL to the Dean's picture.</p>
+                       <p className="text-xs text-muted-foreground">Provide a direct external URL to the Dean&apos;s picture.</p>
                        {canEdit ? (
                           <Input value={deanImageUrl} onChange={(e) => { setDeanImageUrl(processImageUrl(e.target.value)); setHasChanges(true); }} placeholder="https://example.com/dean.jpg or Google Drive link" />
                        ) : (
                           <p className="text-sm bg-muted p-3 rounded-md">{deanImageUrl || "Not provided"}</p>
                        )}
-                       {deanImageUrl && <img src={deanImageUrl} alt="Dean" className="mt-2 h-32 object-contain rounded-md" />}
+                       {deanImageUrl && (
+                         /* eslint-disable-next-line @next/next/no-img-element */
+                         <img src={deanImageUrl} alt="Dean" className="mt-2 h-32 object-contain rounded-md" />
+                       )}
                     </div>
                     <div className="space-y-2">
                        <Label>HOD Image URL</Label>
-                       <p className="text-xs text-muted-foreground">Provide a direct external URL to the HOD's picture.</p>
+                       <p className="text-xs text-muted-foreground">Provide a direct external URL to the HOD&apos;s picture.</p>
                        {canEdit ? (
                           <Input value={hodImageUrl} onChange={(e) => { setHodImageUrl(processImageUrl(e.target.value)); setHasChanges(true); }} placeholder="https://example.com/hod.jpg or Google Drive link" />
                        ) : (
                           <p className="text-sm bg-muted p-3 rounded-md">{hodImageUrl || "Not provided"}</p>
                        )}
-                       {hodImageUrl && <img src={hodImageUrl} alt="HOD" className="mt-2 h-32 object-contain rounded-md" />}
+                       {hodImageUrl && (
+                         /* eslint-disable-next-line @next/next/no-img-element */
+                         <img src={hodImageUrl} alt="HOD" className="mt-2 h-32 object-contain rounded-md" />
+                       )}
                     </div>
                   </div>
                 )}
