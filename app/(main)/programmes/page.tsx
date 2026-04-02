@@ -121,7 +121,7 @@ export default function ProgrammesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [filterDepartmentId, filterSchoolId]);
+  }, [filterDepartmentId, filterSchoolId, isHOD, hodDepartmentId]);
 
   const fetchDepartments = async () => {
     try {
