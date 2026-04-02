@@ -90,6 +90,7 @@ interface Submission {
     role: string;
   };
   content: {
+    programmeInfo?: { deanImageUrl?: string; hodImageUrl?: string; };
     philosophy?: string;
     objectives?: string[];
     uniqueFeatures?: string[];
@@ -147,6 +148,12 @@ interface PhaseTransition {
 
 // Updated section structure based on template
 const sections = [
+  {
+    key: "deans_hods",
+    title: "Deans & HODs",
+    icon: Users,
+    description: "Profiles of the Dean and Head of Department",
+  },
   {
     key: "staff",
     title: "Staff Directory",
@@ -327,6 +334,8 @@ export default function SubmissionDetailPage({
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   // Form state for structured sections
+  const [deanImageUrl, setDeanImageUrl] = useState("");
+  const [hodImageUrl, setHodImageUrl] = useState("");
   const [philosophy, setPhilosophy] = useState("");
   const [mission, setMission] = useState("");
   const [vision, setVision] = useState("");
@@ -384,6 +393,8 @@ export default function SubmissionDetailPage({
         setSubmission(data);
         // Initialize form state from submission content
         if (data.content) {
+          setDeanImageUrl(data.content.programmeInfo?.deanImageUrl || "");
+          setHodImageUrl(data.content.programmeInfo?.hodImageUrl || "");
           setPhilosophy(data.content.philosophy || "");
           setMission(data.content.mission || "");
           setVision(data.content.vision || "");
@@ -429,6 +440,15 @@ export default function SubmissionDetailPage({
     return text.trim().split(/\s+/).filter(Boolean).length;
   };
 
+  // Google Drive auto-converter
+  const processImageUrl = (url: string) => {
+    const driveMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (driveMatch && driveMatch[1]) {
+      return `https://drive.google.com/uc?export=view&id=${driveMatch[1]}`;
+    }
+    return url;
+  };
+
   const philosophyWordCount = getWordCount(philosophy);
   const isPhilosophyValid =
     philosophyWordCount >= 150 && philosophyWordCount <= 250;
@@ -448,6 +468,11 @@ export default function SubmissionDetailPage({
       setAutoSaveStatus("saving");
       try {
         const contentToSave = {
+          programmeInfo: {
+            ...submission.content?.programmeInfo,
+            deanImageUrl,
+            hodImageUrl,
+          },
           philosophy,
           philosophyGracePass: gracePhilosophyResult?.passed || false,
           philosophyGrace: gracePhilosophyResult || null,
@@ -521,6 +546,11 @@ export default function SubmissionDetailPage({
 
     try {
       const contentToSave = {
+        programmeInfo: {
+          ...submission.content?.programmeInfo,
+          deanImageUrl,
+          hodImageUrl,
+        },
         philosophy,
         philosophyGracePass: gracePhilosophyResult?.passed || false,
         philosophyGrace: gracePhilosophyResult || null,
@@ -1182,6 +1212,32 @@ export default function SubmissionDetailPage({
                   </p>
                 </div>
                 <Separator />
+
+                {/* Deans & HODs Section */}
+                {activeSection === "deans_hods" && (
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                       <Label>Dean Image URL</Label>
+                       <p className="text-xs text-muted-foreground">Provide a direct external URL to the Dean's picture.</p>
+                       {canEdit ? (
+                          <Input value={deanImageUrl} onChange={(e) => { setDeanImageUrl(processImageUrl(e.target.value)); setHasChanges(true); }} placeholder="https://example.com/dean.jpg or Google Drive link" />
+                       ) : (
+                          <p className="text-sm bg-muted p-3 rounded-md">{deanImageUrl || "Not provided"}</p>
+                       )}
+                       {deanImageUrl && <img src={deanImageUrl} alt="Dean" className="mt-2 h-32 object-contain rounded-md" />}
+                    </div>
+                    <div className="space-y-2">
+                       <Label>HOD Image URL</Label>
+                       <p className="text-xs text-muted-foreground">Provide a direct external URL to the HOD's picture.</p>
+                       {canEdit ? (
+                          <Input value={hodImageUrl} onChange={(e) => { setHodImageUrl(processImageUrl(e.target.value)); setHasChanges(true); }} placeholder="https://example.com/hod.jpg or Google Drive link" />
+                       ) : (
+                          <p className="text-sm bg-muted p-3 rounded-md">{hodImageUrl || "Not provided"}</p>
+                       )}
+                       {hodImageUrl && <img src={hodImageUrl} alt="HOD" className="mt-2 h-32 object-contain rounded-md" />}
+                    </div>
+                  </div>
+                )}
 
                 {/* Staff Directory Section */}
                 {activeSection === "staff" && (
