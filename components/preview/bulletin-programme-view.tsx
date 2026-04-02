@@ -47,6 +47,24 @@ export function BulletinProgrammeView({
 
       <Separator />
 
+      {/* Deans & HODs Profile */}
+      {(programme.content?.deanImageUrl || programme.content?.hodImageUrl) && (
+        <section className="flex justify-center gap-12 my-6">
+          {programme.content.deanImageUrl && (
+            <div className="text-center">
+              <img src={programme.content.deanImageUrl} alt="Dean" className="h-32 w-48 object-contain rounded-md mx-auto shadow-sm" />
+              <p className="mt-3 font-semibold text-lg">Dean</p>
+            </div>
+          )}
+          {programme.content.hodImageUrl && (
+            <div className="text-center">
+              <img src={programme.content.hodImageUrl} alt="Head of Department" className="h-32 w-48 object-contain rounded-md mx-auto shadow-sm" />
+              <p className="mt-3 font-semibold text-lg">Head of Department</p>
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Staff Directory */}
       <section>
         <h2 className="text-lg font-bold mb-3 border-b pb-1">
@@ -211,6 +229,26 @@ export function BulletinProgrammeView({
 
       <Separator />
 
+      {/* Graduation Requirements */}
+      <section>
+        <h2 className="text-lg font-bold mb-3 border-b pb-1">
+          GRADUATION REQUIREMENTS
+        </h2>
+
+        {programme.content?.graduationRequirements && (
+          <p className="mb-4">{programme.content.graduationRequirements}</p>
+        )}
+
+        <div className="grid grid-cols-2 gap-4 mt-4">
+          <div className="bg-muted p-3 rounded">
+            <span className="font-medium">Total Credit Units:</span>{" "}
+            {programme.courses.reduce((sum, c) => sum + c.units, 0)}
+          </div>
+        </div>
+      </section>
+
+      <Separator />
+
       {/* Course Structure */}
       <section>
         <h2 className="text-lg font-bold mb-3 border-b pb-1">
@@ -328,23 +366,63 @@ export function BulletinProgrammeView({
 
       <Separator />
 
-      {/* Graduation Requirements */}
+      {/* Course Details (Course Descriptions) */}
       <section>
         <h2 className="text-lg font-bold mb-3 border-b pb-1">
-          GRADUATION REQUIREMENTS
+          COURSE DESCRIPTIONS
         </h2>
-
-        {programme.content?.graduationRequirements && (
-          <p className="mb-4">{programme.content.graduationRequirements}</p>
-        )}
-
-        <div className="grid grid-cols-2 gap-4 mt-4">
-          <div className="bg-muted p-3 rounded">
-            <span className="font-medium">Total Credit Units:</span>{" "}
-            {programme.courses.reduce((sum, c) => sum + c.units, 0)}
-          </div>
+        <div className="space-y-4">
+          {programme.courses
+            .sort((a, b) => a.code.localeCompare(b.code))
+            .filter((c) => c.description?.courseContent || (c.description?.learningOutcomes && c.description.learningOutcomes.length > 0))
+            .map((course) => (
+            <div key={course.code} className="mb-4">
+              <h3 className="font-semibold">{course.code} - {course.title} ({course.units} Units)</h3>
+              {course.description?.courseContent && (
+                <div className="mt-1 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: course.description.courseContent }} />
+              )}
+              {course.description?.learningOutcomes && course.description.learningOutcomes.length > 0 && (
+                <div className="mt-2 text-sm text-muted-foreground">
+                  <strong>Learning Outcomes:</strong>
+                  <ul className="list-disc list-inside mt-1">
+                    {course.description.learningOutcomes.map((outcome, i) => (
+                      <li key={i}>{outcome}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ))}
+          {programme.courses.filter((c) => c.description?.courseContent || (c.description?.learningOutcomes && c.description.learningOutcomes.length > 0)).length === 0 && (
+            <p className="text-muted-foreground italic">No course descriptions provided.</p>
+          )}
         </div>
       </section>
+
+      <Separator />
+
+      {/* Regulations & Changes */}
+      {(programme.content?.sectionF?.content || programme.content?.sectionG?.content) && (
+        <section>
+          <h2 className="text-lg font-bold mb-3 border-b pb-1">
+            REGULATIONS & SUMMARY OF CHANGES
+          </h2>
+          
+          {programme.content?.sectionF?.content && (
+            <div className="mb-4">
+              <h3 className="font-semibold mb-2">Programme Regulations</h3>
+              <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: programme.content.sectionF.content }} />
+            </div>
+          )}
+
+          {programme.content?.sectionG?.content && (
+            <div className="mb-4">
+              <h3 className="font-semibold mb-2">Summary of Changes</h3>
+              <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: programme.content.sectionG.content }} />
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }
