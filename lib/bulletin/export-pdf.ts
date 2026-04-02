@@ -13,6 +13,11 @@ import type {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+function stripHtml(html?: string) {
+  if (!html) return "";
+  return html.replace(/<[^>]*>?/gm, "").trim();
+}
+
 const MARGIN = 60;
 const PAGE_WIDTH = 612; // Letter size
 const CONTENT_WIDTH = PAGE_WIDTH - 2 * MARGIN;
@@ -330,18 +335,39 @@ function generateCourseDescriptionsSection(
     }
     if (desc.courseContent) {
       boldText(doc, "Course Content:");
-      bodyText(doc, desc.courseContent);
+      bodyText(doc, stripHtml(desc.courseContent));
     }
     if (desc.labWork) {
       boldText(doc, "Lab/Practical Work:");
-      bodyText(doc, desc.labWork);
+      bodyText(doc, stripHtml(desc.labWork));
     }
     if (desc.entrepreneurialAspect) {
       boldText(doc, "Entrepreneurial/Practical Aspect:");
-      bodyText(doc, desc.entrepreneurialAspect);
+      bodyText(doc, stripHtml(desc.entrepreneurialAspect));
     }
 
     doc.moveDown(0.5);
+  }
+}
+
+function generateRegulationsSection(
+  doc: InstanceType<typeof PDFDocument>,
+  prog: BulletinProgramme,
+) {
+  const hasRegulations = !!prog.content?.sectionF?.content;
+  const hasChanges = !!prog.content?.sectionG?.content;
+
+  if (!hasRegulations && !hasChanges) return;
+
+  sectionHeading(doc, "6. Regulations & Summary of Changes");
+
+  if (hasRegulations) {
+    subHeading(doc, "Programme Regulations");
+    bodyText(doc, stripHtml(prog.content!.sectionF!.content));
+  }
+  if (hasChanges) {
+    subHeading(doc, "Summary of Changes");
+    bodyText(doc, stripHtml(prog.content!.sectionG!.content));
   }
 }
 
@@ -376,6 +402,7 @@ export async function generateBulletinPdf(data: BulletinData): Promise<Buffer> {
       generateAdmissionSection(doc, p);
       generateCourseStructureSection(doc, p.courses);
       generateCourseDescriptionsSection(doc, p.courses);
+      generateRegulationsSection(doc, p);
     }
 
     doc.end();
