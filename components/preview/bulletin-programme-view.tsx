@@ -52,12 +52,14 @@ export function BulletinProgrammeView({
         <section className="flex justify-center gap-12 my-6">
           {programme.content.deanImageUrl && (
             <div className="text-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={programme.content.deanImageUrl} alt="Dean" className="h-32 w-48 object-contain rounded-md mx-auto shadow-sm" />
               <p className="mt-3 font-semibold text-lg">Dean</p>
             </div>
           )}
           {programme.content.hodImageUrl && (
             <div className="text-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={programme.content.hodImageUrl} alt="Head of Department" className="h-32 w-48 object-contain rounded-md mx-auto shadow-sm" />
               <p className="mt-3 font-semibold text-lg">Head of Department</p>
             </div>
