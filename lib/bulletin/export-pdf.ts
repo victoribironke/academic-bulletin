@@ -162,13 +162,13 @@ function generateStaffSection(
 
     drawTable(
       doc,
-      ["S/N", "Name", "Rank", "Specialization", "Qualification"],
+      ["S/N", "Name", "Rank", "Qualification", "Specialization"],
       members.map((s, i) => [
         String(i + 1),
         s.fullName,
         s.rank,
-        s.specialization || "—",
         s.qualification,
+        s.specialization || "—",
       ]),
       colWidths,
     );
@@ -204,9 +204,9 @@ function generatePhilosophySection(
     subHeading(doc, "Unique Features");
     c.uniqueFeatures.forEach((f) => bodyText(doc, `• ${f}`));
   }
-  if (c?.employability) {
+  if (c?.employability && c.employability.length > 0) {
     subHeading(doc, "Employability Skills");
-    bodyText(doc, c.employability);
+    c.employability.forEach((skill) => bodyText(doc, `• ${skill}`));
   }
   if (c?.centurySkills && c.centurySkills.length > 0) {
     subHeading(doc, "21st Century Skills");
@@ -241,11 +241,56 @@ function generateAdmissionSection(
     subHeading(doc, "Graduation Requirements");
     bodyText(doc, c.graduationRequirements);
   }
+
+  // Credit Requirements Summary Table
+  subHeading(doc, "Credit Requirements Summary");
+  const levels = Array.from(new Set(prog.courses.map((course) => course.level))).sort((a, b) => a - b);
+  const dataRows = levels.map((level) => {
+    const courses = prog.courses.filter((course) => course.level === level);
+    const core = courses
+      .filter((course) => course.status === "CORE" || course.status === "MANDATORY")
+      .reduce((acc, course) => acc + course.units, 0);
+    const elective = courses
+      .filter((course) => course.status === "ELECTIVE")
+      .reduce((acc, course) => acc + course.units, 0);
+
+    return [
+      `${level} Level`,
+      String(core),
+      String(elective),
+      String(core + elective),
+    ];
+  });
+
+  const totalCore = prog.courses
+      .filter((course) => course.status === "CORE" || course.status === "MANDATORY")
+      .reduce((acc, course) => acc + course.units, 0);
+  const totalElective = prog.courses
+      .filter((course) => course.status === "ELECTIVE")
+      .reduce((acc, course) => acc + course.units, 0);
+  const totalUnits = prog.courses.reduce((acc, course) => acc + course.units, 0);
+
+  dataRows.push([
+    "Total Requirements",
+    String(totalCore),
+    String(totalElective),
+    String(totalUnits)
+  ]);
+
+  // Table total width 500 max usually in pdf
+  drawTable(
+    doc,
+    ["Level", "Core Units", "Elective Units", "Total"],
+    dataRows,
+    [100, 100, 100, 100]
+  );
+  doc.moveDown(1);
+
   if (c?.minimumCGPA) {
     boldText(doc, `Minimum CGPA: ${c.minimumCGPA}`);
   }
   if (c?.totalUnits) {
-    boldText(doc, `Total Required Units: ${c.totalUnits}`);
+    boldText(doc, `Total Expected Units: ${c.totalUnits}`);
   }
 }
 
