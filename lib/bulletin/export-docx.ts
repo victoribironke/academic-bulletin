@@ -189,8 +189,8 @@ function generateStaffSection(prog: BulletinProgramme): (Paragraph | Table)[] {
         headerCell("S/N", 8),
         headerCell("Name", 30),
         headerCell("Rank", 22),
-        headerCell("Specialization", 22),
         headerCell("Qualification", 18),
+        headerCell("Specialization", 22),
       ],
     });
 
@@ -201,8 +201,8 @@ function generateStaffSection(prog: BulletinProgramme): (Paragraph | Table)[] {
             cell(String(i + 1), 8),
             cell(s.fullName, 30),
             cell(s.rank, 22),
-            cell(s.specialization || "—", 22),
             cell(s.qualification, 18),
+            cell(s.specialization || "—", 22),
           ],
         }),
     );
@@ -255,9 +255,9 @@ function generatePhilosophySection(prog: BulletinProgramme): Paragraph[] {
     c.uniqueFeatures.forEach((f) => elements.push(bulletItem(f)));
   }
 
-  if (c?.employability) {
+  if (c?.employability && c.employability.length > 0) {
     elements.push(heading("Employability Skills", HeadingLevel.HEADING_2));
-    elements.push(paragraph(c.employability));
+    c.employability.forEach((skill) => elements.push(bulletItem(skill)));
   }
 
   if (c?.centurySkills && c.centurySkills.length > 0) {
@@ -268,9 +268,9 @@ function generatePhilosophySection(prog: BulletinProgramme): Paragraph[] {
   return elements;
 }
 
-function generateAdmissionSection(prog: BulletinProgramme): Paragraph[] {
+function generateAdmissionSection(prog: BulletinProgramme): (Paragraph | Table)[] {
   const c = prog.content;
-  const elements: Paragraph[] = [];
+  const elements: (Paragraph | Table)[] = [];
   elements.push(
     heading("3. Admission & Graduation Requirements", HeadingLevel.HEADING_1),
   );
@@ -302,13 +302,88 @@ function generateAdmissionSection(prog: BulletinProgramme): Paragraph[] {
     elements.push(paragraph(c.graduationRequirements));
   }
 
+  // Credit Requirements Summary Table
+  elements.push(heading("Credit Requirements Summary", HeadingLevel.HEADING_3));
+
+  const levels = Array.from(new Set(prog.courses.map((course) => course.level))).sort((a, b) => a - b);
+
+  const headerRow = new TableRow({
+    children: [
+      headerCell("Level", 25),
+      headerCell("Core Units", 25),
+      headerCell("Elective Units", 25),
+      headerCell("Total", 25),
+    ],
+  });
+
+  const dataRows = levels.map((level) => {
+    const courses = prog.courses.filter((course) => course.level === level);
+    const core = courses
+      .filter((course) => course.status === "CORE" || course.status === "MANDATORY")
+      .reduce((acc, course) => acc + course.units, 0);
+    const elective = courses
+      .filter((course) => course.status === "ELECTIVE")
+      .reduce((acc, course) => acc + course.units, 0);
+
+    return new TableRow({
+      children: [
+        cell(`${level} Level`, 25),
+        cell(String(core), 25),
+        cell(String(elective), 25),
+        cell(String(core + elective), 25),
+      ],
+    });
+  });
+
+  const totalCore = prog.courses
+      .filter((course) => course.status === "CORE" || course.status === "MANDATORY")
+      .reduce((acc, course) => acc + course.units, 0);
+  const totalElective = prog.courses
+      .filter((course) => course.status === "ELECTIVE")
+      .reduce((acc, course) => acc + course.units, 0);
+  const totalUnits = prog.courses.reduce((acc, course) => acc + course.units, 0);
+
+  const totalRow = new TableRow({
+    children: [
+      new TableCell({
+        width: { size: 25, type: WidthType.PERCENTAGE },
+        borders: CELL_BORDERS,
+        children: [new Paragraph({ children: [new TextRun({ text: "Total Requirements", bold: true, size: 20 })] })],
+      }),
+      new TableCell({
+        width: { size: 25, type: WidthType.PERCENTAGE },
+        borders: CELL_BORDERS,
+        children: [new Paragraph({ children: [new TextRun({ text: String(totalCore), bold: true, size: 20 })] })],
+      }),
+      new TableCell({
+        width: { size: 25, type: WidthType.PERCENTAGE },
+        borders: CELL_BORDERS,
+        children: [new Paragraph({ children: [new TextRun({ text: String(totalElective), bold: true, size: 20 })] })],
+      }),
+      new TableCell({
+        width: { size: 25, type: WidthType.PERCENTAGE },
+        borders: CELL_BORDERS,
+        children: [new Paragraph({ children: [new TextRun({ text: String(totalUnits), bold: true, size: 20 })] })],
+      }),
+    ],
+  });
+
+  elements.push(
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      layout: TableLayoutType.FIXED,
+      rows: [headerRow, ...dataRows, totalRow],
+    }),
+  );
+  elements.push(new Paragraph({ spacing: { after: 200 } }));
+
   if (c?.minimumCGPA) {
     elements.push(paragraph(`Minimum CGPA: ${c.minimumCGPA}`, { bold: true }));
   }
 
   if (c?.totalUnits) {
     elements.push(
-      paragraph(`Total Required Units: ${c.totalUnits}`, { bold: true }),
+      paragraph(`Total Expected Units: ${c.totalUnits}`, { bold: true }),
     );
   }
 
