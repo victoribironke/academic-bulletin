@@ -69,7 +69,7 @@ export interface BulletinProgramme {
     vision?: string;
     objectives?: string[];
     uniqueFeatures?: string[];
-    employability?: string;
+    employability?: string[];
     centurySkills?: string[];
     utmeRequirements?: string;
     directEntryRequirements?: string;
@@ -214,7 +214,11 @@ export async function generateDepartmentBulletin(
           uniqueFeatures: Array.isArray(submission.content.uniqueFeatures)
             ? (submission.content.uniqueFeatures as string[])
             : undefined,
-          employability: submission.content.employability || undefined,
+          employability: Array.isArray(submission.content.employability)
+            ? (submission.content.employability as string[])
+            : submission.content.employability
+              ? [(submission.content.employability as string)]
+              : undefined,
           centurySkills: Array.isArray(submission.content.centurySkills)
             ? (submission.content.centurySkills as string[])
             : undefined,
@@ -364,7 +368,11 @@ export async function generateSchoolBulletin(
               uniqueFeatures: Array.isArray(submission.content.uniqueFeatures)
                 ? (submission.content.uniqueFeatures as string[])
                 : undefined,
-              employability: submission.content.employability || undefined,
+              employability: Array.isArray(submission.content.employability)
+            ? (submission.content.employability as string[])
+            : submission.content.employability
+              ? [(submission.content.employability as string)]
+              : undefined,
               centurySkills: Array.isArray(submission.content.centurySkills)
                 ? (submission.content.centurySkills as string[])
                 : undefined,
@@ -513,7 +521,11 @@ export async function generateInstitutionBulletin(): Promise<BulletinData> {
                 uniqueFeatures: Array.isArray(submission.content.uniqueFeatures)
                   ? (submission.content.uniqueFeatures as string[])
                   : undefined,
-                employability: submission.content.employability || undefined,
+                employability: Array.isArray(submission.content.employability)
+            ? (submission.content.employability as string[])
+            : submission.content.employability
+              ? [(submission.content.employability as string)]
+              : undefined,
                 centurySkills: Array.isArray(submission.content.centurySkills)
                   ? (submission.content.centurySkills as string[])
                   : undefined,
