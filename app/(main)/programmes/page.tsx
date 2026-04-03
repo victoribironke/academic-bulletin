@@ -93,6 +93,10 @@ export default function ProgrammesPage() {
 
   const canManage = hasPermission("manage:programmes");
   const isHOD = currentUser?.role === "HOD";
+  const isDean = currentUser?.role === "DEAN";
+  const canCreate = canManage && !isHOD && !isDean;
+  const canDelete = canManage && !isHOD && !isDean;
+  const canEdit = canManage || isHOD || isDean;
   const hodDepartmentId = currentUser?.departmentId;
 
   const fetchProgrammes = useCallback(async () => {
@@ -292,7 +296,7 @@ export default function ProgrammesPage() {
           <h1 className="text-2xl font-bold tracking-tight">Programmes</h1>
           <p className="text-muted-foreground">Manage academic programmes</p>
         </div>
-        {canManage && (
+        {canCreate && (
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={openCreateDialog}>
@@ -503,7 +507,7 @@ export default function ProgrammesPage() {
           {programmes.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               No programmes found.{" "}
-              {canManage && "Click 'Add Programme' to create one."}
+              {canCreate && "Click 'Add Programme' to create one."}
             </div>
           ) : (
             <Table>
@@ -515,7 +519,7 @@ export default function ProgrammesPage() {
                   <TableHead>Degree</TableHead>
                   <TableHead>Duration</TableHead>
                   <TableHead>Submissions</TableHead>
-                  {canManage && (
+                  {(canEdit || canDelete) && (
                     <TableHead className="text-right">Actions</TableHead>
                   )}
                 </TableRow>
@@ -545,23 +549,27 @@ export default function ProgrammesPage() {
                         {prog._count.submissions}
                       </div>
                     </TableCell>
-                    {canManage && (
+                    {(canEdit || canDelete) && (
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEdit(prog)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDelete(prog)}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
+                          {canEdit && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEdit(prog)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(prog)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     )}
