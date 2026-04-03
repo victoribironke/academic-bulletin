@@ -341,7 +341,7 @@ export default function SubmissionDetailPage({
   const [vision, setVision] = useState("");
   const [objectives, setObjectives] = useState<string[]>([""]);
   const [uniqueFeatures, setUniqueFeatures] = useState<string[]>([""]);
-  const [employability, setEmployability] = useState("");
+  const [employability, setEmployability] = useState<string[]>([""]);
   const [utmeRequirements, setUtmeRequirements] = useState("");
   const [directEntryRequirements, setDirectEntryRequirements] = useState("");
   const [transferRequirements, setTransferRequirements] = useState("");
@@ -406,7 +406,13 @@ export default function SubmissionDetailPage({
               ? data.content.uniqueFeatures
               : [""],
           );
-          setEmployability(data.content.employability || "");
+          setEmployability(
+            Array.isArray(data.content.employability)
+              ? data.content.employability
+              : data.content.employability
+                ? [data.content.employability]
+                : [""],
+          );
           setUtmeRequirements(data.content.utmeRequirements || "");
           setDirectEntryRequirements(
             data.content.directEntryRequirements || "",
@@ -1482,20 +1488,49 @@ export default function SubmissionDetailPage({
                     {/* Employability */}
                     <div className="space-y-2">
                       <Label>Employability Skills</Label>
-                      {canEdit ? (
-                        <Textarea
-                          value={employability}
-                          onChange={(e) => {
-                            setEmployability(e.target.value);
-                            setHasChanges(true);
-                          }}
-                          placeholder="Describe the employability skills this programme develops..."
-                          rows={3}
-                        />
-                      ) : (
-                        <p className="text-sm bg-muted p-3 rounded-md">
-                          {employability || "Not provided"}
-                        </p>
+                      {employability.map((skill, index) => (
+                        <div key={index} className="flex items-start gap-2">
+                          <span className="mt-2 text-sm text-muted-foreground w-6">
+                            {index + 1}.
+                          </span>
+                          {canEdit ? (
+                            <>
+                              <Input
+                                value={skill}
+                                onChange={(e) =>
+                                  updateListItem(
+                                    setEmployability,
+                                    index,
+                                    e.target.value,
+                                  )
+                                }
+                                placeholder="Enter employability skill..."
+                                className="flex-1"
+                              />
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() =>
+                                  removeListItem(setEmployability, index)
+                                }
+                                disabled={employability.length <= 1}
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </Button>
+                            </>
+                          ) : (
+                            <p className="text-sm">{skill}</p>
+                          )}
+                        </div>
+                      ))}
+                      {canEdit && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => addListItem(setEmployability)}
+                        >
+                          <Plus className="h-4 w-4 mr-1" /> Add Skill
+                        </Button>
                       )}
                     </div>
                   </div>
