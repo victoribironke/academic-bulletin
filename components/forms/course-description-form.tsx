@@ -22,7 +22,16 @@ import {
   ShieldCheck,
   AlertTriangle,
   CheckCircle,
+  Pencil,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 const GRACE_PILLAR_LABELS: Record<string, string> = {
   G: "Global Relevance",
@@ -183,6 +192,9 @@ export function CourseDescriptionForm({
     new Set(),
   );
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Dialog state
+  const [activeDialogCourseId, setActiveDialogCourseId] = useState<string | null>(null);
 
   const fetchCourses = useCallback(async () => {
     try {
@@ -345,6 +357,8 @@ export function CourseDescriptionForm({
       console.error("Failed to save description:", error);
     } finally {
       setSavingCourseId(null);
+      // Close the dialog after saving
+      setActiveDialogCourseId(null);
     }
   };
 
@@ -527,7 +541,7 @@ export function CourseDescriptionForm({
           .map(([level, levelCourses]) => (
             <div key={level} className="mb-6">
               <h3 className="font-semibold text-lg mb-3">{level} Level</h3>
-              <Accordion type="multiple" className="space-y-2">
+              <div className="grid gap-2">
                 {levelCourses
                   .sort((a, b) => a.code.localeCompare(b.code))
                   .map((course) => {
@@ -538,228 +552,267 @@ export function CourseDescriptionForm({
                       entrepreneurialAspect: "",
                     };
 
+                    const hasGraceResult = graceResults[course.id];
+                    const isPassed = hasGraceResult?.passed;
+
                     return (
-                      <AccordionItem
+                      <div
                         key={course.id}
-                        value={course.id}
-                        className="border rounded-lg px-4"
+                        className="flex items-center justify-between border rounded-lg p-3 bg-card shadow-sm"
                       >
-                        <AccordionTrigger className="hover:no-underline">
-                          <div className="flex items-center gap-3">
-                            <Badge variant="outline">{course.code}</Badge>
-                            <span className="font-medium">{course.title}</span>
-                            <Badge variant="secondary">
-                              {course.units} units
-                            </Badge>
+                        <div className="flex items-center gap-3">
+                          <Badge variant="outline" className="w-20 justify-center">{course.code}</Badge>
+                          <div>
+                            <div className="font-medium">{course.title} <span className="text-muted-foreground font-normal text-sm">({course.units} units)</span></div>
+                            <div className="flex items-center gap-2 mt-1">
+                              {desc.courseContent ? (
+                                <Badge variant="secondary" className="text-xs">Content added</Badge>
+                              ) : (
+                                <Badge variant="secondary" className="bg-muted text-muted-foreground text-xs">No content</Badge>
+                              )}
+                              
+                              {hasGraceResult ? (
+                                <Badge variant={isPassed ? "default" : "destructive"} className={isPassed ? "bg-green-600 hover:bg-green-700 text-xs" : "text-xs"}>
+                                  {isPassed ? "GRACE Compliant" : "Needs Revision"}
+                                </Badge>
+                              ) : desc.courseContent ? (
+                                <Badge variant="outline" className="text-xs text-amber-600 border-amber-200 bg-amber-50">Unchecked</Badge>
+                              ) : null}
+                            </div>
                           </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="space-y-4 pb-4">
-                          {/* Learning Outcomes */}
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium">
-                              Learning Outcomes
-                            </label>
-                            <p className="text-xs text-muted-foreground">
-                              At the end of this course, students should be able
-                              to:
-                            </p>
-                            {desc.learningOutcomes.map((outcome, index) => (
-                              <div
-                                key={index}
-                                className="flex items-start gap-2"
-                              >
-                                <span className="text-sm text-muted-foreground mt-2 w-6">
-                                  {index + 1}.
-                                </span>
-                                <Input
-                                  value={outcome}
-                                  onChange={(e) =>
-                                    updateLearningOutcome(
-                                      course.id,
-                                      index,
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="Enter learning outcome..."
-                                  disabled={disabled}
-                                  className="flex-1"
-                                />
+                        </div>
+
+                        <Dialog
+                          open={activeDialogCourseId === course.id}
+                          onOpenChange={(open) => setActiveDialogCourseId(open ? course.id : null)}
+                        >
+                          <DialogTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              {disabled ? <FileText className="h-4 w-4 mr-2" /> : <Pencil className="h-4 w-4 mr-2" />}
+                              {disabled ? "View Details" : "Edit Details"}
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+                            <DialogHeader>
+                              <DialogTitle className="flex items-center gap-2 text-xl">
+                                <Badge variant="outline">{course.code}</Badge>
+                                {course.title}
+                              </DialogTitle>
+                            </DialogHeader>
+
+                            <div className="space-y-6 pt-2">
+                              {/* Learning Outcomes */}
+                              <div className="space-y-2">
+                                <label className="text-sm font-semibold">
+                                  Learning Outcomes
+                                </label>
+                                <p className="text-xs text-muted-foreground">
+                                  At the end of this course, students should be able
+                                  to:
+                                </p>
+                                {desc.learningOutcomes.map((outcome, index) => (
+                                  <div
+                                    key={index}
+                                    className="flex items-start gap-2"
+                                  >
+                                    <span className="text-sm text-muted-foreground mt-2 w-6 shrink-0">
+                                      {index + 1}.
+                                    </span>
+                                    <Input
+                                      value={outcome}
+                                      onChange={(e) =>
+                                        updateLearningOutcome(
+                                          course.id,
+                                          index,
+                                          e.target.value,
+                                        )
+                                      }
+                                      placeholder="Enter learning outcome..."
+                                      disabled={disabled}
+                                      className="flex-1"
+                                    />
+                                    {!disabled && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() =>
+                                          removeLearningOutcome(course.id, index)
+                                        }
+                                        className="text-muted-foreground hover:text-destructive shrink-0"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                ))}
                                 {!disabled && (
                                   <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() =>
-                                      removeLearningOutcome(course.id, index)
-                                    }
-                                    className="text-muted-foreground hover:text-destructive"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => addLearningOutcome(course.id)}
+                                    className="mt-2"
                                   >
-                                    <Trash2 className="h-4 w-4" />
+                                    <Plus className="h-4 w-4 mr-1" />
+                                    Add Outcome
                                   </Button>
                                 )}
                               </div>
-                            ))}
-                            {!disabled && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => addLearningOutcome(course.id)}
-                                className="mt-2"
-                              >
-                                <Plus className="h-4 w-4 mr-1" />
-                                Add Outcome
-                              </Button>
-                            )}
-                          </div>
 
-                          <Separator />
+                              <Separator />
 
-                          {/* Course Description */}
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <label className="text-sm font-medium">
-                                  Course Description
-                                </label>
-                                <p className="text-xs text-muted-foreground">
-                                  Ensure this description is GRACE compliant
-                                  (clear, concise, and outcome-focused).
-                                </p>
-                              </div>
-                              {!disabled && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() =>
-                                    checkGraceCompliance(
+                              {/* Course Description */}
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <label className="text-sm font-semibold">
+                                      Course Description
+                                    </label>
+                                    <p className="text-xs text-muted-foreground">
+                                      Ensure this description is GRACE compliant
+                                      (clear, concise, and outcome-focused).
+                                    </p>
+                                  </div>
+                                  {!disabled && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() =>
+                                        checkGraceCompliance(
+                                          course.id,
+                                          course.title,
+                                        )
+                                      }
+                                      disabled={
+                                        graceChecking === course.id ||
+                                        !desc.courseContent?.trim()
+                                      }
+                                    >
+                                      {graceChecking === course.id ? (
+                                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                      ) : (
+                                        <ShieldCheck className="h-4 w-4 mr-1" />
+                                      )}
+                                      Check GRACE
+                                    </Button>
+                                  )}
+                                </div>
+                                <Textarea
+                                  value={desc.courseContent}
+                                  onChange={(e) => {
+                                    updateDescription(
                                       course.id,
-                                      course.title,
+                                      "courseContent",
+                                      e.target.value,
+                                    );
+                                    // Clear GRACE result when content changes
+                                    if (graceResults[course.id]) {
+                                      setGraceResults((prev) => {
+                                        const next = { ...prev };
+                                        delete next[course.id];
+                                        return next;
+                                      });
+                                      // Also reset persisted GRACE state
+                                      setDescriptions((prev) => ({
+                                        ...prev,
+                                        [course.id]: {
+                                          ...prev[course.id],
+                                          gracePass: false,
+                                          graceResult: null,
+                                        },
+                                      }));
+                                    }
+                                  }}
+                                  placeholder="Describe the course content, topics covered, and key learning areas. Keep the description GRACE compliant: clear, structured, and focused on student outcomes."
+                                  disabled={disabled}
+                                  rows={5}
+                                />
+
+                                {/* GRACE Compliance Feedback */}
+                                {graceResults[course.id] && (
+                                  <div className="mt-2">
+                                    <GraceResultDisplay
+                                      result={graceResults[course.id]}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Lab Work (optional) */}
+                              <div className="space-y-2 pb-2">
+                                <label className="text-sm font-semibold">
+                                  Lab Work{" "}
+                                  <span className="text-muted-foreground font-normal">
+                                    (if applicable)
+                                  </span>
+                                </label>
+                                <Textarea
+                                  value={desc.labWork}
+                                  onChange={(e) =>
+                                    updateDescription(
+                                      course.id,
+                                      "labWork",
+                                      e.target.value,
                                     )
                                   }
-                                  disabled={
-                                    graceChecking === course.id ||
-                                    !desc.courseContent?.trim()
+                                  placeholder="Describe practical/lab work requirements..."
+                                  disabled={disabled}
+                                  rows={2}
+                                />
+                              </div>
+
+                              {/* Entrepreneurial/Practical Aspect */}
+                              <div className="space-y-2 pb-2">
+                                <label className="text-sm font-semibold">
+                                  Entrepreneurial/Practical Aspect{" "}
+                                  <span className="text-muted-foreground font-normal">
+                                    (if applicable)
+                                  </span>
+                                </label>
+                                <p className="text-xs text-muted-foreground">
+                                  Describe how students can apply this course
+                                  commercially, in industry, or in real-world
+                                  scenarios.
+                                </p>
+                                <Textarea
+                                  value={desc.entrepreneurialAspect}
+                                  onChange={(e) =>
+                                    updateDescription(
+                                      course.id,
+                                      "entrepreneurialAspect",
+                                      e.target.value,
+                                    )
                                   }
+                                  placeholder="Describe entrepreneurial applications, practical industry use cases, or commercial opportunities related to this course..."
+                                  disabled={disabled}
+                                  rows={3}
+                                />
+                              </div>
+                            </div>
+                            
+                            <DialogFooter className="sticky bottom-0 bg-background pt-4 border-t mt-4">
+                              <Button variant="outline" onClick={() => setActiveDialogCourseId(null)}>
+                                {disabled ? "Close" : "Cancel"}
+                              </Button>
+                              {!disabled && (
+                                <Button
+                                  onClick={() => saveDescription(course.id)}
+                                  disabled={savingCourseId === course.id}
                                 >
-                                  {graceChecking === course.id ? (
-                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                  {savingCourseId === course.id ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                   ) : (
-                                    <ShieldCheck className="h-4 w-4 mr-1" />
+                                    <Save className="h-4 w-4 mr-2" />
                                   )}
-                                  Check GRACE
+                                  Save & Close
                                 </Button>
                               )}
-                            </div>
-                            <Textarea
-                              value={desc.courseContent}
-                              onChange={(e) => {
-                                updateDescription(
-                                  course.id,
-                                  "courseContent",
-                                  e.target.value,
-                                );
-                                // Clear GRACE result when content changes
-                                if (graceResults[course.id]) {
-                                  setGraceResults((prev) => {
-                                    const next = { ...prev };
-                                    delete next[course.id];
-                                    return next;
-                                  });
-                                  // Also reset persisted GRACE state
-                                  setDescriptions((prev) => ({
-                                    ...prev,
-                                    [course.id]: {
-                                      ...prev[course.id],
-                                      gracePass: false,
-                                      graceResult: null,
-                                    },
-                                  }));
-                                }
-                              }}
-                              placeholder="Describe the course content, topics covered, and key learning areas. Keep the description GRACE compliant: clear, structured, and focused on student outcomes."
-                              disabled={disabled}
-                              rows={4}
-                            />
-
-                            {/* GRACE Compliance Feedback */}
-                            {graceResults[course.id] && (
-                              <GraceResultDisplay
-                                result={graceResults[course.id]}
-                              />
-                            )}
-                          </div>
-
-                          {/* Lab Work (optional) */}
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium">
-                              Lab Work{" "}
-                              <span className="text-muted-foreground">
-                                (if applicable)
-                              </span>
-                            </label>
-                            <Textarea
-                              value={desc.labWork}
-                              onChange={(e) =>
-                                updateDescription(
-                                  course.id,
-                                  "labWork",
-                                  e.target.value,
-                                )
-                              }
-                              placeholder="Describe practical/lab work requirements..."
-                              disabled={disabled}
-                              rows={2}
-                            />
-                          </div>
-
-                          {/* Entrepreneurial/Practical Aspect */}
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium">
-                              Entrepreneurial/Practical Aspect{" "}
-                              <span className="text-muted-foreground">
-                                (if applicable)
-                              </span>
-                            </label>
-                            <p className="text-xs text-muted-foreground">
-                              Describe how students can apply this course
-                              commercially, in industry, or in real-world
-                              scenarios.
-                            </p>
-                            <Textarea
-                              value={desc.entrepreneurialAspect}
-                              onChange={(e) =>
-                                updateDescription(
-                                  course.id,
-                                  "entrepreneurialAspect",
-                                  e.target.value,
-                                )
-                              }
-                              placeholder="Describe entrepreneurial applications, practical industry use cases, or commercial opportunities related to this course..."
-                              disabled={disabled}
-                              rows={3}
-                            />
-                          </div>
-
-                          {!disabled && (
-                            <div className="flex justify-end pt-2">
-                              <Button
-                                onClick={() => saveDescription(course.id)}
-                                disabled={savingCourseId === course.id}
-                                size="sm"
-                              >
-                                {savingCourseId === course.id ? (
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                ) : (
-                                  <Save className="h-4 w-4 mr-2" />
-                                )}
-                                Save Description
-                              </Button>
-                            </div>
-                          )}
-                        </AccordionContent>
-                      </AccordionItem>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
                     );
                   })}
-              </Accordion>
+              </div>
             </div>
           ))}
       </CardContent>
