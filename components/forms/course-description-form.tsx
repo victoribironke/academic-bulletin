@@ -8,12 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import {
   Loader2,
   Save,
   FileText,
@@ -192,9 +186,11 @@ export function CourseDescriptionForm({
     new Set(),
   );
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   // Dialog state
-  const [activeDialogCourseId, setActiveDialogCourseId] = useState<string | null>(null);
+  const [activeDialogCourseId, setActiveDialogCourseId] = useState<
+    string | null
+  >(null);
 
   const fetchCourses = useCallback(async () => {
     try {
@@ -561,22 +557,53 @@ export function CourseDescriptionForm({
                         className="flex items-center justify-between border rounded-lg p-3 bg-card shadow-sm"
                       >
                         <div className="flex items-center gap-3">
-                          <Badge variant="outline" className="w-20 justify-center">{course.code}</Badge>
+                          <Badge
+                            variant="outline"
+                            className="w-20 justify-center"
+                          >
+                            {course.code}
+                          </Badge>
                           <div>
-                            <div className="font-medium">{course.title} <span className="text-muted-foreground font-normal text-sm">({course.units} units)</span></div>
+                            <div className="font-medium">
+                              {course.title}{" "}
+                              <span className="text-muted-foreground font-normal text-sm">
+                                ({course.units} units)
+                              </span>
+                            </div>
                             <div className="flex items-center gap-2 mt-1">
                               {desc.courseContent ? (
-                                <Badge variant="secondary" className="text-xs">Content added</Badge>
+                                <Badge variant="secondary" className="text-xs">
+                                  Content added
+                                </Badge>
                               ) : (
-                                <Badge variant="secondary" className="bg-muted text-muted-foreground text-xs">No content</Badge>
+                                <Badge
+                                  variant="secondary"
+                                  className="bg-muted text-muted-foreground text-xs"
+                                >
+                                  No content
+                                </Badge>
                               )}
-                              
+
                               {hasGraceResult ? (
-                                <Badge variant={isPassed ? "default" : "destructive"} className={isPassed ? "bg-green-600 hover:bg-green-700 text-xs" : "text-xs"}>
-                                  {isPassed ? "GRACE Compliant" : "Needs Revision"}
+                                <Badge
+                                  variant={isPassed ? "default" : "destructive"}
+                                  className={
+                                    isPassed
+                                      ? "bg-green-600 hover:bg-green-700 text-xs"
+                                      : "text-xs"
+                                  }
+                                >
+                                  {isPassed
+                                    ? "GRACE Compliant"
+                                    : "Needs Revision"}
                                 </Badge>
                               ) : desc.courseContent ? (
-                                <Badge variant="outline" className="text-xs text-amber-600 border-amber-200 bg-amber-50">Unchecked</Badge>
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs text-amber-600 border-amber-200 bg-amber-50"
+                                >
+                                  Unchecked
+                                </Badge>
                               ) : null}
                             </div>
                           </div>
@@ -584,11 +611,17 @@ export function CourseDescriptionForm({
 
                         <Dialog
                           open={activeDialogCourseId === course.id}
-                          onOpenChange={(open) => setActiveDialogCourseId(open ? course.id : null)}
+                          onOpenChange={(open) =>
+                            setActiveDialogCourseId(open ? course.id : null)
+                          }
                         >
                           <DialogTrigger asChild>
                             <Button variant="outline" size="sm">
-                              {disabled ? <FileText className="h-4 w-4 mr-2" /> : <Pencil className="h-4 w-4 mr-2" />}
+                              {disabled ? (
+                                <FileText className="h-4 w-4 mr-2" />
+                              ) : (
+                                <Pencil className="h-4 w-4 mr-2" />
+                              )}
                               {disabled ? "View Details" : "Edit Details"}
                             </Button>
                           </DialogTrigger>
@@ -607,8 +640,8 @@ export function CourseDescriptionForm({
                                   Learning Outcomes
                                 </label>
                                 <p className="text-xs text-muted-foreground">
-                                  At the end of this course, students should be able
-                                  to:
+                                  At the end of this course, students should be
+                                  able to:
                                 </p>
                                 {desc.learningOutcomes.map((outcome, index) => (
                                   <div
@@ -636,7 +669,10 @@ export function CourseDescriptionForm({
                                         variant="ghost"
                                         size="icon"
                                         onClick={() =>
-                                          removeLearningOutcome(course.id, index)
+                                          removeLearningOutcome(
+                                            course.id,
+                                            index,
+                                          )
                                         }
                                         className="text-muted-foreground hover:text-destructive shrink-0"
                                       >
@@ -649,7 +685,9 @@ export function CourseDescriptionForm({
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => addLearningOutcome(course.id)}
+                                    onClick={() =>
+                                      addLearningOutcome(course.id)
+                                    }
                                     className="mt-2"
                                   >
                                     <Plus className="h-4 w-4 mr-1" />
@@ -788,9 +826,12 @@ export function CourseDescriptionForm({
                                 />
                               </div>
                             </div>
-                            
+
                             <DialogFooter className="sticky bottom-0 bg-background pt-4 border-t mt-4">
-                              <Button variant="outline" onClick={() => setActiveDialogCourseId(null)}>
+                              <Button
+                                variant="outline"
+                                onClick={() => setActiveDialogCourseId(null)}
+                              >
                                 {disabled ? "Close" : "Cancel"}
                               </Button>
                               {!disabled && (
