@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Separator } from "@/components/ui/separator";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BulletinProgramme, BulletinCourse } from "@/lib/bulletin/generation";
 
 interface BulletinProgrammeViewProps {
@@ -79,13 +80,13 @@ export function BulletinProgrammeView({
             <table className="w-full border-collapse border text-xs">
               <thead>
                 <tr className="bg-muted">
-                  <th className="border p-2 text-left">S/N</th>
-                  <th className="border p-2 text-left">Name</th>
-                  <th className="border p-2 text-left">Rank/Designation</th>
-                  <th className="border p-2 text-left">
+                  <th className="border p-2 text-left w-10">S/N</th>
+                  <th className="border p-2 text-left w-1/4">Name</th>
+                  <th className="border p-2 text-left w-1/5">Rank/Designation</th>
+                  <th className="border p-2 text-left w-1/5">
                     Highest Qualification
                   </th>
-                  <th className="border p-2 text-left">
+                  <th className="border p-2 text-left w-1/5">
                     Area of Specialization
                   </th>
                 </tr>
@@ -143,9 +144,9 @@ export function BulletinProgrammeView({
             <table className="w-full border-collapse border text-xs">
               <thead>
                 <tr className="bg-muted">
-                  <th className="border p-2 text-left">S/N</th>
-                  <th className="border p-2 text-left">Name</th>
-                  <th className="border p-2 text-left">Rank/Designation</th>
+                  <th className="border p-2 text-left w-10">S/N</th>
+                  <th className="border p-2 text-left w-2/5">Name</th>
+                  <th className="border p-2 text-left w-2/5">Rank/Designation</th>
                 </tr>
               </thead>
               <tbody>
@@ -241,10 +242,61 @@ export function BulletinProgrammeView({
           <p className="mb-4">{programme.content.graduationRequirements}</p>
         )}
 
+        <div className="mt-4 mb-6">
+          <h3 className="font-semibold mb-2">Credit Requirements Summary</h3>
+          <div className="overflow-x-auto text-sm">
+            <Table className="border w-full">
+              <TableHeader className="bg-muted">
+                <TableRow>
+                  <TableHead className="w-1/4">Level</TableHead>
+                  <TableHead className="w-1/4">Core Units</TableHead>
+                  <TableHead className="w-1/4">Elective Units</TableHead>
+                  <TableHead className="w-1/4">Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {Array.from(new Set(programme.courses.map(c => c.level)))
+                  .sort()
+                  .map(level => {
+                    const courses = programme.courses.filter(c => c.level === level);
+                    const core = courses.filter(c => c.status === "CORE" || c.status === "MANDATORY").reduce((acc, c) => acc + c.units, 0);
+                    const elective = courses.filter(c => c.status === "ELECTIVE").reduce((acc, c) => acc + c.units, 0);
+                    return (
+                      <TableRow key={level}>
+                        <TableCell className="font-medium">{level}</TableCell>
+                        <TableCell>{core}</TableCell>
+                        <TableCell>{elective}</TableCell>
+                        <TableCell className="font-semibold">{core + elective}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                <TableRow className="bg-muted/50">
+                  <TableCell className="font-bold">Total Requirements</TableCell>
+                  <TableCell className="font-bold">
+                    {programme.courses.filter(c => c.status === "CORE" || c.status === "MANDATORY").reduce((acc, c) => acc + c.units, 0)}
+                  </TableCell>
+                  <TableCell className="font-bold">
+                    {programme.courses.filter(c => c.status === "ELECTIVE").reduce((acc, c) => acc + c.units, 0)}
+                  </TableCell>
+                  <TableCell className="font-bold text-primary text-base">
+                    {programme.courses.reduce((sum, c) => sum + c.units, 0)}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 gap-4 mt-4">
+          {programme.content?.minimumCGPA !== undefined && (
+            <div className="bg-muted p-3 rounded">
+              <span className="font-medium">Minimum CGPA:</span>{" "}
+              {programme.content.minimumCGPA}
+            </div>
+          )}
           <div className="bg-muted p-3 rounded">
-            <span className="font-medium">Total Credit Units:</span>{" "}
-            {programme.courses.reduce((sum, c) => sum + c.units, 0)}
+            <span className="font-medium">Total Credit Units Expected:</span>{" "}
+            {programme.content?.totalUnits || programme.courses.reduce((sum, c) => sum + c.units, 0)}
           </div>
         </div>
       </section>
@@ -400,6 +452,21 @@ export function BulletinProgrammeView({
           )}
         </div>
       </section>
+
+      {/* Employability Skills */}
+      {programme.content?.employability &&
+        programme.content.employability.length > 0 && (
+          <section>
+            <h2 className="text-lg font-bold mb-3 border-b pb-1">
+              EMPLOYABILITY SKILLS
+            </h2>
+            <ul className="list-disc list-inside space-y-1">
+              {programme.content.employability.map((skill, i) => (
+                <li key={i}>{skill}</li>
+              ))}
+            </ul>
+          </section>
+        )}
 
       <Separator />
 
