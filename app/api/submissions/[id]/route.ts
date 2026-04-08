@@ -18,6 +18,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             id: true,
             name: true,
             code: true,
+            duration: true,
             department: {
               select: {
                 id: true,
