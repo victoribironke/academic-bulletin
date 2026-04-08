@@ -13,7 +13,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChevronDown, User as UserIcon } from "lucide-react";
+import {
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { ChevronDown, User as UserIcon, Menu } from "lucide-react";
+import { SidebarContent } from "./sidebar";
 
 export function Header() {
   const { currentUser, isLoading } = useUser();
@@ -46,6 +52,16 @@ export function Header() {
     <header className="z-30 flex h-16 shrink-0 items-center justify-between border-b bg-background px-6">
       {/* Left side - Page title area (can be used by pages) */}
       <div className="flex items-center gap-4">
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="md:hidden">
+              <Menu className="h-5 w-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="p-0 w-64 flex flex-col bg-card">
+            <SidebarContent />
+          </SheetContent>
+        </Sheet>
         {/* Placeholder for breadcrumbs or page title */}
       </div>
 
