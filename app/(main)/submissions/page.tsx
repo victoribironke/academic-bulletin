@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { usePermission } from "@/contexts/user-context";
+import { usePermission, useUser } from "@/contexts/user-context";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -125,6 +125,7 @@ export default function SubmissionsPage() {
   const [filterPhase, setFilterPhase] = useState<string>("all");
   const [filterCycle, setFilterCycle] = useState<string>("all");
   const { hasPermission } = usePermission();
+  const { currentUser } = useUser();
 
   const canCreate = hasPermission("create:submission");
 
@@ -144,6 +145,35 @@ export default function SubmissionsPage() {
     }
   };
 
+  const handleInitializeSubmissions = async () => {
+    if (!filterCycle || filterCycle === "all") return;
+    
+    const confirm = window.confirm(
+      "This will create draft submissions for all programmes that don't have one in the active cycle yet. Continue?"
+    );
+    if (!confirm) return;
+
+    try {
+      const response = await fetch("/api/submissions/initialize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cycleId: filterCycle, createdById: currentUser?.id })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        alert(`Successfully created ${data.createdCount} new submissions.`);
+        fetchSubmissions();
+      } else {
+        const err = await response.json();
+        alert(`Failed: ${err.error || "Unknown error"}`);
+      }
+    } catch (error) {
+      console.error("Initialization failed:", error);
+      alert("Failed to initialize submissions.");
+    }
+  };
+
   useEffect(() => {
     fetchCycles();
   }, []);
@@ -154,6 +184,13 @@ export default function SubmissionsPage() {
       if (filterStatus !== "all") params.set("status", filterStatus);
       if (filterPhase !== "all") params.set("phase", filterPhase);
       if (filterCycle !== "all") params.set("cycleId", filterCycle);
+      
+      // Auto-filter based on user role
+      if (currentUser?.role === "HOD" && currentUser.departmentId) {
+        params.set("departmentId", currentUser.departmentId);
+      } else if (currentUser?.role === "DEAN" && currentUser.schoolId) {
+        params.set("schoolId", currentUser.schoolId);
+      }
 
       const url = `/api/submissions${
         params.toString() ? `?${params.toString()}` : ""
@@ -168,7 +205,7 @@ export default function SubmissionsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [filterStatus, filterPhase, filterCycle]);
+  }, [filterStatus, filterPhase, filterCycle, currentUser]);
 
   useEffect(() => {
     fetchSubmissions();
@@ -201,14 +238,22 @@ export default function SubmissionsPage() {
             Manage academic bulletin submissions
           </p>
         </div>
-        {canCreate && (
-          <Link href="/submissions/new">
-            <Button>
+        <div className="flex items-center gap-2">
+          {(currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN") && filterCycle !== "all" && (
+            <Button variant="outline" onClick={handleInitializeSubmissions}>
               <Plus className="mr-2 h-4 w-4" />
-              New Submission
+              Initialize All Submissions
             </Button>
-          </Link>
-        )}
+          )}
+          {canCreate && (
+            <Link href="/submissions/new">
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                New Submission
+              </Button>
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
