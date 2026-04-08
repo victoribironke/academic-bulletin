@@ -15,7 +15,7 @@ export default function MainLayout({
         <Sidebar />
 
         {/* Main content area */}
-        <div className="flex flex-1 flex-col pl-64 h-screen overflow-hidden">
+        <div className="flex flex-1 flex-col md:pl-64 h-screen overflow-hidden">
           {/* Header */}
           <Header />
 
