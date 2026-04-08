@@ -57,6 +57,7 @@ interface MasterCourse {
 interface CourseTableProps {
   submissionId: string;
   departmentId: string;
+  programmeDuration?: number;
   disabled?: boolean;
   onValidationChange?: (isValid: boolean, errors: string[]) => void;
 }
@@ -77,23 +78,19 @@ interface Course {
   isMandatory?: boolean; // New flag for locking
 }
 
-const LEVELS = [100, 200, 300, 400, 500, 600];
-
 export function CourseTable({
   submissionId,
   departmentId,
+  programmeDuration = 4,
   disabled = false,
   onValidationChange,
 }: CourseTableProps) {
-  const [coursesByLevel, setCoursesByLevel] = useState<
-    Record<number, Course[]>
-  >({
-    100: [],
-    200: [],
-    300: [],
-    400: [],
-    500: [],
-    600: [],
+  const LEVELS = Array.from({ length: programmeDuration }, (_, i) => (i + 1) * 100);
+
+  const [coursesByLevel, setCoursesByLevel] = useState<Record<number, Course[]>>(() => {
+    const initial: Record<number, Course[]> = {};
+    LEVELS.forEach(level => initial[level] = []);
+    return initial;
   });
   const [originalCourseIds, setOriginalCourseIds] = useState<Set<string>>(
     new Set(),
@@ -126,14 +123,8 @@ export function CourseTable({
 
       const courses = await coursesRes.json();
 
-      const grouped: Record<number, Course[]> = {
-        100: [],
-        200: [],
-        300: [],
-        400: [],
-        500: [],
-        600: [],
-      };
+      const grouped: Record<number, Course[]> = {};
+      LEVELS.forEach(level => grouped[level] = []);
       const ids = new Set<string>();
       courses.forEach((course: Course) => {
         if (grouped[course.level]) {
