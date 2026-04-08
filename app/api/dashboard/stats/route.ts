@@ -2,8 +2,19 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
 // GET /api/dashboard/stats - Get dashboard statistics
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const departmentId = searchParams.get("departmentId");
+    const schoolId = searchParams.get("schoolId");
+
+    const whereClause: any = {};
+    if (departmentId) {
+      whereClause.programme = { departmentId };
+    } else if (schoolId) {
+      whereClause.programme = { department: { schoolId } };
+    }
+
     // Get submission counts by status
     const [
       totalSubmissions,
@@ -12,16 +23,17 @@ export async function GET() {
       approvedCount,
       rejectedCount,
     ] = await Promise.all([
-      prisma.submission.count(),
-      prisma.submission.count({ where: { status: "DRAFT" } }),
-      prisma.submission.count({ where: { status: "IN_REVIEW" } }),
-      prisma.submission.count({ where: { status: "APPROVED" } }),
-      prisma.submission.count({ where: { status: "REJECTED" } }),
+      prisma.submission.count({ where: whereClause }),
+      prisma.submission.count({ where: { ...whereClause, status: "DRAFT" } }),
+      prisma.submission.count({ where: { ...whereClause, status: "IN_REVIEW" } }),
+      prisma.submission.count({ where: { ...whereClause, status: "APPROVED" } }),
+      prisma.submission.count({ where: { ...whereClause, status: "REJECTED" } }),
     ]);
 
     // Get submission counts by phase
     const phaseDistribution = await prisma.submission.groupBy({
       by: ["currentPhase"],
+      where: whereClause,
       _count: { id: true },
       orderBy: { currentPhase: "asc" },
     });
@@ -29,6 +41,9 @@ export async function GET() {
     // Get recent activity (phase transitions)
     const recentTransitions = await prisma.phaseTransition.findMany({
       take: 10,
+      where: Object.keys(whereClause).length > 0 ? {
+        submission: whereClause
+      } : undefined,
       orderBy: { transitionedAt: "desc" },
       include: {
         submission: {
@@ -52,7 +67,10 @@ export async function GET() {
 
     // Get open comments count
     const openComments = await prisma.comment.count({
-      where: { status: "OPEN" },
+      where: { 
+        status: "OPEN",
+        ...(Object.keys(whereClause).length > 0 ? { submission: whereClause } : {})
+      },
     });
 
     // Get organizational stats
