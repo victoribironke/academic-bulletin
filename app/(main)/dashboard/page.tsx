@@ -463,7 +463,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-4">
-              <Link href="/schools">
+              <Link href="/academic-units">
                 <div className="flex items-center gap-3 p-4 rounded-lg border hover:bg-muted transition-colors">
                   <School className="h-8 w-8 text-blue-500" />
                   <div>
@@ -474,7 +474,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </Link>
-              <Link href="/departments">
+              <Link href="/academic-units">
                 <div className="flex items-center gap-3 p-4 rounded-lg border hover:bg-muted transition-colors">
                   <Building2 className="h-8 w-8 text-green-500" />
                   <div>
@@ -485,7 +485,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </Link>
-              <Link href="/programmes">
+              <Link href="/academic-units">
                 <div className="flex items-center gap-3 p-4 rounded-lg border hover:bg-muted transition-colors">
                   <GraduationCap className="h-8 w-8 text-purple-500" />
                   <div>
