@@ -393,22 +393,24 @@ export default function SubmissionDetailPage({
         const data = await response.json();
 
         // Access Control Verification
-        if (
-          currentUser?.role === "HOD" &&
-          data.programme.department.id !== currentUser.departmentId
-        ) {
-          toast.error("You do not have access to this submission");
-          window.location.href = "/submissions";
-          return;
-        }
-        if (
-          currentUser?.role === "DEAN" &&
-          data.programme.department.school.id !== currentUser.schoolId
-        ) {
-          toast.error("You do not have access to this submission");
-          window.location.href = "/submissions";
-          return;
-        }
+        // Temporarily Disabled for Test Users //
+        // ----------------------------------- //
+        // if (
+        //   currentUser?.role === "HOD" &&
+        //   data.programme.department.id !== currentUser.departmentId
+        // ) {
+        //   toast.error("You do not have access to this submission");
+        //   window.location.href = "/submissions";
+        //   return;
+        // }
+        // if (
+        //   currentUser?.role === "DEAN" &&
+        //   data.programme.department.school.id !== currentUser.schoolId
+        // ) {
+        //   toast.error("You do not have access to this submission");
+        //   window.location.href = "/submissions";
+        //   return;
+        // }
 
         setSubmission(data);
         // Initialize form state from submission content
