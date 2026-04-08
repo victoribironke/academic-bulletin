@@ -59,7 +59,7 @@ const navItems: NavItem[] = [
   },
 ];
 
-export function Sidebar() {
+export function SidebarContent() {
   const pathname = usePathname();
   const { hasPermission } = usePermission();
 
@@ -69,7 +69,7 @@ export function Sidebar() {
   );
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r bg-card">
+    <>
       {/* Logo/Brand */}
       <div className="flex h-16 shrink-0 items-center border-b px-6">
         <Link href="/dashboard" className="flex items-center gap-2">
@@ -113,6 +113,14 @@ export function Sidebar() {
           <p>2027-2031</p>
         </div>
       </div>
+    </>
+  );
+}
+
+export function Sidebar() {
+  return (
+    <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 flex-col border-r bg-card md:flex">
+      <SidebarContent />
     </aside>
   );
 }
