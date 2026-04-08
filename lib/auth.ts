@@ -38,25 +38,18 @@ const rolePermissions: Record<UserRole, Permission[]> = {
   HOD: [
     "view:dashboard",
     "view:submissions",
-    "create:submission",
     "edit:submission",
     "comment:submission",
     "review:submission",
-    "view:programmes",
-    "manage:programmes",
-    "view:departments",
-    "view:schools",
     "view:staff",
     "manage:staff",
   ],
   DEAN: [
-    // Dean can ONLY view and comment - cannot edit submissions
+    // Dean can view, edit, and comment on submissions within their school
     "view:dashboard",
     "view:submissions",
-    "comment:submission", // Can add comments/feedback
-    "view:programmes",
-    "view:departments",
-    "view:schools",
+    "edit:submission",
+    "comment:submission",
     "view:staff",
   ],
   ADMIN: [
