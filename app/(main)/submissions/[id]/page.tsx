@@ -78,6 +78,7 @@ interface Submission {
     id: string;
     name: string;
     code: string;
+    duration?: number;
     department: {
       id: string;
       name: string;
@@ -90,7 +91,7 @@ interface Submission {
     role: string;
   };
   content: {
-    programmeInfo?: { deanImageUrl?: string; hodImageUrl?: string; };
+    programmeInfo?: { deanImageUrl?: string; hodImageUrl?: string };
     philosophy?: string;
     objectives?: string[];
     uniqueFeatures?: string[];
@@ -329,7 +330,7 @@ export default function SubmissionDetailPage({
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [activeSection, setActiveSection] = useState("staff");
+  const [activeSection, setActiveSection] = useState("deans_hods");
   const [hasChanges, setHasChanges] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
@@ -390,6 +391,25 @@ export default function SubmissionDetailPage({
       const response = await fetch(`/api/submissions/${id}`);
       if (response.ok) {
         const data = await response.json();
+
+        // Access Control Verification
+        if (
+          currentUser?.role === "HOD" &&
+          data.programme.department.id !== currentUser.departmentId
+        ) {
+          toast.error("You do not have access to this submission");
+          window.location.href = "/submissions";
+          return;
+        }
+        if (
+          currentUser?.role === "DEAN" &&
+          data.programme.department.school.id !== currentUser.schoolId
+        ) {
+          toast.error("You do not have access to this submission");
+          window.location.href = "/submissions";
+          return;
+        }
+
         setSubmission(data);
         // Initialize form state from submission content
         if (data.content) {
@@ -928,7 +948,7 @@ export default function SubmissionDetailPage({
               <span>{submission.programme.name}</span>
               <span>•</span>
               <span>{submission.programme.department.school.code}</span>
-              <span>•</span>
+              {/* <span>•</span> */}
             </div>
           </div>
         </div>
@@ -1225,30 +1245,61 @@ export default function SubmissionDetailPage({
                 {activeSection === "deans_hods" && (
                   <div className="space-y-6">
                     <div className="space-y-2">
-                       <Label>Dean Image URL</Label>
-                       <p className="text-xs text-muted-foreground">Provide a direct external URL to the Dean&apos;s picture.</p>
-                       {canEdit ? (
-                          <Input value={deanImageUrl} onChange={(e) => { setDeanImageUrl(processImageUrl(e.target.value)); setHasChanges(true); }} placeholder="https://example.com/dean.jpg or Google Drive link" />
-                       ) : (
-                          <p className="text-sm bg-muted p-3 rounded-md">{deanImageUrl || "Not provided"}</p>
-                       )}
-                       {deanImageUrl && (
-                         /* eslint-disable-next-line @next/next/no-img-element */
-                         <img src={deanImageUrl} alt="Dean" className="mt-2 h-32 object-contain rounded-md" />
-                       )}
+                      <Label>Dean Image URL</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Provide a direct external URL to the Dean&apos;s
+                        picture.
+                      </p>
+                      {canEdit ? (
+                        <Input
+                          value={deanImageUrl}
+                          onChange={(e) => {
+                            setDeanImageUrl(processImageUrl(e.target.value));
+                            setHasChanges(true);
+                          }}
+                          placeholder="https://example.com/dean.jpg or Google Drive link"
+                        />
+                      ) : (
+                        <p className="text-sm bg-muted p-3 rounded-md">
+                          {deanImageUrl || "Not provided"}
+                        </p>
+                      )}
+                      {deanImageUrl && (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={deanImageUrl}
+                          alt="Dean"
+                          className="mt-2 h-32 object-contain rounded-md"
+                        />
+                      )}
                     </div>
                     <div className="space-y-2">
-                       <Label>HOD Image URL</Label>
-                       <p className="text-xs text-muted-foreground">Provide a direct external URL to the HOD&apos;s picture.</p>
-                       {canEdit ? (
-                          <Input value={hodImageUrl} onChange={(e) => { setHodImageUrl(processImageUrl(e.target.value)); setHasChanges(true); }} placeholder="https://example.com/hod.jpg or Google Drive link" />
-                       ) : (
-                          <p className="text-sm bg-muted p-3 rounded-md">{hodImageUrl || "Not provided"}</p>
-                       )}
-                       {hodImageUrl && (
-                         /* eslint-disable-next-line @next/next/no-img-element */
-                         <img src={hodImageUrl} alt="HOD" className="mt-2 h-32 object-contain rounded-md" />
-                       )}
+                      <Label>HOD Image URL</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Provide a direct external URL to the HOD&apos;s picture.
+                      </p>
+                      {canEdit ? (
+                        <Input
+                          value={hodImageUrl}
+                          onChange={(e) => {
+                            setHodImageUrl(processImageUrl(e.target.value));
+                            setHasChanges(true);
+                          }}
+                          placeholder="https://example.com/hod.jpg or Google Drive link"
+                        />
+                      ) : (
+                        <p className="text-sm bg-muted p-3 rounded-md">
+                          {hodImageUrl || "Not provided"}
+                        </p>
+                      )}
+                      {hodImageUrl && (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={hodImageUrl}
+                          alt="HOD"
+                          className="mt-2 h-32 object-contain rounded-md"
+                        />
+                      )}
                     </div>
                   </div>
                 )}
@@ -1704,6 +1755,7 @@ export default function SubmissionDetailPage({
                   <CourseTable
                     submissionId={submission.id}
                     departmentId={submission.programme.department.id}
+                    programmeDuration={submission.programme.duration || 4}
                     disabled={!canEdit}
                     onValidationChange={(isValid, errors) => {
                       if (!isValid) {
