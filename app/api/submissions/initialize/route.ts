@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Ensure the cycle exists
-    const cycle = await prisma.cycle.findUnique({
+    const cycle = await prisma.reviewCycle.findUnique({
       where: { id: cycleId }
     });
 
