@@ -7,10 +7,9 @@ import { usePermission } from "@/contexts/user-context";
 import {
   LayoutDashboard,
   FileText,
-  GraduationCap,
-  Building2,
   Users,
-  School,
+  Network,
+  GraduationCap,
 } from "lucide-react";
 
 interface NavItem {
@@ -34,21 +33,9 @@ const navItems: NavItem[] = [
     permission: "view:submissions",
   },
   {
-    title: "Programmes",
-    href: "/programmes",
-    icon: <GraduationCap className="h-5 w-5" />,
-    permission: "view:programmes",
-  },
-  {
-    title: "Departments",
-    href: "/departments",
-    icon: <Building2 className="h-5 w-5" />,
-    permission: "view:departments",
-  },
-  {
-    title: "Schools",
-    href: "/schools",
-    icon: <School className="h-5 w-5" />,
+    title: "Academic Units",
+    href: "/academic-units",
+    icon: <Network className="h-5 w-5" />,
     permission: "view:schools",
   },
   {
