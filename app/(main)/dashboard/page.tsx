@@ -100,8 +100,15 @@ export default function DashboardPage() {
   const [newCycleName, setNewCycleName] = useState("");
 
   const fetchStats = async () => {
+    if (!currentUser) return;
     try {
-      const response = await fetch("/api/dashboard/stats");
+      const url = new URL("/api/dashboard/stats", window.location.origin);
+      if (currentUser.role === "HOD" && currentUser.departmentId) {
+        url.searchParams.append("departmentId", currentUser.departmentId);
+      } else if (currentUser.role === "DEAN" && currentUser.schoolId) {
+        url.searchParams.append("schoolId", currentUser.schoolId);
+      }
+      const response = await fetch(url.toString());
       if (response.ok) {
         const data = await response.json();
         setStats(data);
@@ -125,9 +132,11 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    fetchStats();
-    if (currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN") {
-      fetchCycles();
+    if (currentUser) {
+      fetchStats();
+      if (currentUser.role === "ADMIN" || currentUser.role === "SUPER_ADMIN") {
+        fetchCycles();
+      }
     }
   }, [currentUser]);
 
@@ -446,6 +455,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Organization Stats */}
+        {(currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN") && (
         <Card>
           <CardHeader>
             <CardTitle>Organization Overview</CardTitle>
@@ -534,6 +544,7 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+        )}
       </div>
 
       {/* Admin Cycle Management */}
