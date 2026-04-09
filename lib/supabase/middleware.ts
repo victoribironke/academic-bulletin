@@ -36,7 +36,9 @@ export async function updateSession(request: NextRequest) {
 
   const isAuthRoute =
     request.nextUrl.pathname.startsWith("/login") ||
-    request.nextUrl.pathname.startsWith("/confirm");
+    request.nextUrl.pathname.startsWith("/confirm") ||
+    request.nextUrl.pathname.startsWith("/invite-accept") ||
+    request.nextUrl.pathname.startsWith("/forgot-password");
   const isApiRoute = request.nextUrl.pathname.startsWith("/api");
 
   if (!user && !isAuthRoute && !isApiRoute) {
