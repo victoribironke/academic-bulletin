@@ -29,20 +29,14 @@ export async function GET(request: Request) {
     const ownership = searchParams.get("ownership");
     const level = searchParams.get("level");
     const semester = searchParams.get("semester");
-    const scope = searchParams.get("scope"); // "all" = fetch everything (for borrowing)
+    const discoverable = searchParams.get("discoverable");
 
     const where: Record<string, unknown> = {};
 
-    // Logic for Course Visibility
-    if (scope === "all") {
-      // If scope is ALL, we don't restrict by ownerDeptId
-      // We still apply other filters if they exist
+    // When the import dialog requests only discoverable courses, filter accordingly
+    if (discoverable === "true") {
+      where.discoverable = true;
     } else if (departmentId || schoolId) {
-      // Default behavior: Filter by Context (Dept + School + Institutional)
-      // This allows a department to see:
-      // 1. Their own courses
-      // 2. Courses owned by their School
-      // 3. Institutional courses (Compulsory)
       const OR: Array<Record<string, unknown>> = [];
 
       if (departmentId) {
@@ -51,12 +45,9 @@ export async function GET(request: Request) {
       if (schoolId) {
         OR.push({ ownerSchoolId: schoolId });
       }
-      // Always include INSTITUTIONAL courses when viewing in context
       OR.push({ ownership: "INSTITUTIONAL" });
-      // Always include GENERAL courses from anywhere so they can be borrowed
       OR.push({ type: "GENERAL" });
 
-      // Find the school for the department if only departmentId was passed
       if (departmentId && !schoolId) {
         const dept = await prisma.department.findUnique({
           where: { id: departmentId },
