@@ -267,23 +267,23 @@ export function isValidName(name: string): boolean {
 
 /**
  * Validates that a course code follows the expected format
- * e.g., "COS 101", "MTH 201"
+ * e.g., "COS 101", "COSC 101", "MTH 201"
  */
 export function isValidCourseCode(code: string): boolean {
   if (!code) return false;
-  // Format: 3 uppercase letters, space, 3 digits
-  const codeRegex = /^[A-Z]{3}\s?\d{3}$/;
+  const codeRegex = /^[A-Z]{2,5}\s?\d{3}$/;
   return codeRegex.test(code.trim().toUpperCase());
 }
 
 /**
- * Formats a course code to standard format
+ * Formats a course code to standard format: LETTERS DIGITS
  */
 export function formatCourseCode(code: string): string {
   if (!code) return "";
-  const cleaned = code.toUpperCase().replace(/\s+/g, "");
-  if (cleaned.length >= 6) {
-    return `${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)}`;
+  const upper = code.toUpperCase().trim();
+  const match = upper.match(/^([A-Z]{2,5})\s*(\d{3})$/);
+  if (match) {
+    return `${match[1]} ${match[2]}`;
   }
-  return cleaned;
+  return upper;
 }
