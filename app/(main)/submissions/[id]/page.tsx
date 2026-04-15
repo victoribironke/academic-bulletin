@@ -64,6 +64,8 @@ import {
   CloudOff,
   ShieldCheck,
   AlertTriangle,
+  Camera,
+  Trash2,
 } from "lucide-react";
 
 interface Submission {
@@ -93,9 +95,18 @@ interface Submission {
   content: {
     programmeInfo?: { deanImageUrl?: string; hodImageUrl?: string };
     philosophy?: string;
+    philosophyGracePass?: boolean;
+    philosophyGrace?: {
+      scores: Record<string, number>;
+      explanation: string;
+      recommendation: string;
+      passed: boolean;
+    } | null;
+    mission?: string;
+    vision?: string;
     objectives?: string[];
     uniqueFeatures?: string[];
-    employability?: string;
+    employability?: string | string[];
     centurySkills?: string[];
     utmeRequirements?: string;
     directEntryRequirements?: string;
@@ -104,7 +115,6 @@ interface Submission {
     graduationRequirements?: string;
     minimumCGPA?: number;
     totalUnits?: number;
-    // Legacy sections
     sectionA?: { content?: string };
     sectionB?: { content?: string };
     sectionC?: { content?: string };
@@ -254,11 +264,10 @@ function GraceResultPanel({
 
   return (
     <div
-      className={`rounded-lg border p-4 space-y-3 ${
-        result.passed
+      className={`rounded-lg border p-4 space-y-3 ${result.passed
           ? "bg-green-50 border-green-200"
           : "bg-amber-50 border-amber-200"
-      }`}
+        }`}
     >
       <div className="flex items-center gap-2">
         {result.passed ? (
@@ -267,9 +276,8 @@ function GraceResultPanel({
           <AlertTriangle className="h-4 w-4 text-amber-600" />
         )}
         <span
-          className={`text-sm font-medium ${
-            result.passed ? "text-green-700" : "text-amber-700"
-          }`}
+          className={`text-sm font-medium ${result.passed ? "text-green-700" : "text-amber-700"
+            }`}
         >
           {result.passed ? "GRACE Compliant" : "Improvements Needed"}
         </span>
@@ -373,18 +381,29 @@ export default function SubmissionDetailPage({
   >("idle");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const deanFileRef = useRef<HTMLInputElement>(null);
+  const hodFileRef = useRef<HTMLInputElement>(null);
+  const [uploadingDean, setUploadingDean] = useState(false);
+  const [uploadingHod, setUploadingHod] = useState(false);
+
+  const isOwnDepartment =
+    !currentUser ||
+    currentUser.role !== "HOD" ||
+    (submission?.programme.department.id === currentUser.departmentId);
 
   const canEdit =
-    hasPermission("edit:submission") && submission?.status === "DRAFT";
+    hasPermission("edit:submission") &&
+    submission?.status === "DRAFT" &&
+    isOwnDepartment;
   const canComment =
     hasPermission("comment:submission") || hasPermission("review:submission");
   const canReview = hasPermission("review:submission");
   const canApprove = hasPermission("approve:submission");
-  // Only HOD and Super Admin can officially submit (not coordinators or regular admins)
   const canSubmit =
     currentUser &&
     ["HOD", "SUPER_ADMIN"].includes(currentUser.role) &&
-    submission?.status === "DRAFT";
+    submission?.status === "DRAFT" &&
+    isOwnDepartment;
 
   const fetchSubmission = useCallback(async () => {
     try {
@@ -392,64 +411,52 @@ export default function SubmissionDetailPage({
       if (response.ok) {
         const data = await response.json();
 
-        // Access Control Verification
-        // Temporarily Disabled for Test Users //
-        // ----------------------------------- //
-        // if (
-        //   currentUser?.role === "HOD" &&
-        //   data.programme.department.id !== currentUser.departmentId
-        // ) {
-        //   toast.error("You do not have access to this submission");
-        //   window.location.href = "/submissions";
-        //   return;
-        // }
-        // if (
-        //   currentUser?.role === "DEAN" &&
-        //   data.programme.department.school.id !== currentUser.schoolId
-        // ) {
-        //   toast.error("You do not have access to this submission");
-        //   window.location.href = "/submissions";
-        //   return;
-        // }
-
         setSubmission(data);
-        // Initialize form state from submission content
-        if (data.content) {
-          setDeanImageUrl(data.content.programmeInfo?.deanImageUrl || "");
-          setHodImageUrl(data.content.programmeInfo?.hodImageUrl || "");
-          setPhilosophy(data.content.philosophy || "");
-          setMission(data.content.mission || "");
-          setVision(data.content.vision || "");
-          setObjectives(
-            data.content.objectives?.length ? data.content.objectives : [""],
-          );
-          setUniqueFeatures(
-            data.content.uniqueFeatures?.length
-              ? data.content.uniqueFeatures
-              : [""],
-          );
-          setEmployability(
-            Array.isArray(data.content.employability)
-              ? data.content.employability
-              : data.content.employability
-                ? [data.content.employability]
-                : [""],
-          );
-          setUtmeRequirements(data.content.utmeRequirements || "");
-          setDirectEntryRequirements(
-            data.content.directEntryRequirements || "",
-          );
-          setTransferRequirements(data.content.transferRequirements || "");
-          setMinimumDuration(data.content.minimumDuration || "");
-          setGraduationRequirements(data.content.graduationRequirements || "");
-          setMinimumCGPA(data.content.minimumCGPA || 2.5);
-          setTotalUnits(data.content.totalUnits || 154);
-          setRegulations(data.content.sectionF?.content || "");
-          setSummaryOfChanges(data.content.sectionG?.content || "");
-          // Restore persisted GRACE result
-          if (data.content.philosophyGrace) {
-            setGracePhilosophyResult(data.content.philosophyGrace);
-          }
+
+        // Try restoring from localStorage draft first (crash recovery)
+        let draft: Record<string, any> | null = null;
+        try {
+          const raw = localStorage.getItem(`submission-draft-${id}`);
+          if (raw) draft = JSON.parse(raw);
+        } catch { /* corrupt data – ignore */ }
+
+        const src = draft || data.content || {};
+
+        setDeanImageUrl(src.programmeInfo?.deanImageUrl || data.content?.programmeInfo?.deanImageUrl || "");
+        setHodImageUrl(src.programmeInfo?.hodImageUrl || data.content?.programmeInfo?.hodImageUrl || "");
+        setPhilosophy(src.philosophy ?? data.content?.philosophy ?? "");
+        setMission(src.mission ?? data.content?.mission ?? "");
+        setVision(src.vision ?? data.content?.vision ?? "");
+        setObjectives(
+          (src.objectives?.length ? src.objectives : null) ??
+          (data.content?.objectives?.length ? data.content.objectives : [""])
+        );
+        setUniqueFeatures(
+          (src.uniqueFeatures?.length ? src.uniqueFeatures : null) ??
+          (data.content?.uniqueFeatures?.length ? data.content.uniqueFeatures : [""])
+        );
+        setEmployability(
+          Array.isArray(src.employability) ? src.employability :
+            Array.isArray(data.content?.employability) ? data.content.employability :
+              data.content?.employability ? [data.content.employability] : [""]
+        );
+        setUtmeRequirements(src.utmeRequirements ?? data.content?.utmeRequirements ?? "");
+        setDirectEntryRequirements(src.directEntryRequirements ?? data.content?.directEntryRequirements ?? "");
+        setTransferRequirements(src.transferRequirements ?? data.content?.transferRequirements ?? "");
+        setMinimumDuration(src.minimumDuration ?? data.content?.minimumDuration ?? "");
+        setGraduationRequirements(src.graduationRequirements ?? data.content?.graduationRequirements ?? "");
+        setMinimumCGPA(src.minimumCGPA ?? data.content?.minimumCGPA ?? 2.5);
+        setTotalUnits(src.totalUnits ?? data.content?.totalUnits ?? 154);
+        setRegulations(src.sectionF?.content ?? data.content?.sectionF?.content ?? "");
+        setSummaryOfChanges(src.sectionG?.content ?? data.content?.sectionG?.content ?? "");
+
+        if (src.philosophyGrace || data.content?.philosophyGrace) {
+          setGracePhilosophyResult(src.philosophyGrace ?? data.content?.philosophyGrace);
+        }
+
+        if (draft) {
+          setHasChanges(true);
+          toast.info("Restored unsaved changes from your last session");
         }
       }
     } catch (err) {
@@ -477,48 +484,97 @@ export default function SubmissionDetailPage({
     return url;
   };
 
+  const uploadRoleImage = async (role: "dean" | "hod", file: File) => {
+    if (!submission) return;
+    const setUploading = role === "dean" ? setUploadingDean : setUploadingHod;
+    const setUrl = role === "dean" ? setDeanImageUrl : setHodImageUrl;
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      formData.append("role", role);
+
+      const res = await fetch(`/api/submissions/${id}/image`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setUrl(data.imageUrl);
+        setHasChanges(true);
+        toast.success(`${role === "dean" ? "Dean" : "HOD"} photo uploaded`);
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Upload failed");
+      }
+    } catch {
+      toast.error("Failed to upload image");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const philosophyWordCount = getWordCount(philosophy);
   const isPhilosophyValid =
     philosophyWordCount >= 150 && philosophyWordCount <= 250;
 
+  const buildContentPayload = useCallback(() => ({
+    programmeInfo: {
+      ...submission?.content?.programmeInfo,
+      deanImageUrl,
+      hodImageUrl,
+    },
+    philosophy,
+    philosophyGracePass: gracePhilosophyResult?.passed || false,
+    philosophyGrace: gracePhilosophyResult || null,
+    mission,
+    vision,
+    objectives: objectives.filter((o) => o.trim()),
+    uniqueFeatures: uniqueFeatures.filter((f) => f.trim()),
+    employability,
+    utmeRequirements,
+    directEntryRequirements,
+    transferRequirements,
+    minimumDuration,
+    graduationRequirements,
+    minimumCGPA,
+    totalUnits,
+    sectionF: { content: regulations },
+    sectionG: { content: summaryOfChanges },
+  }), [
+    submission?.content?.programmeInfo,
+    deanImageUrl, hodImageUrl, philosophy, gracePhilosophyResult,
+    mission, vision, objectives, uniqueFeatures, employability,
+    utmeRequirements, directEntryRequirements, transferRequirements,
+    minimumDuration, graduationRequirements, minimumCGPA, totalUnits,
+    regulations, summaryOfChanges,
+  ]);
+
+  // Persist draft to localStorage as a crash-recovery backup
+  useEffect(() => {
+    if (!hasChanges || !canEdit || !submission) return;
+    try {
+      localStorage.setItem(
+        `submission-draft-${id}`,
+        JSON.stringify(buildContentPayload()),
+      );
+    } catch { /* quota exceeded – non-critical */ }
+  }, [hasChanges, canEdit, submission, id, buildContentPayload]);
+
   // Auto-save effect - debounced save after 3 seconds of no changes
   useEffect(() => {
-    // Only auto-save if there are changes, user can edit, and submission exists
     if (!hasChanges || !canEdit || !submission) return;
 
-    // Clear any existing timeout
     if (autoSaveTimeoutRef.current) {
       clearTimeout(autoSaveTimeoutRef.current);
     }
 
-    // Set a new timeout to save after 3 seconds
     autoSaveTimeoutRef.current = setTimeout(async () => {
       setAutoSaveStatus("saving");
       try {
-        const contentToSave = {
-          programmeInfo: {
-            ...submission.content?.programmeInfo,
-            deanImageUrl,
-            hodImageUrl,
-          },
-          philosophy,
-          philosophyGracePass: gracePhilosophyResult?.passed || false,
-          philosophyGrace: gracePhilosophyResult || null,
-          mission,
-          vision,
-          objectives: objectives.filter((o) => o.trim()),
-          uniqueFeatures: uniqueFeatures.filter((f) => f.trim()),
-          employability,
-          utmeRequirements,
-          directEntryRequirements,
-          transferRequirements,
-          minimumDuration,
-          graduationRequirements,
-          minimumCGPA,
-          totalUnits,
-          sectionF: { content: regulations },
-          sectionG: { content: summaryOfChanges },
-        };
+        const contentToSave = buildContentPayload();
 
         const response = await fetch(`/api/submissions/${id}`, {
           method: "PUT",
@@ -530,6 +586,10 @@ export default function SubmissionDetailPage({
           setHasChanges(false);
           setAutoSaveStatus("saved");
           setLastSavedAt(new Date());
+          setSubmission((prev) =>
+            prev ? { ...prev, content: { ...prev.content, ...contentToSave } } : prev,
+          );
+          localStorage.removeItem(`submission-draft-${id}`);
         } else {
           setAutoSaveStatus("error");
         }
@@ -537,68 +597,21 @@ export default function SubmissionDetailPage({
         console.error("Auto-save failed:", err);
         setAutoSaveStatus("error");
       }
-    }, 3000); // 3 second debounce
+    }, 3000);
 
-    // Cleanup timeout on unmount or when dependencies change
     return () => {
       if (autoSaveTimeoutRef.current) {
         clearTimeout(autoSaveTimeoutRef.current);
       }
     };
-  }, [
-    hasChanges,
-    canEdit,
-    submission,
-    philosophy,
-    mission,
-    vision,
-    objectives,
-    uniqueFeatures,
-    employability,
-    utmeRequirements,
-    directEntryRequirements,
-    transferRequirements,
-    minimumDuration,
-    graduationRequirements,
-    minimumCGPA,
-    totalUnits,
-    regulations,
-    summaryOfChanges,
-    gracePhilosophyResult,
-    deanImageUrl,
-    hodImageUrl,
-    id,
-  ]);
+  }, [hasChanges, canEdit, submission, id, buildContentPayload]);
 
-  const handleSave = async () => {
-    if (!submission) return;
+  const handleSave = async (): Promise<boolean> => {
+    if (!submission) return false;
     setIsSaving(true);
 
     try {
-      const contentToSave = {
-        programmeInfo: {
-          ...submission.content?.programmeInfo,
-          deanImageUrl,
-          hodImageUrl,
-        },
-        philosophy,
-        philosophyGracePass: gracePhilosophyResult?.passed || false,
-        philosophyGrace: gracePhilosophyResult || null,
-        mission,
-        vision,
-        objectives: objectives.filter((o) => o.trim()),
-        uniqueFeatures: uniqueFeatures.filter((f) => f.trim()),
-        employability,
-        utmeRequirements,
-        directEntryRequirements,
-        transferRequirements,
-        minimumDuration,
-        graduationRequirements,
-        minimumCGPA,
-        totalUnits,
-        sectionF: { content: regulations },
-        sectionG: { content: summaryOfChanges },
-      };
+      const contentToSave = buildContentPayload();
 
       const response = await fetch(`/api/submissions/${id}`, {
         method: "PUT",
@@ -608,14 +621,22 @@ export default function SubmissionDetailPage({
 
       if (response.ok) {
         setHasChanges(false);
+        setAutoSaveStatus("saved");
+        setLastSavedAt(new Date());
+        setSubmission((prev) =>
+          prev ? { ...prev, content: { ...prev.content, ...contentToSave } } : prev,
+        );
+        localStorage.removeItem(`submission-draft-${id}`);
         toast.success("Draft saved successfully");
-        fetchSubmission();
+        return true;
       } else {
         toast.error("Failed to save draft");
+        return false;
       }
     } catch (err) {
       console.error("Failed to save:", err);
       toast.error("Failed to save draft");
+      return false;
     } finally {
       setIsSaving(false);
     }
@@ -623,6 +644,18 @@ export default function SubmissionDetailPage({
 
   const handleTransition = async (action: string) => {
     if (!submission || !currentUser) return;
+
+    // Flush pending saves before transition
+    if (hasChanges && canEdit) {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+      const saved = await handleSave();
+      if (!saved) {
+        toast.error("Please save your changes before continuing");
+        return;
+      }
+    }
 
     // Validate before submission
     if (action === "SUBMIT") {
@@ -717,99 +750,48 @@ export default function SubmissionDetailPage({
     }
   };
 
-  const parseGraceAnalysis = (analysis: any) => {
-    let scores: Record<string, number> = {};
-    let explanation = "";
-    let recommendation = "";
-
-    // If it's a string, it might be raw JSON string or markdown
-    if (typeof analysis === "string") {
-      try {
-        // Try parsing it directly as JSON first
-        analysis = JSON.parse(analysis);
-      } catch {
-        // Fallback: If it's markdown, extract the ```json part
-        const jsonMatch = analysis.match(/```json\s*([\s\S]*?)```/);
-        if (jsonMatch) {
-          try {
-            analysis = JSON.parse(jsonMatch[1]);
-          } catch {
-            // Leave analysis as string to fall back to regex
-          }
-        }
-      }
-    }
-
-    if (typeof analysis === "object" && analysis !== null) {
-      if (Array.isArray(analysis.GRACE_PILLARS)) {
-        analysis.GRACE_PILLARS.forEach((p: any) => {
-          if (p && p.pillar && typeof p.score === "number") {
-            scores[p.pillar] = p.score;
-          }
-        });
-      } else if (typeof analysis.GRACE_PILLARS === "object") {
-        scores = analysis.GRACE_PILLARS || {};
-      }
-
-      explanation = analysis.Vision_Alignment || analysis.Explanation || "";
-      recommendation = analysis.Recommendation || "";
-    } else if (typeof analysis === "string") {
-      const explanationMatch = analysis.match(
-        /\*\*Explanation:\*\*\s*([\s\S]*?)(?=\*\*(?:Vision Alignment|Recommendation))/,
-      );
-      explanation = explanationMatch ? explanationMatch[1].trim() : "";
-
-      const recommendationMatch = analysis.match(
-        /\*\*Recommendation:\*\*\s*([\s\S]*?)$/,
-      );
-      recommendation = recommendationMatch ? recommendationMatch[1].trim() : "";
-    }
-
-    const scoreValues = Object.values(scores);
-    const passed = scoreValues.length > 0 && scoreValues.every((s) => s >= 3);
-
-    return { scores, explanation, recommendation, passed };
-  };
+  const graceCheckAbortRef = useRef<AbortController | null>(null);
 
   const checkPhilosophyGrace = async () => {
     if (!philosophy.trim() || !submission) return;
+
+    if (graceCheckAbortRef.current) {
+      graceCheckAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    graceCheckAbortRef.current = controller;
 
     setGraceCheckingPhilosophy(true);
     setGracePhilosophyResult(null);
 
     try {
-      const res = await fetch("https://santacl-grace.hf.space/check-grace", {
+      const res = await fetch("/api/grace-check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          type: "philosophy",
+          submissionId: submission.id,
           title: `${submission.programme.name} - Programme Philosophy`,
           content: philosophy,
         }),
+        signal: controller.signal,
       });
 
-      if (!res.ok) {
+      if (controller.signal.aborted) return;
+
+      if (res.ok) {
+        const result = await res.json();
+        setGracePhilosophyResult(result);
+      } else {
         setGracePhilosophyResult({
           scores: {},
           explanation: "Compliance check failed. Please try again.",
           recommendation: "",
           passed: false,
         });
-      } else {
-        const data = await res.json();
-
-        const analysisData = data.analysis || data;
-        if (analysisData) {
-          setGracePhilosophyResult(parseGraceAnalysis(analysisData));
-        } else {
-          setGracePhilosophyResult({
-            scores: {},
-            explanation: "No analysis returned from server.",
-            recommendation: "",
-            passed: false,
-          });
-        }
       }
-    } catch {
+    } catch (err) {
+      if ((err as Error).name === "AbortError") return;
       setGracePhilosophyResult({
         scores: {},
         explanation:
@@ -818,8 +800,10 @@ export default function SubmissionDetailPage({
         passed: false,
       });
     } finally {
-      setGraceCheckingPhilosophy(false);
-      setHasChanges(true);
+      if (!controller.signal.aborted) {
+        setGraceCheckingPhilosophy(false);
+        setHasChanges(true);
+      }
     }
   };
 
@@ -840,8 +824,11 @@ export default function SubmissionDetailPage({
       });
 
       if (response.ok) {
+        const created = await response.json();
+        setSubmission((prev) =>
+          prev ? { ...prev, comments: [...prev.comments, created] } : prev,
+        );
         setNewComment("");
-        fetchSubmission();
       }
     } catch (err) {
       console.error("Failed to add comment:", err);
@@ -854,20 +841,28 @@ export default function SubmissionDetailPage({
     commentId: string,
     currentStatus: string,
   ) => {
+    const newStatus = currentStatus === "OPEN" ? "RESOLVED" : "OPEN";
     try {
       const response = await fetch(
         `/api/submissions/${id}/comments/${commentId}`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            status: currentStatus === "OPEN" ? "RESOLVED" : "OPEN",
-          }),
+          body: JSON.stringify({ status: newStatus }),
         },
       );
 
       if (response.ok) {
-        fetchSubmission();
+        setSubmission((prev) =>
+          prev
+            ? {
+              ...prev,
+              comments: prev.comments.map((c) =>
+                c.id === commentId ? { ...c, status: newStatus as Comment["status"] } : c,
+              ),
+            }
+            : prev,
+        );
       }
     } catch (err) {
       console.error("Failed to update comment:", err);
@@ -967,6 +962,16 @@ export default function SubmissionDetailPage({
           </Badge>
         </div>
       </div>
+
+      {/* Read-only banner for HODs viewing other departments' submissions */}
+      {currentUser?.role === "HOD" && !isOwnDepartment && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            You are viewing a submission from another department. This view is read-only.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Action Bar */}
       <Card>
@@ -1151,9 +1156,8 @@ export default function SubmissionDetailPage({
                         sectionComments.map((comment) => (
                           <div
                             key={comment.id}
-                            className={`p-3 rounded-lg border ${
-                              comment.status === "RESOLVED" ? "opacity-50" : ""
-                            }`}
+                            className={`p-3 rounded-lg border ${comment.status === "RESOLVED" ? "opacity-50" : ""
+                              }`}
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex items-center gap-2">
@@ -1163,9 +1167,8 @@ export default function SubmissionDetailPage({
                                 </span>
                                 <Badge
                                   variant="secondary"
-                                  className={`text-xs ${
-                                    commentTypeColors[comment.type]
-                                  }`}
+                                  className={`text-xs ${commentTypeColors[comment.type]
+                                    }`}
                                 >
                                   {comment.type}
                                 </Badge>
@@ -1246,62 +1249,132 @@ export default function SubmissionDetailPage({
                 {/* Deans & HODs Section */}
                 {activeSection === "deans_hods" && (
                   <div className="space-y-6">
-                    <div className="space-y-2">
-                      <Label>Dean Image URL</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Provide a direct external URL to the Dean&apos;s
-                        picture.
-                      </p>
-                      {canEdit ? (
-                        <Input
-                          value={deanImageUrl}
-                          onChange={(e) => {
-                            setDeanImageUrl(processImageUrl(e.target.value));
-                            setHasChanges(true);
-                          }}
-                          placeholder="https://example.com/dean.jpg or Google Drive link"
-                        />
-                      ) : (
-                        <p className="text-sm bg-muted p-3 rounded-md">
-                          {deanImageUrl || "Not provided"}
-                        </p>
-                      )}
-                      {deanImageUrl && (
-                        /* eslint-disable-next-line @next/next/no-img-element */
-                        <img
-                          src={deanImageUrl}
-                          alt="Dean"
-                          className="mt-2 h-32 object-contain rounded-md"
-                        />
-                      )}
+                    <p className="text-xs text-muted-foreground">
+                      Upload passport-style photos. JPEG, PNG, or WebP, max 5 MB.
+                    </p>
+
+                    {/* Dean Photo */}
+                    <div className="space-y-3">
+                      <Label>Dean&apos;s Photo</Label>
+                      <div className="flex items-start gap-4">
+                        {deanImageUrl ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img
+                            src={deanImageUrl}
+                            alt="Dean"
+                            className="h-36 w-28 rounded-lg object-cover border"
+                          />
+                        ) : (
+                          <div className="h-36 w-28 rounded-lg bg-muted border-2 border-dashed flex items-center justify-center">
+                            <Camera className="h-6 w-6 text-muted-foreground" />
+                          </div>
+                        )}
+                        {canEdit && (
+                          <div className="flex flex-col gap-2">
+                            <input
+                              ref={deanFileRef}
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) uploadRoleImage("dean", file);
+                                e.target.value = "";
+                              }}
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => deanFileRef.current?.click()}
+                              disabled={uploadingDean}
+                            >
+                              {uploadingDean ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <Camera className="h-4 w-4 mr-2" />
+                              )}
+                              {deanImageUrl ? "Replace" : "Upload"}
+                            </Button>
+                            {deanImageUrl && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive"
+                                onClick={() => {
+                                  setDeanImageUrl("");
+                                  setHasChanges(true);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Remove
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label>HOD Image URL</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Provide a direct external URL to the HOD&apos;s picture.
-                      </p>
-                      {canEdit ? (
-                        <Input
-                          value={hodImageUrl}
-                          onChange={(e) => {
-                            setHodImageUrl(processImageUrl(e.target.value));
-                            setHasChanges(true);
-                          }}
-                          placeholder="https://example.com/hod.jpg or Google Drive link"
-                        />
-                      ) : (
-                        <p className="text-sm bg-muted p-3 rounded-md">
-                          {hodImageUrl || "Not provided"}
-                        </p>
-                      )}
-                      {hodImageUrl && (
-                        /* eslint-disable-next-line @next/next/no-img-element */
-                        <img
-                          src={hodImageUrl}
-                          alt="HOD"
-                          className="mt-2 h-32 object-contain rounded-md"
-                        />
-                      )}
+
+                    <Separator />
+
+                    {/* HOD Photo */}
+                    <div className="space-y-3">
+                      <Label>HOD&apos;s Photo</Label>
+                      <div className="flex items-start gap-4">
+                        {hodImageUrl ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img
+                            src={hodImageUrl}
+                            alt="HOD"
+                            className="h-36 w-28 rounded-lg object-cover border"
+                          />
+                        ) : (
+                          <div className="h-36 w-28 rounded-lg bg-muted border-2 border-dashed flex items-center justify-center">
+                            <Camera className="h-6 w-6 text-muted-foreground" />
+                          </div>
+                        )}
+                        {canEdit && (
+                          <div className="flex flex-col gap-2">
+                            <input
+                              ref={hodFileRef}
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) uploadRoleImage("hod", file);
+                                e.target.value = "";
+                              }}
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => hodFileRef.current?.click()}
+                              disabled={uploadingHod}
+                            >
+                              {uploadingHod ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <Camera className="h-4 w-4 mr-2" />
+                              )}
+                              {hodImageUrl ? "Replace" : "Upload"}
+                            </Button>
+                            {hodImageUrl && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive"
+                                onClick={() => {
+                                  setHodImageUrl("");
+                                  setHasChanges(true);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Remove
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1347,13 +1420,12 @@ export default function SubmissionDetailPage({
                             </Button>
                           )}
                           <span
-                            className={`text-xs ${
-                              isPhilosophyValid
+                            className={`text-xs ${isPhilosophyValid
                                 ? "text-green-600"
                                 : philosophyWordCount > 0
                                   ? "text-red-600"
                                   : "text-muted-foreground"
-                            }`}
+                              }`}
                           >
                             {philosophyWordCount}/150-250 words
                           </span>
