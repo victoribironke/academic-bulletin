@@ -30,6 +30,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Plus, BookOpen, Link } from "lucide-react";
 
 // Types
@@ -43,6 +44,7 @@ interface MasterCourse {
   level: number;
   semester: number;
   description?: string;
+  discoverable: boolean;
   ownerDepartment?: { id: string; name: string; code: string };
   ownerSchool?: { id: string; name: string; code: string };
   programmeLinks?: {
@@ -156,6 +158,8 @@ export function MasterCourseManager({
       });
 
       if (res.ok) {
+        const created = await res.json();
+        setCourses((prev) => [...prev, created]);
         setIsDialogOpen(false);
         setNewCourse({
           code: "",
@@ -168,7 +172,6 @@ export function MasterCourseManager({
           description: "",
           ownerDeptId: departmentId || "",
         });
-        await fetchData();
       }
     } catch (error) {
       console.error("Failed to create course:", error);
@@ -181,16 +184,77 @@ export function MasterCourseManager({
     if (!selectedCourse) return;
 
     try {
-      await fetch(`/api/master-courses/${selectedCourse.id}/programmes`, {
+      const res = await fetch(`/api/master-courses/${selectedCourse.id}/programmes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ programmeIds }),
       });
 
+      if (res.ok) {
+        const linkedProgs = programmes
+          .filter((p) => programmeIds.includes(p.id))
+          .map((p) => ({
+            id: `temp-${p.id}`,
+            isCore: false,
+            programme: { id: p.id, name: p.name, code: p.code },
+          }));
+
+        setCourses((prev) =>
+          prev.map((c) =>
+            c.id === selectedCourse.id
+              ? {
+                ...c,
+                programmeLinks: [...(c.programmeLinks || []), ...linkedProgs],
+                _count: {
+                  ...c._count,
+                  programmeLinks: (c._count?.programmeLinks || 0) + programmeIds.length,
+                },
+              }
+              : c,
+          ),
+        );
+        setSelectedCourse((prev) =>
+          prev
+            ? {
+              ...prev,
+              programmeLinks: [...(prev.programmeLinks || []), ...linkedProgs],
+            }
+            : prev,
+        );
+      }
+
       setLinkDialogOpen(false);
-      await fetchData();
     } catch (error) {
       console.error("Failed to link programmes:", error);
+    }
+  };
+
+  const handleToggleDiscoverable = async (course: MasterCourse) => {
+    const newValue = !course.discoverable;
+    setCourses((prev) =>
+      prev.map((c) =>
+        c.id === course.id ? { ...c, discoverable: newValue } : c,
+      ),
+    );
+    try {
+      const res = await fetch(`/api/master-courses/${course.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ discoverable: newValue }),
+      });
+      if (!res.ok) {
+        setCourses((prev) =>
+          prev.map((c) =>
+            c.id === course.id ? { ...c, discoverable: !newValue } : c,
+          ),
+        );
+      }
+    } catch {
+      setCourses((prev) =>
+        prev.map((c) =>
+          c.id === course.id ? { ...c, discoverable: !newValue } : c,
+        ),
+      );
     }
   };
 
@@ -444,6 +508,7 @@ export function MasterCourseManager({
               <TableHead>Level</TableHead>
               <TableHead>Sem</TableHead>
               <TableHead>Programmes</TableHead>
+              <TableHead className="text-center">Discoverable</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -451,7 +516,7 @@ export function MasterCourseManager({
             {courses.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={9}
+                  colSpan={10}
                   className="text-center text-muted-foreground"
                 >
                   No master courses found. Create one to get started.
@@ -471,6 +536,12 @@ export function MasterCourseManager({
                     <Badge variant="outline">
                       {course._count?.programmeLinks || 0}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Checkbox
+                      checked={course.discoverable}
+                      onCheckedChange={() => handleToggleDiscoverable(course)}
+                    />
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
