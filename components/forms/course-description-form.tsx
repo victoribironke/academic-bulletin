@@ -61,11 +61,10 @@ function GraceResultDisplay({
 
   return (
     <div
-      className={`rounded-lg border p-4 space-y-3 ${
-        result.passed
+      className={`rounded-lg border p-4 space-y-3 ${result.passed
           ? "bg-green-50 border-green-200"
           : "bg-amber-50 border-amber-200"
-      }`}
+        }`}
     >
       {/* Header */}
       <div className="flex items-center gap-2">
@@ -75,9 +74,8 @@ function GraceResultDisplay({
           <AlertTriangle className="h-4 w-4 text-amber-600" />
         )}
         <span
-          className={`text-sm font-medium ${
-            result.passed ? "text-green-700" : "text-amber-700"
-          }`}
+          className={`text-sm font-medium ${result.passed ? "text-green-700" : "text-amber-700"
+            }`}
         >
           {result.passed ? "GRACE Compliant" : "Improvements Needed"}
         </span>
@@ -274,12 +272,13 @@ export function CourseDescriptionForm({
 
     autoSaveTimerRef.current = setTimeout(async () => {
       const toSave = Array.from(dirtyDescriptions);
+      const saved = new Set<string>();
       for (const courseId of toSave) {
         const desc = descriptions[courseId];
         if (!desc) continue;
 
         try {
-          await fetch(`/api/courses/${courseId}/description`, {
+          const res = await fetch(`/api/courses/${courseId}/description`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -291,11 +290,23 @@ export function CourseDescriptionForm({
               graceResult: desc.graceResult,
             }),
           });
+          if (res.ok) {
+            saved.add(courseId);
+          } else {
+            console.error(`Autosave failed for course ${courseId}: ${res.status}`);
+          }
         } catch (error) {
           console.error(`Autosave failed for course ${courseId}:`, error);
         }
       }
-      setDirtyDescriptions(new Set());
+      // Only clear dirty flags for successfully saved descriptions
+      if (saved.size > 0) {
+        setDirtyDescriptions((prev) => {
+          const next = new Set(prev);
+          saved.forEach((id) => next.delete(id));
+          return next;
+        });
+      }
     }, 3000);
 
     return () => {
@@ -331,7 +342,7 @@ export function CourseDescriptionForm({
     setSavingCourseId(courseId);
     try {
       const desc = descriptions[courseId];
-      await fetch(`/api/courses/${courseId}/description`, {
+      const res = await fetch(`/api/courses/${courseId}/description`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -343,73 +354,21 @@ export function CourseDescriptionForm({
           graceResult: desc.graceResult,
         }),
       });
-      // Clear from dirty set since we just saved
-      setDirtyDescriptions((prev) => {
-        const next = new Set(prev);
-        next.delete(courseId);
-        return next;
-      });
+      if (res.ok) {
+        setDirtyDescriptions((prev) => {
+          const next = new Set(prev);
+          next.delete(courseId);
+          return next;
+        });
+        setActiveDialogCourseId(null);
+      } else {
+        console.error("Failed to save description:", res.status);
+      }
     } catch (error) {
       console.error("Failed to save description:", error);
     } finally {
       setSavingCourseId(null);
-      // Close the dialog after saving
-      setActiveDialogCourseId(null);
     }
-  };
-
-  const parseGraceAnalysis = (analysis: any) => {
-    let scores: Record<string, number> = {};
-    let explanation = "";
-    let recommendation = "";
-
-    // If it's a string, it might be raw JSON string or markdown
-    if (typeof analysis === "string") {
-      try {
-        // Try parsing it directly as JSON first
-        analysis = JSON.parse(analysis);
-      } catch {
-        // Fallback: If it's markdown, extract the ```json part
-        const jsonMatch = analysis.match(/```json\s*([\s\S]*?)```/);
-        if (jsonMatch) {
-          try {
-            analysis = JSON.parse(jsonMatch[1]);
-          } catch {
-            // Leave analysis as string to fall back to regex
-          }
-        }
-      }
-    }
-
-    if (typeof analysis === "object" && analysis !== null) {
-      if (Array.isArray(analysis.GRACE_PILLARS)) {
-        analysis.GRACE_PILLARS.forEach((p: any) => {
-          if (p && p.pillar && typeof p.score === "number") {
-            scores[p.pillar] = p.score;
-          }
-        });
-      } else if (typeof analysis.GRACE_PILLARS === "object") {
-        scores = analysis.GRACE_PILLARS || {};
-      }
-
-      explanation = analysis.Vision_Alignment || analysis.Explanation || "";
-      recommendation = analysis.Recommendation || "";
-    } else if (typeof analysis === "string") {
-      const explanationMatch = analysis.match(
-        /\*\*Explanation:\*\*\s*([\s\S]*?)(?=\*\*(?:Vision Alignment|Recommendation))/,
-      );
-      explanation = explanationMatch ? explanationMatch[1].trim() : "";
-
-      const recommendationMatch = analysis.match(
-        /\*\*Recommendation:\*\*\s*([\s\S]*?)$/,
-      );
-      recommendation = recommendationMatch ? recommendationMatch[1].trim() : "";
-    }
-
-    const scoreValues = Object.values(scores);
-    const passed = scoreValues.length > 0 && scoreValues.every((s) => s >= 3);
-
-    return { scores, explanation, recommendation, passed };
   };
 
   // Persist GRACE result into the description state so autosave picks it up
@@ -441,48 +400,36 @@ export function CourseDescriptionForm({
     });
 
     try {
-      const res = await fetch("https://santacl-grace.hf.space/check-grace", {
+      const res = await fetch("/api/grace-check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          type: "course",
+          courseId,
           title: courseTitle,
           content: desc.courseContent,
         }),
       });
 
-      if (!res.ok) {
-        const fallback: GraceResult = {
+      if (res.ok) {
+        const result: GraceResult = await res.json();
+        setGraceForCourse(courseId, result);
+      } else {
+        setGraceForCourse(courseId, {
           scores: {},
           explanation: "Compliance check failed. Please try again.",
           recommendation: "",
           passed: false,
-        };
-        setGraceForCourse(courseId, fallback);
-      } else {
-        const data = await res.json();
-        const analysisData = data.analysis || data;
-        if (analysisData) {
-          const result = parseGraceAnalysis(analysisData);
-          setGraceForCourse(courseId, result);
-        } else {
-          const fallback: GraceResult = {
-            scores: {},
-            explanation: "No analysis returned from server.",
-            recommendation: "",
-            passed: false,
-          };
-          setGraceForCourse(courseId, fallback);
-        }
+        });
       }
     } catch {
-      const fallback: GraceResult = {
+      setGraceForCourse(courseId, {
         scores: {},
         explanation:
           "Could not reach the GRACE compliance server. Please try again later.",
         recommendation: "",
         passed: false,
-      };
-      setGraceForCourse(courseId, fallback);
+      });
     } finally {
       setGraceChecking(null);
     }
