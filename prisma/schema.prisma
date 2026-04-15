@@ -217,6 +217,8 @@ model Staff {
   customJobTitle       String? // Used when academicRank is OTHER (for non-academic staff)
   specialization       String?
   email                String?
+  imageUrl             String? // Staff photo URL (Google Drive or direct link)
+  imageDriveFileId     String? // Google Drive file ID for cleanup
   type                 StaffType             @default(ACADEMIC)
   isActive             Boolean               @default(true)
   createdAt            DateTime              @default(now())
@@ -454,7 +456,8 @@ model MasterCourse {
   ownership   CourseOwnership @default(DEPARTMENT)
   level       Int // 100, 200, 300, 400, 500
   semester    Int // 1 or 2
-  description String?
+  description  String?
+  discoverable Boolean @default(true)
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
