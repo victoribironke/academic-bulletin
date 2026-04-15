@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { getApiUser, canWriteSubmission } from "@/lib/api-auth";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -94,6 +95,18 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const body = await request.json();
     const { title, content, status } = body;
 
+    // Server-side ownership check
+    const user = await getApiUser();
+    if (user && user.role === "HOD") {
+      const allowed = await canWriteSubmission(user, id);
+      if (!allowed) {
+        return NextResponse.json(
+          { error: "You can only edit your own department's submissions" },
+          { status: 403 },
+        );
+      }
+    }
+
     // Update submission
     await prisma.submission.update({
       where: { id },
@@ -105,11 +118,24 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       },
     });
 
+    // Normalize employability: client sends array, schema expects String?
+    const normalizeEmployability = (val: unknown): string | null => {
+      if (Array.isArray(val)) {
+        const filtered = val.filter((s: string) => s.trim());
+        return filtered.length > 0 ? filtered.join("; ") : null;
+      }
+      return (val as string) || null;
+    };
+
     // Update content if provided
     if (content) {
       await prisma.submissionContent.upsert({
         where: { submissionId: id },
         update: {
+          // Programme info (dean/HOD images, etc.)
+          ...(content.programmeInfo !== undefined && {
+            programmeInfo: content.programmeInfo,
+          }),
           // Structured fields
           ...(content.philosophy !== undefined && {
             philosophy: content.philosophy,
@@ -129,7 +155,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
             uniqueFeatures: content.uniqueFeatures,
           }),
           ...(content.employability !== undefined && {
-            employability: content.employability,
+            employability: normalizeEmployability(content.employability),
           }),
           ...(content.utmeRequirements !== undefined && {
             utmeRequirements: content.utmeRequirements,
@@ -164,6 +190,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         },
         create: {
           submissionId: id,
+          programmeInfo: content.programmeInfo || null,
           philosophy: content.philosophy || null,
           philosophyGracePass: content.philosophyGracePass || false,
           philosophyGrace: content.philosophyGrace || null,
@@ -171,7 +198,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           vision: content.vision || null,
           objectives: content.objectives || null,
           uniqueFeatures: content.uniqueFeatures || null,
-          employability: content.employability || null,
+          employability: normalizeEmployability(content.employability),
           utmeRequirements: content.utmeRequirements || null,
           directEntryRequirements: content.directEntryRequirements || null,
           transferRequirements: content.transferRequirements || null,
