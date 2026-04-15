@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { DynamicTable, Column } from "./dynamic-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,7 +23,15 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Save, BookOpen, Import } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Loader2, Save, BookOpen, Import, History } from "lucide-react";
+import { toast } from "sonner";
 
 // Updated Course interface - removed lecturerId, added prerequisites
 // interface Course {
@@ -52,6 +60,32 @@ interface MasterCourse {
   ownership: string;
   ownerDepartment?: { code: string; name: string };
   ownerSchool?: { code: string; name: string };
+}
+
+interface PreviousSubmission {
+  id: string;
+  title: string;
+  status: string;
+  createdAt: string;
+  cycle: { id: string; name: string } | null;
+  _count: { courses: number };
+}
+
+interface PreviousCourse {
+  id: string;
+  code: string;
+  title: string;
+  units: number;
+  status: "CORE" | "ELECTIVE";
+  semester: number;
+  level: number;
+  prerequisites?: string;
+  description?: {
+    learningOutcomes?: string[];
+    courseContent?: string;
+    labWork?: string;
+    entrepreneurialAspect?: string;
+  };
 }
 
 interface CourseTableProps {
@@ -106,10 +140,20 @@ export function CourseTable({
     Set<string>
   >(new Set());
   const [isLoadingMasterCourses, setIsLoadingMasterCourses] = useState(false);
-  const [registryScope, setRegistryScope] = useState<"context" | "all">(
-    "context",
-  ); // Scope filter
   const [allMasterCourses, setAllMasterCourses] = useState<MasterCourse[]>([]);
+
+  // Import from previous bulletin state
+  const [bulletinDialogOpen, setBulletinDialogOpen] = useState(false);
+  const [previousSubmissions, setPreviousSubmissions] = useState<PreviousSubmission[]>([]);
+  const [selectedSourceId, setSelectedSourceId] = useState<string>("");
+  const [previousCourses, setPreviousCourses] = useState<PreviousCourse[]>([]);
+  const [selectedPrevCourses, setSelectedPrevCourses] = useState<Set<string>>(new Set());
+  const [isLoadingPrevious, setIsLoadingPrevious] = useState(false);
+
+  // Autosave state
+  const [isDirty, setIsDirty] = useState(false);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isSavingRef = useRef(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -138,8 +182,7 @@ export function CourseTable({
       setCoursesByLevel(grouped);
       setOriginalCourseIds(ids);
 
-      // Fetch all master courses into memory for combobox selection
-      const allMasterRes = await fetch(`/api/master-courses?scope=all`);
+      const allMasterRes = await fetch(`/api/master-courses`);
       if (allMasterRes.ok) {
         setAllMasterCourses(await allMasterRes.json());
       }
@@ -278,17 +321,10 @@ export function CourseTable({
     isNew: true,
   });
 
-  // Fetch master courses for import dialog
   const fetchMasterCourses = useCallback(async () => {
     setIsLoadingMasterCourses(true);
     try {
-      // Fetch based on scope
-      let url = `/api/master-courses?departmentId=${departmentId}`;
-      if (registryScope === "all") {
-        url = `/api/master-courses?scope=all`;
-      }
-
-      const res = await fetch(url);
+      const res = await fetch(`/api/master-courses?discoverable=true`);
       if (res.ok) {
         const data = await res.json();
         setMasterCourses(data);
@@ -298,14 +334,7 @@ export function CourseTable({
     } finally {
       setIsLoadingMasterCourses(false);
     }
-  }, [registryScope, departmentId]);
-
-  // Effect to refetch when scope changes if dialog is open
-  useEffect(() => {
-    if (importDialogOpen) {
-      fetchMasterCourses();
-    }
-  }, [registryScope, importDialogOpen, fetchMasterCourses]);
+  }, []);
 
   // Open import dialog and load courses
   const openImportDialog = async () => {
@@ -369,6 +398,122 @@ export function CourseTable({
     setCoursesByLevel(newCoursesByLevel);
     setImportDialogOpen(false);
     setSelectedMasterCourses(new Set());
+    setIsDirty(true);
+  };
+
+  // Select all / clear all for registry import
+  const toggleSelectAll = () => {
+    if (selectedMasterCourses.size === masterCourses.length) {
+      setSelectedMasterCourses(new Set());
+    } else {
+      const existingCodes = new Set<string>();
+      LEVELS.forEach((level) => {
+        (coursesByLevel[level] || []).forEach((c) => existingCodes.add(c.code));
+      });
+      setSelectedMasterCourses(
+        new Set(masterCourses.filter((mc) => !existingCodes.has(mc.code)).map((mc) => mc.id)),
+      );
+    }
+  };
+
+  // Bulletin import functions
+  const openBulletinDialog = async () => {
+    setBulletinDialogOpen(true);
+    setSelectedSourceId("");
+    setPreviousCourses([]);
+    setSelectedPrevCourses(new Set());
+    setIsLoadingPrevious(true);
+    try {
+      const res = await fetch(`/api/submissions/${submissionId}/importable-courses`);
+      if (res.ok) {
+        setPreviousSubmissions(await res.json());
+      }
+    } catch (error) {
+      console.error("Failed to fetch previous submissions:", error);
+    } finally {
+      setIsLoadingPrevious(false);
+    }
+  };
+
+  const loadSourceCourses = async (sourceId: string) => {
+    setSelectedSourceId(sourceId);
+    setSelectedPrevCourses(new Set());
+    if (!sourceId) {
+      setPreviousCourses([]);
+      return;
+    }
+    setIsLoadingPrevious(true);
+    try {
+      const res = await fetch(
+        `/api/submissions/${submissionId}/importable-courses?sourceSubmissionId=${sourceId}`,
+      );
+      if (res.ok) {
+        setPreviousCourses(await res.json());
+      }
+    } catch (error) {
+      console.error("Failed to load source courses:", error);
+    } finally {
+      setIsLoadingPrevious(false);
+    }
+  };
+
+  const togglePrevCourseSelection = (courseId: string) => {
+    setSelectedPrevCourses((prev) => {
+      const next = new Set(prev);
+      if (next.has(courseId)) next.delete(courseId);
+      else next.add(courseId);
+      return next;
+    });
+  };
+
+  const toggleSelectAllPrev = () => {
+    const existingCodes = new Set<string>();
+    LEVELS.forEach((level) => {
+      (coursesByLevel[level] || []).forEach((c) => existingCodes.add(c.code));
+    });
+    const importable = previousCourses.filter((c) => !existingCodes.has(c.code));
+    if (selectedPrevCourses.size === importable.length) {
+      setSelectedPrevCourses(new Set());
+    } else {
+      setSelectedPrevCourses(new Set(importable.map((c) => c.id)));
+    }
+  };
+
+  const importPreviousCourses = () => {
+    const selected = previousCourses.filter((c) => selectedPrevCourses.has(c.id));
+
+    const existingCodes = new Set<string>();
+    LEVELS.forEach((level) => {
+      (coursesByLevel[level] || []).forEach((c) => existingCodes.add(c.code));
+    });
+
+    const newCoursesByLevel = { ...coursesByLevel };
+
+    selected.forEach((pc) => {
+      if (existingCodes.has(pc.code)) return;
+
+      const level = pc.level;
+      if (!newCoursesByLevel[level]) newCoursesByLevel[level] = [];
+
+      newCoursesByLevel[level] = [
+        ...newCoursesByLevel[level],
+        {
+          code: pc.code,
+          title: pc.title,
+          units: pc.units,
+          status: pc.status,
+          semester: pc.semester,
+          level: pc.level,
+          prerequisites: pc.prerequisites || "",
+          isNew: true,
+        },
+      ];
+    });
+
+    setCoursesByLevel(newCoursesByLevel);
+    setBulletinDialogOpen(false);
+    setIsDirty(true);
+    toast.success(`Imported ${selected.filter((c) => !existingCodes.has(c.code)).length} courses`);
   };
 
   // Build columns - removed lecturer, added prerequisites
@@ -432,12 +577,17 @@ export function CourseTable({
 
   const handleLevelChange = (level: number, courses: Course[]) => {
     setCoursesByLevel((prev) => ({ ...prev, [level]: courses }));
+    setIsDirty(true);
   };
 
-  const saveCourses = async () => {
-    setIsSaving(true);
+  const saveCourses = async (silent = false) => {
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
+    if (!silent) setIsSaving(true);
+    const errors: string[] = [];
+    // Track newly-created course IDs so we can patch local state without refetching
+    const createdMap = new Map<string, { id: string; code: string; level: number }>();
     try {
-      // Collect all current course IDs to find deleted ones
       const currentCourseIds = new Set<string>();
 
       for (const level of LEVELS) {
@@ -446,7 +596,6 @@ export function CourseTable({
         for (const course of courses) {
           if (!course.code.trim() || !course.title.trim()) continue;
 
-          // Track existing course IDs
           if (course.id && !course.isNew) {
             currentCourseIds.add(course.id);
           }
@@ -461,55 +610,111 @@ export function CourseTable({
           };
 
           if (course.isNew || !course.id) {
-            // Try to find matching master course first
-            let masterCourseId = undefined;
-            try {
-              const search = await fetch(
-                `/api/master-courses?code=${course.code}`,
-              );
-              if (search.ok) {
-                const results = await search.json();
-                const match = results.find(
-                  (m: MasterCourse) => m.code === course.code,
-                );
-                if (match) masterCourseId = match.id;
-              }
-            } catch (e) {
-              // Ignore lookup error
-              console.error("Failed to find matching master course:", e);
-            }
+            const match = allMasterCourses.find(
+              (m) => m.code === course.code,
+            );
+            const masterCourseId = match?.id ?? undefined;
 
-            await fetch("/api/courses", {
+            const res = await fetch("/api/courses", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ ...courseData, masterCourseId }),
             });
+            if (!res.ok) {
+              errors.push(`Failed to create ${course.code || "new course"}`);
+            } else {
+              const created = await res.json();
+              createdMap.set(course.code, { id: created.id, code: course.code, level });
+              currentCourseIds.add(created.id);
+            }
           } else {
-            await fetch(`/api/courses/${course.id}`, {
+            const res = await fetch(`/api/courses/${course.id}`, {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(courseData),
             });
+            if (!res.ok) {
+              errors.push(`Failed to update ${course.code}`);
+            }
           }
         }
       }
 
-      // Delete courses that were removed
       for (const originalId of originalCourseIds) {
         if (!currentCourseIds.has(originalId)) {
-          await fetch(`/api/courses/${originalId}`, {
+          const res = await fetch(`/api/courses/${originalId}`, {
             method: "DELETE",
           });
+          if (!res.ok) {
+            errors.push(`Failed to delete a removed course`);
+          }
         }
       }
 
-      await fetchData();
+      if (errors.length > 0) {
+        toast.error(`Some courses failed to save: ${errors.join("; ")}`);
+      } else {
+        setIsDirty(false);
+        if (!silent) toast.success("All courses saved successfully");
+
+        // Patch local state: assign server IDs to newly created courses, clear isNew flags
+        if (createdMap.size > 0) {
+          setCoursesByLevel((prev) => {
+            const next = { ...prev };
+            for (const level of LEVELS) {
+              next[level] = (prev[level] || []).map((c) => {
+                const created = createdMap.get(c.code);
+                if (created && (c.isNew || !c.id)) {
+                  return { ...c, id: created.id, isNew: false };
+                }
+                return c.isNew ? { ...c, isNew: false } : c;
+              });
+            }
+            return next;
+          });
+        } else {
+          setCoursesByLevel((prev) => {
+            const next = { ...prev };
+            for (const level of LEVELS) {
+              next[level] = (prev[level] || []).map((c) =>
+                c.isNew ? { ...c, isNew: false } : c,
+              );
+            }
+            return next;
+          });
+        }
+
+        // Sync originalCourseIds so deleted courses stay deleted
+        setOriginalCourseIds(currentCourseIds);
+      }
     } catch (error) {
       console.error("Failed to save courses:", error);
+      if (!silent) toast.error("Failed to save courses. Your changes are still in the editor.");
     } finally {
       setIsSaving(false);
+      isSavingRef.current = false;
     }
   };
+
+  // Autosave: debounced save 5 seconds after last change
+  useEffect(() => {
+    if (!isDirty || disabled || isLoading) return;
+
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      saveCourses(true);
+    }, 5000);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDirty, coursesByLevel, disabled, isLoading]);
 
   // Calculate totals
   const getTotals = (level: number) => {
@@ -547,11 +752,15 @@ export function CourseTable({
         </div>
         {!disabled && (
           <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={openBulletinDialog}>
+              <History className="h-4 w-4 mr-2" />
+              Previous Bulletin
+            </Button>
             <Button variant="outline" onClick={openImportDialog}>
               <Import className="h-4 w-4 mr-2" />
               Import from Registry
             </Button>
-            <Button onClick={saveCourses} disabled={isSaving}>
+            <Button onClick={() => saveCourses(false)} disabled={isSaving}>
               {isSaving ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
@@ -646,22 +855,6 @@ export function CourseTable({
             <DialogTitle>Import Courses from Registry</DialogTitle>
           </DialogHeader>
 
-          <div className="px-6 py-2 border-b">
-            <Tabs
-              value={registryScope}
-              onValueChange={(v) => setRegistryScope(v as "context" | "all")}
-            >
-              <TabsList className="w-full">
-                <TabsTrigger value="context" className="flex-1">
-                  Recommended
-                </TabsTrigger>
-                <TabsTrigger value="all" className="flex-1">
-                  All Courses
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-
           <div className="flex-1 min-h-0 overflow-hidden">
             {isLoadingMasterCourses ? (
               <div className="flex items-center justify-center h-48">
@@ -669,11 +862,10 @@ export function CourseTable({
               </div>
             ) : masterCourses.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                No courses found in the registry for this department.
+                No discoverable courses found in the registry.
                 <br />
                 <span className="text-sm">
-                  Ask an administrator to add courses to the Master Course
-                  Registry.
+                  Courses must be marked as discoverable to appear here.
                 </span>
               </div>
             ) : (
@@ -681,7 +873,23 @@ export function CourseTable({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-12"></TableHead>
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={
+                            masterCourses.length > 0 &&
+                            selectedMasterCourses.size > 0 &&
+                            selectedMasterCourses.size ===
+                            masterCourses.filter((mc) => {
+                              const codes = new Set<string>();
+                              LEVELS.forEach((l) =>
+                                (coursesByLevel[l] || []).forEach((c) => codes.add(c.code)),
+                              );
+                              return !codes.has(mc.code);
+                            }).length
+                          }
+                          onCheckedChange={toggleSelectAll}
+                        />
+                      </TableHead>
                       <TableHead className="whitespace-nowrap">Code</TableHead>
                       <TableHead>Title</TableHead>
                       <TableHead className="whitespace-nowrap">Units</TableHead>
@@ -762,6 +970,129 @@ export function CourseTable({
                 <Button
                   onClick={importSelectedCourses}
                   disabled={selectedMasterCourses.size === 0}
+                >
+                  Import Selected
+                </Button>
+              </div>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Import from Previous Bulletin Dialog */}
+      <Dialog open={bulletinDialogOpen} onOpenChange={setBulletinDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0">
+            <DialogTitle>Import from Previous Bulletin</DialogTitle>
+          </DialogHeader>
+
+          <div className="px-6 py-2 border-b shrink-0">
+            <Select value={selectedSourceId} onValueChange={loadSourceCourses}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a previous submission..." />
+              </SelectTrigger>
+              <SelectContent>
+                {previousSubmissions.map((sub) => (
+                  <SelectItem key={sub.id} value={sub.id}>
+                    {sub.cycle?.name || sub.title} ({sub._count.courses} courses) — {sub.status}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {isLoadingPrevious ? (
+              <div className="flex items-center justify-center h-48">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : !selectedSourceId ? (
+              <div className="text-center py-8 text-muted-foreground">
+                {previousSubmissions.length === 0
+                  ? "No previous submissions found for this programme."
+                  : "Select a previous submission to view its courses."}
+              </div>
+            ) : previousCourses.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No courses found in the selected submission.
+              </div>
+            ) : (
+              <ScrollArea className="h-full max-h-[50vh]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={
+                            previousCourses.length > 0 &&
+                            selectedPrevCourses.size > 0
+                          }
+                          onCheckedChange={toggleSelectAllPrev}
+                        />
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap">Code</TableHead>
+                      <TableHead>Title</TableHead>
+                      <TableHead className="whitespace-nowrap">Units</TableHead>
+                      <TableHead className="whitespace-nowrap">Level</TableHead>
+                      <TableHead className="whitespace-nowrap">Sem</TableHead>
+                      <TableHead className="whitespace-nowrap">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {previousCourses.map((pc) => {
+                      const existingCodes = new Set<string>();
+                      LEVELS.forEach((level) => {
+                        (coursesByLevel[level] || []).forEach((c) =>
+                          existingCodes.add(c.code),
+                        );
+                      });
+                      const isAlreadyAdded = existingCodes.has(pc.code);
+
+                      return (
+                        <TableRow
+                          key={pc.id}
+                          className={isAlreadyAdded ? "opacity-50" : ""}
+                        >
+                          <TableCell className="p-2">
+                            <Checkbox
+                              checked={selectedPrevCourses.has(pc.id)}
+                              onCheckedChange={() => togglePrevCourseSelection(pc.id)}
+                              disabled={isAlreadyAdded}
+                            />
+                          </TableCell>
+                          <TableCell className="font-mono whitespace-nowrap p-2">
+                            {pc.code}
+                          </TableCell>
+                          <TableCell className="p-2">{pc.title}</TableCell>
+                          <TableCell className="p-2">{pc.units}</TableCell>
+                          <TableCell className="p-2">{pc.level}</TableCell>
+                          <TableCell className="p-2">{pc.semester}</TableCell>
+                          <TableCell className="p-2">
+                            <Badge variant="outline">{pc.status}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            )}
+          </div>
+
+          <DialogFooter className="shrink-0 border-t pt-4">
+            <div className="flex items-center justify-between w-full">
+              <span className="text-sm text-muted-foreground">
+                {selectedPrevCourses.size} course(s) selected
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setBulletinDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={importPreviousCourses}
+                  disabled={selectedPrevCourses.size === 0}
                 >
                   Import Selected
                 </Button>
