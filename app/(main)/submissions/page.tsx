@@ -147,7 +147,7 @@ export default function SubmissionsPage() {
 
   const handleInitializeSubmissions = async () => {
     if (!filterCycle || filterCycle === "all") return;
-    
+
     const confirm = window.confirm(
       "This will create draft submissions for all programmes that don't have one in the active cycle yet. Continue?"
     );
@@ -184,17 +184,14 @@ export default function SubmissionsPage() {
       if (filterStatus !== "all") params.set("status", filterStatus);
       if (filterPhase !== "all") params.set("phase", filterPhase);
       if (filterCycle !== "all") params.set("cycleId", filterCycle);
-      
-      // Auto-filter based on user role
-      if (currentUser?.role === "HOD" && currentUser.departmentId) {
-        params.set("departmentId", currentUser.departmentId);
-      } else if (currentUser?.role === "DEAN" && currentUser.schoolId) {
+
+      // Auto-filter based on user role (Deans see their school only)
+      if (currentUser?.role === "DEAN" && currentUser.schoolId) {
         params.set("schoolId", currentUser.schoolId);
       }
 
-      const url = `/api/submissions${
-        params.toString() ? `?${params.toString()}` : ""
-      }`;
+      const url = `/api/submissions${params.toString() ? `?${params.toString()}` : ""
+        }`;
       const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
@@ -210,6 +207,17 @@ export default function SubmissionsPage() {
   useEffect(() => {
     fetchSubmissions();
   }, [fetchSubmissions]);
+
+  // Sort submissions: HOD's own department first
+  const sortedSubmissions = [...submissions].sort((a, b) => {
+    if (currentUser?.role === "HOD" && currentUser.departmentId) {
+      const aIsOwn = a.programme.department.id === currentUser.departmentId;
+      const bIsOwn = b.programme.department.id === currentUser.departmentId;
+      if (aIsOwn && !bIsOwn) return -1;
+      if (!aIsOwn && bIsOwn) return 1;
+    }
+    return 0;
+  });
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "—";
@@ -315,8 +323,8 @@ export default function SubmissionsPage() {
             </div>
             <div className="ml-auto flex items-center gap-4 text-sm text-muted-foreground">
               <span>
-                {submissions.length} submission
-                {submissions.length !== 1 ? "s" : ""}
+                {sortedSubmissions.length} submission
+                {sortedSubmissions.length !== 1 ? "s" : ""}
               </span>
             </div>
           </div>
@@ -335,7 +343,7 @@ export default function SubmissionsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {submissions.length === 0 ? (
+          {sortedSubmissions.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               No submissions found.{" "}
               {canCreate && (
@@ -361,14 +369,25 @@ export default function SubmissionsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {submissions.map((submission) => {
+                {sortedSubmissions.map((submission) => {
                   const StatusIcon = statusConfig[submission.status].icon;
+                  const isOwnDept =
+                    currentUser?.role === "HOD" &&
+                    currentUser.departmentId === submission.programme.department.id;
                   return (
-                    <TableRow key={submission.id}>
+                    <TableRow
+                      key={submission.id}
+                      className={isOwnDept ? "bg-primary/5 border-l-2 border-l-primary" : ""}
+                    >
                       <TableCell>
                         <div className="flex flex-col">
-                          <span className="font-medium">
+                          <span className="font-medium flex items-center gap-2">
                             {submission.programme.name}
+                            {isOwnDept && (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                Your Programme
+                              </Badge>
+                            )}
                           </span>
                           <span className="text-xs text-muted-foreground">
                             {submission.programme.department.school.code} /{" "}
