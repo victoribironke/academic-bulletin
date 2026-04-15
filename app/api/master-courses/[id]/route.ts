@@ -84,6 +84,7 @@ export async function PATCH(
       level,
       semester,
       description,
+      discoverable,
       prerequisiteIds,
     } = body;
 
@@ -149,6 +150,8 @@ export async function PATCH(
       updateData.semester = semester;
     }
     if (description !== undefined) updateData.description = description || null;
+    if (discoverable !== undefined)
+      updateData.discoverable = Boolean(discoverable);
 
     // Handle prerequisite updates
     let prerequisiteConnect = undefined;
