@@ -113,13 +113,18 @@ export function DynamicTable<T extends Record<string, unknown>>({
         const option = column.options?.find(
           (o) => String(o.value) === String(value),
         );
+        const label = option ? option.label : (value as string);
         return (
-          <span className="text-sm text-gray-600">
-            {option ? option.label : (value as string)}
+          <span className="text-sm text-gray-600 truncate block" title={label || ""}>
+            {label}
           </span>
         );
       }
-      return <span className="text-sm text-gray-600">{value as string}</span>;
+      return (
+        <span className="text-sm text-gray-600 truncate block" title={(value as string) || ""}>
+          {value as string}
+        </span>
+      );
     }
 
     switch (column.type) {
@@ -129,6 +134,7 @@ export function DynamicTable<T extends Record<string, unknown>>({
             value={(value as string) || ""}
             onChange={(e) => updateCell(rowIndex, column.key, e.target.value)}
             placeholder={column.placeholder}
+            title={(value as string) || ""}
             className="h-8 text-sm"
           />
         );
@@ -176,6 +182,7 @@ export function DynamicTable<T extends Record<string, unknown>>({
               value={(value as string) || ""}
               onChange={(e) => updateCell(rowIndex, column.key, e.target.value)}
               placeholder={column.placeholder}
+              title={(value as string) || ""}
               className="h-8 text-sm"
               list={listId}
             />
