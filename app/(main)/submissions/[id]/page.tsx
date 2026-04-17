@@ -265,8 +265,8 @@ function GraceResultPanel({
   return (
     <div
       className={`rounded-lg border p-4 space-y-3 ${result.passed
-          ? "bg-green-50 border-green-200"
-          : "bg-amber-50 border-amber-200"
+        ? "bg-green-50 border-green-200"
+        : "bg-amber-50 border-amber-200"
         }`}
     >
       <div className="flex items-center gap-2">
@@ -391,6 +391,13 @@ export default function SubmissionDetailPage({
     currentUser.role !== "HOD" ||
     (submission?.programme.department.id === currentUser.departmentId);
 
+  const submissionsBackHref =
+    currentUser?.role === "HOD"
+      ? isOwnDepartment
+        ? "/submissions/me"
+        : "/submissions/browse"
+      : "/submissions";
+
   const canEdit =
     hasPermission("edit:submission") &&
     submission?.status === "DRAFT" &&
@@ -473,15 +480,6 @@ export default function SubmissionDetailPage({
   // Word count helper
   const getWordCount = (text: string) => {
     return text.trim().split(/\s+/).filter(Boolean).length;
-  };
-
-  // Google Drive auto-converter
-  const processImageUrl = (url: string) => {
-    const driveMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-    if (driveMatch && driveMatch[1]) {
-      return `https://drive.google.com/uc?export=view&id=${driveMatch[1]}`;
-    }
-    return url;
   };
 
   const uploadRoleImage = async (role: "dean" | "hod", file: File) => {
@@ -932,7 +930,7 @@ export default function SubmissionDetailPage({
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-4">
-          <Link href="/submissions">
+          <Link href={submissionsBackHref}>
             <Button variant="ghost" size="icon">
               <ArrowLeft className="h-5 w-5" />
             </Button>
@@ -941,11 +939,21 @@ export default function SubmissionDetailPage({
             <h1 className="text-2xl font-bold tracking-tight">
               {submission.title}
             </h1>
-            <div className="flex items-center gap-2 mt-1 text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-muted-foreground">
               <span>{submission.programme.name}</span>
               <span>•</span>
               <span>{submission.programme.department.school.code}</span>
-              {/* <span>•</span> */}
+              {currentUser?.role === "HOD" && isOwnDepartment && (
+                <>
+                  <span className="hidden sm:inline">•</span>
+                  <Link
+                    href="/submissions/browse"
+                    className="text-primary text-sm hover:underline"
+                  >
+                    Browse all programme submissions
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -1421,10 +1429,10 @@ export default function SubmissionDetailPage({
                           )}
                           <span
                             className={`text-xs ${isPhilosophyValid
-                                ? "text-green-600"
-                                : philosophyWordCount > 0
-                                  ? "text-red-600"
-                                  : "text-muted-foreground"
+                              ? "text-green-600"
+                              : philosophyWordCount > 0
+                                ? "text-red-600"
+                                : "text-muted-foreground"
                               }`}
                           >
                             {philosophyWordCount}/150-250 words
