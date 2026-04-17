@@ -252,7 +252,7 @@ export function CourseTable({
     } finally {
       setIsLoading(false);
     }
-  }, [submissionId, departmentId]);
+  }, [submissionId, departmentId, programmeDuration]);
 
   useEffect(() => {
     if (submissionId && departmentId) {
