@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { usePermission, useUser } from "@/contexts/user-context";
 import { Button } from "@/components/ui/button";
 import {
@@ -124,8 +125,9 @@ export default function SubmissionsPage() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterPhase, setFilterPhase] = useState<string>("all");
   const [filterCycle, setFilterCycle] = useState<string>("all");
+  const router = useRouter();
   const { hasPermission } = usePermission();
-  const { currentUser } = useUser();
+  const { currentUser, isLoading: userLoading } = useUser();
 
   const canCreate = hasPermission("create:submission");
 
@@ -178,6 +180,13 @@ export default function SubmissionsPage() {
     fetchCycles();
   }, []);
 
+  useEffect(() => {
+    if (userLoading) return;
+    if (currentUser?.role === "HOD") {
+      router.replace("/submissions/me");
+    }
+  }, [userLoading, currentUser, router]);
+
   const fetchSubmissions = useCallback(async () => {
     try {
       const params = new URLSearchParams();
@@ -205,19 +214,11 @@ export default function SubmissionsPage() {
   }, [filterStatus, filterPhase, filterCycle, currentUser]);
 
   useEffect(() => {
+    if (userLoading || currentUser?.role === "HOD") return;
     fetchSubmissions();
-  }, [fetchSubmissions]);
+  }, [fetchSubmissions, userLoading, currentUser]);
 
-  // Sort submissions: HOD's own department first
-  const sortedSubmissions = [...submissions].sort((a, b) => {
-    if (currentUser?.role === "HOD" && currentUser.departmentId) {
-      const aIsOwn = a.programme.department.id === currentUser.departmentId;
-      const bIsOwn = b.programme.department.id === currentUser.departmentId;
-      if (aIsOwn && !bIsOwn) return -1;
-      if (!aIsOwn && bIsOwn) return 1;
-    }
-    return 0;
-  });
+  const sortedSubmissions = submissions;
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "—";
@@ -227,6 +228,14 @@ export default function SubmissionsPage() {
       year: "numeric",
     });
   };
+
+  if (userLoading || currentUser?.role === "HOD") {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-muted-foreground">Loading…</div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -371,23 +380,12 @@ export default function SubmissionsPage() {
               <TableBody>
                 {sortedSubmissions.map((submission) => {
                   const StatusIcon = statusConfig[submission.status].icon;
-                  const isOwnDept =
-                    currentUser?.role === "HOD" &&
-                    currentUser.departmentId === submission.programme.department.id;
                   return (
-                    <TableRow
-                      key={submission.id}
-                      className={isOwnDept ? "bg-primary/5 border-l-2 border-l-primary" : ""}
-                    >
+                    <TableRow key={submission.id}>
                       <TableCell>
                         <div className="flex flex-col">
-                          <span className="font-medium flex items-center gap-2">
+                          <span className="font-medium">
                             {submission.programme.name}
-                            {isOwnDept && (
-                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                Your Programme
-                              </Badge>
-                            )}
                           </span>
                           <span className="text-xs text-muted-foreground">
                             {submission.programme.department.school.code} /{" "}
