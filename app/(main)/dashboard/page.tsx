@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useUser, usePermission } from "@/contexts/user-context";
 import { getRoleDisplayName } from "@/lib/auth";
@@ -99,7 +99,7 @@ export default function DashboardPage() {
   const [isCreatingCycle, setIsCreatingCycle] = useState(false);
   const [newCycleName, setNewCycleName] = useState("");
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     if (!currentUser) return;
     try {
       const url = new URL("/api/dashboard/stats", window.location.origin);
@@ -118,9 +118,9 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentUser]);
 
-  const fetchCycles = async () => {
+  const fetchCycles = useCallback(async () => {
     try {
       const response = await fetch("/api/cycles");
       if (response.ok) {
@@ -129,7 +129,7 @@ export default function DashboardPage() {
     } catch (err) {
       console.error("Failed to fetch cycles:", err);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (currentUser) {
@@ -138,7 +138,7 @@ export default function DashboardPage() {
         fetchCycles();
       }
     }
-  }, [currentUser]);
+  }, [currentUser, fetchStats, fetchCycles]);
 
   const handleCreateCycle = async () => {
     if (!newCycleName.trim() || !currentUser) return;
