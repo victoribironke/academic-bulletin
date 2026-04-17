@@ -369,7 +369,7 @@ export function StaffTable({
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const openImageDialog = (staff: StaffMember) => {
+  const openImageDialog = (staff: StaffMember | null) => {
     setImageStaff(staff);
     setImageDialogOpen(true);
   };
@@ -463,8 +463,7 @@ export function StaffTable({
                   toast.error("Save staff members first before uploading photos");
                   return;
                 }
-                setImageDialogOpen(true);
-                setImageStaff(null);
+                openImageDialog(null);
               }}
             >
               <Camera className="h-4 w-4 mr-2" />
@@ -563,7 +562,7 @@ export function StaffTable({
                 <div
                   key={staff.id}
                   className="flex items-center justify-between border rounded-lg p-3 hover:bg-muted/50 cursor-pointer"
-                  onClick={() => setImageStaff(staff)}
+                  onClick={() => openImageDialog(staff)}
                 >
                   <div className="flex items-center gap-3">
                     {staff.imageUrl ? (
