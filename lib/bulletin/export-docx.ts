@@ -39,7 +39,7 @@ async function fetchImageBuffer(url: string): Promise<Buffer | null> {
     if (!response.ok) return null;
     const arrayBuffer = await response.arrayBuffer();
     return Buffer.from(arrayBuffer);
-  } catch (err) {
+  } catch {
     return null;
   }
 }
