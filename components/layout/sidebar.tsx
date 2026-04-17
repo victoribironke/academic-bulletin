@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { usePermission } from "@/contexts/user-context";
+import { usePermission, useUser } from "@/contexts/user-context";
 import {
   LayoutDashboard,
   FileText,
@@ -49,6 +49,10 @@ const navItems: NavItem[] = [
 export function SidebarContent() {
   const pathname = usePathname();
   const { hasPermission } = usePermission();
+  const { currentUser } = useUser();
+
+  const submissionsHref =
+    currentUser?.role === "HOD" ? "/submissions/me" : "/submissions";
 
   // Filter nav items based on user permissions
   const visibleNavItems = navItems.filter(
@@ -73,12 +77,18 @@ export function SidebarContent() {
       {/* Navigation */}
       <nav className="flex-1 space-y-1 overflow-y-auto p-4">
         {visibleNavItems.map((item) => {
-          const isActive =
-            pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const href =
+            item.href === "/submissions" ? submissionsHref : item.href;
+          const isSubmissions = item.href === "/submissions";
+          const isActive = isSubmissions
+            ? pathname === href ||
+            pathname.startsWith("/submissions/") ||
+            pathname === "/submissions/browse"
+            : pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <Link
-              key={item.href}
-              href={item.href}
+              key={item.title}
+              href={href}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                 isActive
