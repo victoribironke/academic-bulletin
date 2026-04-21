@@ -52,18 +52,23 @@ function GraceResultDisplay({
 }: {
   result: {
     scores: Record<string, number>;
+    pillarSummaries?: Record<string, string>;
     explanation: string;
     recommendation: string;
     passed: boolean;
   };
 }) {
   const hasScores = Object.keys(result.scores).length > 0;
+  const pillarKeys = Object.keys(GRACE_PILLAR_LABELS);
+  const hasPillarSummaries = pillarKeys.some(
+    (k) => result.pillarSummaries?.[k]?.trim(),
+  );
 
   return (
     <div
       className={`rounded-lg border p-4 space-y-3 ${result.passed
-          ? "bg-green-50 border-green-200"
-          : "bg-amber-50 border-amber-200"
+        ? "bg-green-50 border-green-200"
+        : "bg-amber-50 border-amber-200"
         }`}
     >
       {/* Header */}
@@ -105,6 +110,24 @@ function GraceResultDisplay({
         </div>
       )}
 
+      {hasPillarSummaries && (
+        <div className="space-y-1.5 border-t border-border/60 pt-2">
+          <p className="text-xs font-medium text-muted-foreground">
+            Pillar feedback
+          </p>
+          {pillarKeys.map((key) => {
+            const sum = result.pillarSummaries?.[key]?.trim();
+            if (!sum) return null;
+            return (
+              <p key={key} className="text-xs text-muted-foreground leading-relaxed">
+                <span className="font-semibold text-foreground">{key}</span>{" "}
+                ({GRACE_PILLAR_LABELS[key]}): {sum}
+              </p>
+            );
+          })}
+        </div>
+      )}
+
       {/* Explanation */}
       {result.explanation && (
         <div className="text-sm text-muted-foreground whitespace-pre-line leading-relaxed">
@@ -138,6 +161,7 @@ interface Course {
 
 interface GraceResult {
   scores: Record<string, number>;
+  pillarSummaries?: Record<string, string>;
   explanation: string;
   recommendation: string;
   passed: boolean;
@@ -417,6 +441,7 @@ export function CourseDescriptionForm({
       } else {
         setGraceForCourse(courseId, {
           scores: {},
+          pillarSummaries: {},
           explanation: "Compliance check failed. Please try again.",
           recommendation: "",
           passed: false,
@@ -425,6 +450,7 @@ export function CourseDescriptionForm({
     } catch {
       setGraceForCourse(courseId, {
         scores: {},
+        pillarSummaries: {},
         explanation:
           "Could not reach the GRACE compliance server. Please try again later.",
         recommendation: "",
