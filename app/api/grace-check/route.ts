@@ -1,45 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { GRACE_VISION_SPACE_URL, parseGraceAnalysis } from "@/lib/grace-vision";
 
-const GRACE_API_URL = "https://santacl-grace.hf.space/check-grace";
-
-function parseGraceAnalysis(analysis: unknown) {
-  let scores: Record<string, number> = {};
-  let explanation = "";
-  let recommendation = "";
-
-  let parsed = analysis;
-  if (typeof parsed === "string") {
-    try {
-      parsed = JSON.parse(parsed);
-    } catch {
-      const jsonMatch = (parsed as string).match(/```json\s*([\s\S]*?)```/);
-      if (jsonMatch) {
-        try { parsed = JSON.parse(jsonMatch[1]); } catch { /* keep as string */ }
-      }
-    }
-  }
-
-  if (typeof parsed === "object" && parsed !== null) {
-    const obj = parsed as Record<string, unknown>;
-    if (Array.isArray(obj.GRACE_PILLARS)) {
-      obj.GRACE_PILLARS.forEach((p: { pillar?: string; score?: number }) => {
-        if (p?.pillar && typeof p.score === "number") {
-          scores[p.pillar] = p.score;
-        }
-      });
-    } else if (typeof obj.GRACE_PILLARS === "object" && obj.GRACE_PILLARS) {
-      scores = obj.GRACE_PILLARS as Record<string, number>;
-    }
-    explanation = (obj.Vision_Alignment || obj.Explanation || "") as string;
-    recommendation = (obj.Recommendation || "") as string;
-  }
-
-  const scoreValues = Object.values(scores);
-  const passed = scoreValues.length > 0 && scoreValues.every((s) => s >= 3);
-
-  return { scores, explanation, recommendation, passed };
-}
+const GRACE_API_URL = `${GRACE_VISION_SPACE_URL}/check-grace`;
 
 // POST /api/grace-check - Start a GRACE compliance check
 export async function POST(request: NextRequest) {
@@ -67,17 +30,24 @@ export async function POST(request: NextRequest) {
       if (!res.ok) {
         graceResult = {
           scores: {},
+          pillarSummaries: {},
           explanation: "Compliance check failed. Please try again.",
           recommendation: "",
           passed: false,
         };
       } else {
-        const data = await res.json();
-        const analysisData = data.analysis || data;
+        const data = (await res.json()) as {
+          analysis?: unknown;
+          model_used?: string;
+        };
+        const analysisData = data.analysis ?? data;
+        const modelUsed =
+          typeof data.model_used === "string" ? data.model_used : undefined;
         graceResult = analysisData
-          ? parseGraceAnalysis(analysisData)
+          ? parseGraceAnalysis(analysisData, modelUsed)
           : {
               scores: {},
+              pillarSummaries: {},
               explanation: "No analysis returned from server.",
               recommendation: "",
               passed: false,
@@ -86,6 +56,7 @@ export async function POST(request: NextRequest) {
     } catch {
       graceResult = {
         scores: {},
+        pillarSummaries: {},
         explanation:
           "Could not reach the GRACE compliance server. Please try again later.",
         recommendation: "",
@@ -115,10 +86,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(graceResult);
   } catch (error) {
     console.error("GRACE check failed:", error);
-    return NextResponse.json(
-      { error: "GRACE check failed" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "GRACE check failed" }, { status: 500 });
   }
 }
 
@@ -151,9 +119,15 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ error: "submissionId or courseId required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "submissionId or courseId required" },
+      { status: 400 },
+    );
   } catch (error) {
     console.error("Failed to fetch GRACE result:", error);
-    return NextResponse.json({ error: "Failed to fetch GRACE result" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch GRACE result" },
+      { status: 500 },
+    );
   }
 }
