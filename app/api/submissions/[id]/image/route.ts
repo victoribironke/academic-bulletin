@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { checkProfessionalImageFile } from "@/lib/grace-vision";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -52,6 +53,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json(
         { error: "File too large. Maximum size is 5MB." },
         { status: 400 },
+      );
+    }
+
+    const imageCheck = await checkProfessionalImageFile(file);
+    if (!imageCheck.ok) {
+      return NextResponse.json(
+        { error: imageCheck.message },
+        { status: imageCheck.status },
       );
     }
 
