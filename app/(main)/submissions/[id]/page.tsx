@@ -98,6 +98,7 @@ interface Submission {
     philosophyGracePass?: boolean;
     philosophyGrace?: {
       scores: Record<string, number>;
+      pillarSummaries?: Record<string, string>;
       explanation: string;
       recommendation: string;
       passed: boolean;
@@ -243,12 +244,17 @@ function GraceResultPanel({
 }: {
   result: {
     scores: Record<string, number>;
+    pillarSummaries?: Record<string, string>;
     explanation: string;
     recommendation: string;
     passed: boolean;
   };
 }) {
   const hasScores = Object.keys(result.scores).length > 0;
+  const pillarKeys = Object.keys(GRACE_PILLAR_LABELS);
+  const hasPillarSummaries = pillarKeys.some(
+    (k) => result.pillarSummaries?.[k]?.trim(),
+  );
 
   const getScoreColor = (score: number) => {
     if (score >= 4) return "bg-green-500";
@@ -301,6 +307,24 @@ function GraceResultPanel({
                   {score}
                 </span>
               </div>
+            );
+          })}
+        </div>
+      )}
+
+      {hasPillarSummaries && (
+        <div className="space-y-1.5 border-t border-border/60 pt-2">
+          <p className="text-xs font-medium text-muted-foreground">
+            Pillar feedback
+          </p>
+          {pillarKeys.map((key) => {
+            const sum = result.pillarSummaries?.[key]?.trim();
+            if (!sum) return null;
+            return (
+              <p key={key} className="text-xs text-muted-foreground leading-relaxed">
+                <span className="font-semibold text-foreground">{key}</span>{" "}
+                ({GRACE_PILLAR_LABELS[key]}): {sum}
+              </p>
             );
           })}
         </div>
@@ -365,6 +389,7 @@ export default function SubmissionDetailPage({
   const [graceCheckingPhilosophy, setGraceCheckingPhilosophy] = useState(false);
   const [gracePhilosophyResult, setGracePhilosophyResult] = useState<{
     scores: Record<string, number>;
+    pillarSummaries?: Record<string, string>;
     explanation: string;
     recommendation: string;
     passed: boolean;
@@ -783,6 +808,7 @@ export default function SubmissionDetailPage({
       } else {
         setGracePhilosophyResult({
           scores: {},
+          pillarSummaries: {},
           explanation: "Compliance check failed. Please try again.",
           recommendation: "",
           passed: false,
@@ -792,6 +818,7 @@ export default function SubmissionDetailPage({
       if ((err as Error).name === "AbortError") return;
       setGracePhilosophyResult({
         scores: {},
+        pillarSummaries: {},
         explanation:
           "Could not reach the GRACE compliance server. Please try again later.",
         recommendation: "",
