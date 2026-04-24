@@ -43,6 +43,11 @@ interface StaffTableProps {
   disabled?: boolean;
 }
 
+type ImageVerificationFeedback = {
+  status: "success" | "error";
+  message: string;
+};
+
 // Title options
 const titleOptions = [
   { value: "MR", label: "Mr." },
@@ -367,6 +372,8 @@ export function StaffTable({
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [imageStaff, setImageStaff] = useState<StaffMember | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageVerificationFeedback, setImageVerificationFeedback] =
+    useState<ImageVerificationFeedback | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const openImageDialog = (staff: StaffMember | null) => {
@@ -400,12 +407,29 @@ export function StaffTable({
         setAdjunctStaff(updateStaffList);
         setNonAcademicStaff(updateStaffList);
         setImageStaff((prev) => prev ? { ...prev, imageUrl: data.imageUrl } : prev);
+        setImageVerificationFeedback({
+          status: "success",
+          message:
+            data.message ||
+            "Image passed verification and was uploaded successfully.",
+        });
         toast.success("Image uploaded successfully");
       } else {
         const err = await res.json();
+        setImageVerificationFeedback({
+          status: "error",
+          message:
+            err.error ||
+            "Image failed verification. Please upload a clearer professional passport-style photo.",
+        });
         toast.error(err.error || "Failed to upload image");
       }
     } catch {
+      setImageVerificationFeedback({
+        status: "error",
+        message:
+          "Image upload failed due to a network or server issue. Please try again.",
+      });
       toast.error("Failed to upload image");
     } finally {
       setIsUploadingImage(false);
@@ -548,6 +572,35 @@ export function StaffTable({
                 : "Staff Photos"}
             </DialogTitle>
           </DialogHeader>
+          {imageVerificationFeedback && (
+            <Alert
+              variant={
+                imageVerificationFeedback.status === "error"
+                  ? "destructive"
+                  : "default"
+              }
+            >
+              <AlertDescription className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-medium">
+                    Image verification{" "}
+                    {imageVerificationFeedback.status === "success"
+                      ? "passed"
+                      : "failed"}
+                  </p>
+                  <p>{imageVerificationFeedback.message}</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2"
+                  onClick={() => setImageVerificationFeedback(null)}
+                >
+                  Dismiss
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
 
           {!imageStaff ? (
             <div className="flex-1 min-h-0 overflow-y-auto space-y-2 py-2">
