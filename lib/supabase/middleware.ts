@@ -34,11 +34,13 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const pathname = request.nextUrl.pathname;
+  const isLoginRoute = pathname.startsWith("/login");
+  const isInviteFlowRoute =
+    pathname.startsWith("/confirm") || pathname.startsWith("/invite-accept");
+  const isPasswordRecoveryRoute = pathname.startsWith("/forgot-password");
   const isAuthRoute =
-    request.nextUrl.pathname.startsWith("/login") ||
-    request.nextUrl.pathname.startsWith("/confirm") ||
-    request.nextUrl.pathname.startsWith("/invite-accept") ||
-    request.nextUrl.pathname.startsWith("/forgot-password");
+    isLoginRoute || isInviteFlowRoute || isPasswordRecoveryRoute;
   const isApiRoute = request.nextUrl.pathname.startsWith("/api");
 
   if (!user && !isAuthRoute && !isApiRoute) {
@@ -47,7 +49,9 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && isAuthRoute) {
+  // Keep login guest-only, but allow authenticated users to complete
+  // invite/recovery flows on /invite-accept and /confirm.
+  if (user && isLoginRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
