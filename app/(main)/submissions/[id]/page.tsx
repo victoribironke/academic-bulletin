@@ -158,6 +158,12 @@ interface PhaseTransition {
   };
 }
 
+type ImageVerificationFeedback = {
+  role: "dean" | "hod";
+  status: "success" | "error";
+  message: string;
+};
+
 // Updated section structure based on template
 const sections = [
   {
@@ -410,6 +416,8 @@ export default function SubmissionDetailPage({
   const hodFileRef = useRef<HTMLInputElement>(null);
   const [uploadingDean, setUploadingDean] = useState(false);
   const [uploadingHod, setUploadingHod] = useState(false);
+  const [imageVerificationFeedback, setImageVerificationFeedback] =
+    useState<ImageVerificationFeedback | null>(null);
 
   const isOwnDepartment =
     !currentUser ||
@@ -527,12 +535,32 @@ export default function SubmissionDetailPage({
         const data = await res.json();
         setUrl(data.imageUrl);
         setHasChanges(true);
+        setImageVerificationFeedback({
+          role,
+          status: "success",
+          message:
+            data.message ||
+            `${role === "dean" ? "Dean" : "HOD"} photo passed verification and was uploaded successfully.`,
+        });
         toast.success(`${role === "dean" ? "Dean" : "HOD"} photo uploaded`);
       } else {
         const err = await res.json();
+        setImageVerificationFeedback({
+          role,
+          status: "error",
+          message:
+            err.error ||
+            `${role === "dean" ? "Dean" : "HOD"} photo failed verification. Please use a clearer professional passport-style image and try again.`,
+        });
         toast.error(err.error || "Upload failed");
       }
     } catch {
+      setImageVerificationFeedback({
+        role,
+        status: "error",
+        message:
+          "Image upload failed due to a network or server issue. Please try again.",
+      });
       toast.error("Failed to upload image");
     } finally {
       setUploading(false);
@@ -1287,6 +1315,38 @@ export default function SubmissionDetailPage({
                     <p className="text-xs text-muted-foreground">
                       Upload passport-style photos. JPEG, PNG, or WebP, max 5 MB.
                     </p>
+                    {imageVerificationFeedback && (
+                      <Alert
+                        variant={
+                          imageVerificationFeedback.status === "error"
+                            ? "destructive"
+                            : "default"
+                        }
+                      >
+                        <AlertDescription className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-medium">
+                              {imageVerificationFeedback.role === "dean"
+                                ? "Dean"
+                                : "HOD"}{" "}
+                              image verification{" "}
+                              {imageVerificationFeedback.status === "success"
+                                ? "passed"
+                                : "failed"}
+                            </p>
+                            <p>{imageVerificationFeedback.message}</p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2"
+                            onClick={() => setImageVerificationFeedback(null)}
+                          >
+                            Dismiss
+                          </Button>
+                        </AlertDescription>
+                      </Alert>
+                    )}
 
                     {/* Dean Photo */}
                     <div className="space-y-3">
