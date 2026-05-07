@@ -5,6 +5,7 @@ import {
   formatCourseCode,
   isValidCourseCode,
 } from "@/lib/validation/name-format";
+import { getApiUser, requireSubmissionWriteAccess } from "@/lib/api-auth";
 
 // GET /api/courses - Get courses for a submission
 export async function GET(request: Request) {
@@ -119,6 +120,15 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "Invalid semester. Must be 1 or 2" },
         { status: 400 },
+      );
+    }
+
+    const user = await getApiUser();
+    const gate = await requireSubmissionWriteAccess(user, submissionId);
+    if (!gate.ok) {
+      return NextResponse.json(
+        { error: gate.message },
+        { status: gate.status },
       );
     }
 
