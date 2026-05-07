@@ -202,23 +202,23 @@ export default function DashboardPage() {
 
   const statusPieData = stats
     ? [
-        { name: "Draft", value: stats.submissions.draft, color: "#94a3b8" },
-        {
-          name: "In Review",
-          value: stats.submissions.inReview,
-          color: "#3b82f6",
-        },
-        {
-          name: "Approved",
-          value: stats.submissions.approved,
-          color: "#10b981",
-        },
-        {
-          name: "Rejected",
-          value: stats.submissions.rejected,
-          color: "#ef4444",
-        },
-      ].filter((d) => d.value > 0)
+      { name: "Draft", value: stats.submissions.draft, color: "#94a3b8" },
+      {
+        name: "In Review",
+        value: stats.submissions.inReview,
+        color: "var(--primary)",
+      },
+      {
+        name: "Approved",
+        value: stats.submissions.approved,
+        color: "#10b981",
+      },
+      {
+        name: "Rejected",
+        value: stats.submissions.rejected,
+        color: "#ef4444",
+      },
+    ].filter((d) => d.value > 0)
     : [];
 
   return (
@@ -268,7 +268,7 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">In Review</CardTitle>
-            <AlertCircle className="h-4 w-4 text-blue-500" />
+            <AlertCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -294,7 +294,7 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Open Comments</CardTitle>
-            <MessageSquare className="h-4 w-4 text-yellow-500" />
+            <MessageSquare className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats?.openComments || 0}</div>
@@ -338,7 +338,11 @@ export default function DashboardPage() {
                       return null;
                     }}
                   />
-                  <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  <Bar
+                    dataKey="count"
+                    fill="var(--primary)"
+                    radius={[4, 4, 0, 0]}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -407,20 +411,19 @@ export default function DashboardPage() {
                   {stats.recentActivity.map((activity) => (
                     <div key={activity.id} className="flex items-start gap-3">
                       <div
-                        className={`p-2 rounded-full ${
-                          activity.action === "APPROVE"
-                            ? "bg-green-100"
-                            : activity.action === "REJECT"
-                              ? "bg-red-100"
-                              : "bg-blue-100"
-                        }`}
+                        className={`rounded-full p-2 ${activity.action === "APPROVE"
+                          ? "bg-green-100"
+                          : activity.action === "REJECT"
+                            ? "bg-red-100"
+                            : "bg-muted"
+                          }`}
                       >
                         {activity.action === "APPROVE" ? (
                           <CheckCircle className="h-4 w-4 text-green-600" />
                         ) : activity.action === "REJECT" ? (
                           <XCircle className="h-4 w-4 text-red-600" />
                         ) : (
-                          <Clock className="h-4 w-4 text-blue-600" />
+                          <Clock className="h-4 w-4 text-muted-foreground" />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -456,184 +459,184 @@ export default function DashboardPage() {
 
         {/* Organization Stats */}
         {(currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN") && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Organization Overview</CardTitle>
-            <CardDescription>System data summary</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-4">
-              <Link href="/academic-units">
-                <div className="flex items-center gap-3 p-4 rounded-lg border hover:bg-muted transition-colors">
-                  <School className="h-8 w-8 text-blue-500" />
-                  <div>
-                    <p className="text-2xl font-bold">
-                      {stats?.organization.schools || 0}
-                    </p>
-                    <p className="text-sm text-muted-foreground">Schools</p>
-                  </div>
-                </div>
-              </Link>
-              <Link href="/academic-units">
-                <div className="flex items-center gap-3 p-4 rounded-lg border hover:bg-muted transition-colors">
-                  <Building2 className="h-8 w-8 text-green-500" />
-                  <div>
-                    <p className="text-2xl font-bold">
-                      {stats?.organization.departments || 0}
-                    </p>
-                    <p className="text-sm text-muted-foreground">Departments</p>
-                  </div>
-                </div>
-              </Link>
-              <Link href="/academic-units">
-                <div className="flex items-center gap-3 p-4 rounded-lg border hover:bg-muted transition-colors">
-                  <GraduationCap className="h-8 w-8 text-purple-500" />
-                  <div>
-                    <p className="text-2xl font-bold">
-                      {stats?.organization.programmes || 0}
-                    </p>
-                    <p className="text-sm text-muted-foreground">Programmes</p>
-                  </div>
-                </div>
-              </Link>
-              <Link href="/users">
-                <div className="flex items-center gap-3 p-4 rounded-lg border hover:bg-muted transition-colors">
-                  <Users className="h-8 w-8 text-orange-500" />
-                  <div>
-                    <p className="text-2xl font-bold">
-                      {stats?.organization.users || 0}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Active Users
-                    </p>
-                  </div>
-                </div>
-              </Link>
-              {(currentUser?.role === "ADMIN" ||
-                currentUser?.role === "SUPER_ADMIN" ||
-                currentUser?.role === "DEAN" ||
-                currentUser?.role === "HOD") && (
-                <Link href="/master-courses">
-                  <div className="flex items-center gap-3 p-4 rounded-lg border hover:bg-muted transition-colors col-span-2 md:col-span-1">
-                    <BookOpen className="h-8 w-8 text-indigo-500" />
+          <Card>
+            <CardHeader>
+              <CardTitle>Organization Overview</CardTitle>
+              <CardDescription>System data summary</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4">
+                <Link href="/academic-units">
+                  <div className="flex items-center gap-3 p-4 rounded-lg border hover:bg-muted transition-colors">
+                    <School className="h-8 w-8 text-muted-foreground" />
                     <div>
-                      <p className="text-lg font-bold">Master Courses</p>
+                      <p className="text-2xl font-bold">
+                        {stats?.organization.schools || 0}
+                      </p>
+                      <p className="text-sm text-muted-foreground">Schools</p>
+                    </div>
+                  </div>
+                </Link>
+                <Link href="/academic-units">
+                  <div className="flex items-center gap-3 p-4 rounded-lg border hover:bg-muted transition-colors">
+                    <Building2 className="h-8 w-8 text-muted-foreground" />
+                    <div>
+                      <p className="text-2xl font-bold">
+                        {stats?.organization.departments || 0}
+                      </p>
+                      <p className="text-sm text-muted-foreground">Departments</p>
+                    </div>
+                  </div>
+                </Link>
+                <Link href="/academic-units">
+                  <div className="flex items-center gap-3 p-4 rounded-lg border hover:bg-muted transition-colors">
+                    <GraduationCap className="h-8 w-8 text-muted-foreground" />
+                    <div>
+                      <p className="text-2xl font-bold">
+                        {stats?.organization.programmes || 0}
+                      </p>
+                      <p className="text-sm text-muted-foreground">Programmes</p>
+                    </div>
+                  </div>
+                </Link>
+                <Link href="/users">
+                  <div className="flex items-center gap-3 p-4 rounded-lg border hover:bg-muted transition-colors">
+                    <Users className="h-8 w-8 text-muted-foreground" />
+                    <div>
+                      <p className="text-2xl font-bold">
+                        {stats?.organization.users || 0}
+                      </p>
                       <p className="text-sm text-muted-foreground">
-                        Manage Registry
+                        Active Users
                       </p>
                     </div>
                   </div>
                 </Link>
-              )}
+                {(currentUser?.role === "ADMIN" ||
+                  currentUser?.role === "SUPER_ADMIN" ||
+                  currentUser?.role === "DEAN" ||
+                  currentUser?.role === "HOD") && (
+                    <Link href="/master-courses">
+                      <div className="flex items-center gap-3 p-4 rounded-lg border hover:bg-muted transition-colors col-span-2 md:col-span-1">
+                        <BookOpen className="h-8 w-8 text-muted-foreground" />
+                        <div>
+                          <p className="text-lg font-bold">Master Courses</p>
+                          <p className="text-sm text-muted-foreground">
+                            Manage Registry
+                          </p>
+                        </div>
+                      </div>
+                    </Link>
+                  )}
 
-              {(currentUser?.role === "ADMIN" ||
-                currentUser?.role === "SUPER_ADMIN" ||
-                currentUser?.role === "DEAN") && (
-                <Link href="/bulletins">
-                  <div className="flex items-center gap-3 p-4 rounded-lg border hover:bg-muted transition-colors col-span-2 md:col-span-1">
-                    <BookOpen className="h-8 w-8 text-indigo-500" />
-                    <div>
-                      <p className="text-lg font-bold">Academic Bulletins</p>
-                      <p className="text-sm text-muted-foreground">
-                        Generate Reports
-                      </p>
-                    </div>
-                  </div>
-                </Link>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                {(currentUser?.role === "ADMIN" ||
+                  currentUser?.role === "SUPER_ADMIN" ||
+                  currentUser?.role === "DEAN") && (
+                    <Link href="/bulletins">
+                      <div className="flex items-center gap-3 p-4 rounded-lg border hover:bg-muted transition-colors col-span-2 md:col-span-1">
+                        <BookOpen className="h-8 w-8 text-muted-foreground" />
+                        <div>
+                          <p className="text-lg font-bold">Academic Bulletins</p>
+                          <p className="text-sm text-muted-foreground">
+                            Generate Reports
+                          </p>
+                        </div>
+                      </div>
+                    </Link>
+                  )}
+              </div>
+            </CardContent>
+          </Card>
         )}
       </div>
 
       {/* Admin Cycle Management */}
       {(currentUser?.role === "ADMIN" ||
         currentUser?.role === "SUPER_ADMIN") && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Review Cycles Management
-            </CardTitle>
-            <CardDescription>
-              Create and manage academic bulletin review cycles. Only one cycle
-              can be active at a time.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              <div className="flex gap-3">
-                <Input
-                  placeholder="Cycle Name (e.g. 2024-2028 Academic Bulletin)"
-                  value={newCycleName}
-                  onChange={(e) => setNewCycleName(e.target.value)}
-                  className="max-w-sm"
-                />
-                <Button
-                  onClick={handleCreateCycle}
-                  disabled={isCreatingCycle || !newCycleName.trim()}
-                >
-                  {isCreatingCycle ? "Creating..." : "Start New Cycle"}
-                </Button>
-              </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Review Cycles Management
+              </CardTitle>
+              <CardDescription>
+                Create and manage academic bulletin review cycles. Only one cycle
+                can be active at a time.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                <div className="flex gap-3">
+                  <Input
+                    placeholder="Cycle Name (e.g. 2024-2028 Academic Bulletin)"
+                    value={newCycleName}
+                    onChange={(e) => setNewCycleName(e.target.value)}
+                    className="max-w-sm"
+                  />
+                  <Button
+                    onClick={handleCreateCycle}
+                    disabled={isCreatingCycle || !newCycleName.trim()}
+                  >
+                    {isCreatingCycle ? "Creating..." : "Start New Cycle"}
+                  </Button>
+                </div>
 
-              {cycles.length > 0 ? (
-                <div className="rounded-md border">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/50 text-left text-muted-foreground">
-                        <th className="p-3 font-medium">Name</th>
-                        <th className="p-3 font-medium">Status</th>
-                        <th className="p-3 font-medium">Started At</th>
-                        <th className="p-3 font-medium text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {cycles.map((cycle) => (
-                        <tr
-                          key={cycle.id}
-                          className="border-b last:border-0 hover:bg-muted/50"
-                        >
-                          <td className="p-3 font-medium">{cycle.name}</td>
-                          <td className="p-3">
-                            {cycle.isActive ? (
-                              <Badge className="bg-green-500">Active</Badge>
-                            ) : (
-                              <Badge variant="secondary">Closed</Badge>
-                            )}
-                          </td>
-                          <td className="p-3 text-muted-foreground">
-                            {new Date(cycle.startedAt).toLocaleDateString()}
-                          </td>
-                          <td className="p-3 text-right">
-                            <Button
-                              variant={
-                                cycle.isActive ? "destructive" : "outline"
-                              }
-                              size="sm"
-                              onClick={() =>
-                                handleToggleCycle(cycle.id, cycle.isActive)
-                              }
-                            >
-                              <Power className="mr-2 h-3 w-3" />
-                              {cycle.isActive ? "Close Cycle" : "Reopen Cycle"}
-                            </Button>
-                          </td>
+                {cycles.length > 0 ? (
+                  <div className="rounded-md border">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50 text-left text-muted-foreground">
+                          <th className="p-3 font-medium">Name</th>
+                          <th className="p-3 font-medium">Status</th>
+                          <th className="p-3 font-medium">Started At</th>
+                          <th className="p-3 font-medium text-right">Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground border-t pt-4">
-                  No review cycles have been created yet.
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                      </thead>
+                      <tbody>
+                        {cycles.map((cycle) => (
+                          <tr
+                            key={cycle.id}
+                            className="border-b last:border-0 hover:bg-muted/50"
+                          >
+                            <td className="p-3 font-medium">{cycle.name}</td>
+                            <td className="p-3">
+                              {cycle.isActive ? (
+                                <Badge className="bg-green-500">Active</Badge>
+                              ) : (
+                                <Badge variant="secondary">Closed</Badge>
+                              )}
+                            </td>
+                            <td className="p-3 text-muted-foreground">
+                              {new Date(cycle.startedAt).toLocaleDateString()}
+                            </td>
+                            <td className="p-3 text-right">
+                              <Button
+                                variant={
+                                  cycle.isActive ? "destructive" : "outline"
+                                }
+                                size="sm"
+                                onClick={() =>
+                                  handleToggleCycle(cycle.id, cycle.isActive)
+                                }
+                              >
+                                <Power className="mr-2 h-3 w-3" />
+                                {cycle.isActive ? "Close Cycle" : "Reopen Cycle"}
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground border-t pt-4">
+                    No review cycles have been created yet.
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
     </div>
   );
 }
