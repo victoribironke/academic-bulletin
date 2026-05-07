@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { checkProfessionalImageFile } from "@/lib/grace-vision";
+import { getApiUser, requireSubmissionWriteAccess } from "@/lib/api-auth";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -23,6 +24,15 @@ interface RouteParams {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
+
+    const user = await getApiUser();
+    const gate = await requireSubmissionWriteAccess(user, id);
+    if (!gate.ok) {
+      return NextResponse.json(
+        { error: gate.message },
+        { status: gate.status },
+      );
+    }
 
     const formData = await request.formData();
     const file = formData.get("image") as File | null;
