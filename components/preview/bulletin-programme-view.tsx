@@ -278,7 +278,7 @@ export function BulletinProgrammeView({
                   <TableCell className="font-bold">
                     {programme.courses.filter(c => c.status === "ELECTIVE").reduce((acc, c) => acc + c.units, 0)}
                   </TableCell>
-                  <TableCell className="font-bold text-primary text-base">
+                  <TableCell className="text-base font-semibold text-foreground">
                     {programme.courses.reduce((sum, c) => sum + c.units, 0)}
                   </TableCell>
                 </TableRow>
@@ -430,23 +430,23 @@ export function BulletinProgrammeView({
             .sort((a, b) => a.code.localeCompare(b.code))
             .filter((c) => c.description?.courseContent || (c.description?.learningOutcomes && c.description.learningOutcomes.length > 0))
             .map((course) => (
-            <div key={course.code} className="mb-4">
-              <h3 className="font-semibold">{course.code} - {course.title} ({course.units} Units)</h3>
-              {course.description?.courseContent && (
-                <div className="mt-1 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: course.description.courseContent }} />
-              )}
-              {course.description?.learningOutcomes && course.description.learningOutcomes.length > 0 && (
-                <div className="mt-2 text-sm text-muted-foreground">
-                  <strong>Learning Outcomes:</strong>
-                  <ul className="list-disc list-inside mt-1">
-                    {course.description.learningOutcomes.map((outcome, i) => (
-                      <li key={i}>{outcome}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          ))}
+              <div key={course.code} className="mb-4">
+                <h3 className="font-semibold">{course.code} - {course.title} ({course.units} Units)</h3>
+                {course.description?.courseContent && (
+                  <div className="mt-1 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: course.description.courseContent }} />
+                )}
+                {course.description?.learningOutcomes && course.description.learningOutcomes.length > 0 && (
+                  <div className="mt-2 text-sm text-muted-foreground">
+                    <strong>Learning Outcomes:</strong>
+                    <ul className="list-disc list-inside mt-1">
+                      {course.description.learningOutcomes.map((outcome, i) => (
+                        <li key={i}>{outcome}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ))}
           {programme.courses.filter((c) => c.description?.courseContent || (c.description?.learningOutcomes && c.description.learningOutcomes.length > 0)).length === 0 && (
             <p className="text-muted-foreground italic">No course descriptions provided.</p>
           )}
@@ -476,7 +476,7 @@ export function BulletinProgrammeView({
           <h2 className="text-lg font-bold mb-3 border-b pb-1">
             REGULATIONS & SUMMARY OF CHANGES
           </h2>
-          
+
           {programme.content?.sectionF?.content && (
             <div className="mb-4">
               <h3 className="font-semibold mb-2">Programme Regulations</h3>
