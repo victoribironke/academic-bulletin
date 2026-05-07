@@ -9,7 +9,6 @@ import {
   FileText,
   Users,
   Network,
-  GraduationCap,
 } from "lucide-react";
 
 interface NavItem {
@@ -23,25 +22,25 @@ const navItems: NavItem[] = [
   {
     title: "Dashboard",
     href: "/dashboard",
-    icon: <LayoutDashboard className="h-5 w-5" />,
+    icon: <LayoutDashboard className="h-5 w-5 shrink-0" />,
     permission: "view:dashboard",
   },
   {
     title: "Submissions",
     href: "/submissions",
-    icon: <FileText className="h-5 w-5" />,
+    icon: <FileText className="h-5 w-5 shrink-0" />,
     permission: "view:submissions",
   },
   {
     title: "Academic Units",
     href: "/academic-units",
-    icon: <Network className="h-5 w-5" />,
+    icon: <Network className="h-5 w-5 shrink-0" />,
     permission: "view:schools",
   },
   {
     title: "Users",
     href: "/users",
-    icon: <Users className="h-5 w-5" />,
+    icon: <Users className="h-5 w-5 shrink-0" />,
     permission: "view:users",
   },
 ];
@@ -54,28 +53,27 @@ export function SidebarContent() {
   const submissionsHref =
     currentUser?.role === "HOD" ? "/submissions/me" : "/submissions";
 
-  // Filter nav items based on user permissions
   const visibleNavItems = navItems.filter(
     (item) => !item.permission || hasPermission(item.permission),
   );
 
   return (
     <>
-      {/* Logo/Brand */}
-      <div className="flex h-16 shrink-0 items-center border-b px-6">
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <GraduationCap className="h-8 w-8 text-primary" />
-          <div className="flex flex-col">
-            <span className="text-sm font-bold leading-none">Academic</span>
-            <span className="text-xs text-muted-foreground">
-              Bulletin System
-            </span>
-          </div>
+      <div className="shrink-0 border-b border-sidebar-border px-4 py-4">
+        <Link
+          href="/dashboard"
+          className="block rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <span className="block pl-3 text-sm font-semibold leading-snug text-foreground">
+            Academic Bulletin
+          </span>
+          <span className="mt-1 block pl-3 text-xs text-muted-foreground">
+            Babcock University
+          </span>
         </Link>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 space-y-1 overflow-y-auto p-4">
+      <nav className="flex-1 space-y-2 overflow-y-auto p-3">
         {visibleNavItems.map((item) => {
           const href =
             item.href === "/submissions" ? submissionsHref : item.href;
@@ -90,10 +88,10 @@ export function SidebarContent() {
               key={item.title}
               href={href}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-3 border-l-2 py-2.5 pl-3 pr-2 text-sm font-medium transition-colors",
                 isActive
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  ? "border-primary bg-muted/80 text-foreground"
+                  : "border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
               )}
             >
               {item.icon}
@@ -103,11 +101,10 @@ export function SidebarContent() {
         })}
       </nav>
 
-      {/* Footer - Phase indicator */}
-      <div className="shrink-0 border-t p-4">
+      <div className="shrink-0 border-t border-sidebar-border p-4">
         <div className="text-xs text-muted-foreground">
-          <p className="font-medium">Review Cycle</p>
-          <p>2027-2031</p>
+          <p className="font-medium text-foreground/80">Review cycle</p>
+          <p>2027–2031</p>
         </div>
       </div>
     </>
@@ -116,7 +113,7 @@ export function SidebarContent() {
 
 export function Sidebar() {
   return (
-    <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 flex-col border-r bg-card md:flex">
+    <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 flex-col border-r border-sidebar-border bg-sidebar md:flex">
       <SidebarContent />
     </aside>
   );
