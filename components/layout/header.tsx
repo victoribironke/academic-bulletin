@@ -58,7 +58,10 @@ export function Header() {
               <Menu className="h-5 w-5" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="p-0 w-64 flex flex-col bg-card">
+          <SheetContent
+            side="left"
+            className="flex w-64 flex-col border-r border-sidebar-border bg-sidebar p-0"
+          >
             <SidebarContent />
           </SheetContent>
         </Sheet>
@@ -86,7 +89,7 @@ export function Header() {
               ) : currentUser ? (
                 <>
                   <Avatar className="h-8 w-8">
-                    <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                    <AvatarFallback className="bg-muted text-xs font-medium text-muted-foreground">
                       {getInitials(currentUser.firstName, currentUser.lastName)}
                     </AvatarFallback>
                   </Avatar>
