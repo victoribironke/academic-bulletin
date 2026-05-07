@@ -5,6 +5,7 @@ import {
   formatCourseCode,
   isValidCourseCode,
 } from "@/lib/validation/name-format";
+import { getApiUser, requireSubmissionWriteAccess } from "@/lib/api-auth";
 
 // GET /api/courses/[id] - Get single course with description
 export async function GET(
@@ -76,6 +77,18 @@ export async function PATCH(
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
     }
 
+    const user = await getApiUser();
+    const gate = await requireSubmissionWriteAccess(
+      user,
+      existing.submissionId,
+    );
+    if (!gate.ok) {
+      return NextResponse.json(
+        { error: gate.message },
+        { status: gate.status },
+      );
+    }
+
     // Validate course code if provided
     if (code !== undefined && !isValidCourseCode(code)) {
       return NextResponse.json(
@@ -145,6 +158,18 @@ export async function DELETE(
     const existing = await prisma.course.findUnique({ where: { id } });
     if (!existing) {
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
+    }
+
+    const user = await getApiUser();
+    const gate = await requireSubmissionWriteAccess(
+      user,
+      existing.submissionId,
+    );
+    if (!gate.ok) {
+      return NextResponse.json(
+        { error: gate.message },
+        { status: gate.status },
+      );
     }
 
     // Delete course (cascades to description)
