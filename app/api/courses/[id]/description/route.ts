@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { getApiUser, requireSubmissionWriteAccess } from "@/lib/api-auth";
 
 // GET /api/courses/[id]/description - Get course description
 export async function GET(
@@ -65,6 +66,15 @@ export async function PUT(
 
     if (!course) {
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
+    }
+
+    const user = await getApiUser();
+    const gate = await requireSubmissionWriteAccess(user, course.submissionId);
+    if (!gate.ok) {
+      return NextResponse.json(
+        { error: gate.message },
+        { status: gate.status },
+      );
     }
 
     const data = {
