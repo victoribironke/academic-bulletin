@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getApiUser, canWriteSubmission } from "@/lib/api-auth";
+import { getApiUser, requireSubmissionWriteAccess } from "@/lib/api-auth";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -97,14 +97,12 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     // Server-side ownership check
     const user = await getApiUser();
-    if (user && user.role === "HOD") {
-      const allowed = await canWriteSubmission(user, id);
-      if (!allowed) {
-        return NextResponse.json(
-          { error: "You can only edit your own department's submissions" },
-          { status: 403 },
-        );
-      }
+    const gate = await requireSubmissionWriteAccess(user, id);
+    if (!gate.ok) {
+      return NextResponse.json(
+        { error: gate.message },
+        { status: gate.status },
+      );
     }
 
     // Update submission
@@ -250,6 +248,14 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
+
+    const user = await getApiUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (user.role !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     await prisma.submission.delete({
       where: { id },
