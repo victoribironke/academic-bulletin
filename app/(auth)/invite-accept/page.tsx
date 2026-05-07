@@ -3,7 +3,7 @@
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Building2 } from "lucide-react";
+import { BrandedShell } from "@/components/auth/branded-shell";
 
 function InviteContent() {
   const [isLoading, setIsLoading] = useState(false);
@@ -13,7 +13,7 @@ function InviteContent() {
   const supabase = createClient();
 
   const tokenHash = searchParams.get("token_hash");
-  const typeParam = searchParams.get("type") || "invite"; // default to invite
+  const typeParam = searchParams.get("type") || "invite";
 
   const handleAccept = async () => {
     if (!tokenHash) {
@@ -36,8 +36,6 @@ function InviteContent() {
         return;
       }
 
-      // Verification successful. User has an active session now.
-      // Redirect them to set their permanent password.
       router.push("/confirm");
     } catch (err) {
       console.error(err);
@@ -47,39 +45,39 @@ function InviteContent() {
   };
 
   return (
-    <div className="flex bg-background min-h-screen items-center justify-center p-4">
-      <div className="w-full max-w-md p-8 space-y-8 bg-card rounded-xl border shadow-sm text-center">
-        <div className="flex justify-center mb-4">
-          <div className="p-3 bg-primary/10 rounded-full">
-            <Building2 className="h-8 w-8 text-primary" />
-          </div>
-        </div>
-        <div className="space-y-2">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            {typeParam === "recovery" ? "Password Recovery" : "System Invitation"}
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            {typeParam === "recovery" 
-              ? "Click below to verify your password reset request securely."
-              : "You have been invited to join the Academic Bulletin Management System."}
-          </p>
-        </div>
-
-        {error && (
-          <div className="p-3 text-sm font-medium text-destructive bg-destructive/10 rounded-md">
-            {error}
-          </div>
-        )}
-
-        <button
-          onClick={handleAccept}
-          disabled={isLoading || !tokenHash}
-          className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full"
-        >
-          {isLoading ? "Verifying..." : typeParam === "recovery" ? "Verify Request & Continue" : "Accept Invitation & Continue"}
-        </button>
+    <BrandedShell>
+      <div className="space-y-2 text-center">
+        <h1 className="text-2xl font-semibold tracking-tight text-primary">
+          {typeParam === "recovery"
+            ? "Verify reset request"
+            : "Accept your invitation"}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {typeParam === "recovery"
+            ? "Confirm this request to choose a new password."
+            : "Complete setup for your Academic Bulletin account."}
+        </p>
       </div>
-    </div>
+
+      {error && (
+        <div className="mt-6 rounded-md bg-destructive/10 p-3 text-center text-sm font-medium text-destructive">
+          {error}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={handleAccept}
+        disabled={isLoading || !tokenHash}
+        className="mt-8 inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+      >
+        {isLoading
+          ? "Verifying..."
+          : typeParam === "recovery"
+            ? "Continue"
+            : "Continue"}
+      </button>
+    </BrandedShell>
   );
 }
 
@@ -87,8 +85,8 @@ export default function InviteAcceptPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center">
-          <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         </div>
       }
     >
