@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { DynamicTable, Column } from "./dynamic-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -119,7 +119,7 @@ export function CourseTable({
   disabled = false,
   onValidationChange,
 }: CourseTableProps) {
-  const LEVELS = Array.from({ length: programmeDuration }, (_, i) => (i + 1) * 100);
+  const LEVELS = useMemo(() => Array.from({ length: programmeDuration }, (_, i) => (i + 1) * 100), [programmeDuration]);
 
   const [coursesByLevel, setCoursesByLevel] = useState<Record<number, Course[]>>(() => {
     const initial: Record<number, Course[]> = {};

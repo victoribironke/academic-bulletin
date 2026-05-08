@@ -18,8 +18,8 @@ function createPrismaClient() {
       ssl: {
         rejectUnauthorized: false,
       },
-      // Limit pool size for serverless environments
-      max: 1, // Only 1 connection per serverless function instance
+      // Keep pool small to stay within PgBouncer limits
+      max: 5, // Enough concurrency for Docker; stays well under PgBouncer's 15
       idleTimeoutMillis: 10000, // Close idle connections after 10 seconds
       connectionTimeoutMillis: 10000, // Timeout after 10 seconds if can't connect
     });
