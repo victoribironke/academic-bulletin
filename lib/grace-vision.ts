@@ -148,7 +148,12 @@ export type ImageCheckFailure = {
 };
 
 /**
- * Calls POST /check-image (multipart field `file`) before storage upload.
+ * Server-side: calls GRACE's POST /check-image directly via the internal
+ * Docker URL (GRACE_VISION_SPACE_URL). Used by API routes like
+ * /api/submissions/[id]/image and /api/staff/[id]/image.
+ *
+ * Browser-side callers should use /api/image-check (the proxy route) instead,
+ * since the Docker-internal hostname is unreachable from the browser.
  */
 export async function checkProfessionalImageFile(
   file: File,
