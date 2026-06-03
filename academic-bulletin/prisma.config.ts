@@ -2,10 +2,10 @@ import { defineConfig, env } from "prisma/config";
 import "dotenv/config";
 
 // ---- ADD THESE DEBUG LOGS ----
-console.log("--- DEBUG PRISMA ENVIRONMENT ---");
-console.log("process.env.DIRECT_URL:", process.env.DIRECT_URL);
-console.log("process.env.DATABASE_URL:", process.env.DATABASE_URL);
-console.log("--------------------------------");
+// console.log("--- DEBUG PRISMA ENVIRONMENT ---");
+// console.log("process.env.DIRECT_URL:", process.env.DIRECT_URL);
+// console.log("process.env.DATABASE_URL:", process.env.DATABASE_URL);
+// console.log("--------------------------------");
 
 
 export default defineConfig({
