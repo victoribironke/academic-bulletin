@@ -1,0 +1,30 @@
+services:
+  academic-bulletin:
+    build:
+      context: ./academic-bulletin
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - DIRECT_URL=${DIRECT_URL}
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - GRACE_VISION_SPACE_URL=http://grace:7860
+    depends_on:
+      grace:
+        condition: service_started
+    restart: unless-stopped
+
+  grace:
+    build:
+      context: ./GRACE
+      dockerfile: Dockerfile
+    # GRACE is only reachable internally by academic-bulletin via Docker networking.
+    # Uncomment below for direct debugging access:
+    # ports:
+    #   - "7860:7860"
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    restart: unless-stopped

@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { User, hasPermission, hasAnyPermission, Permission } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/client";
+import { AuthChangeEvent } from "@supabase/supabase-js";
 
 interface UserContextType {
   currentUser: User | null;
@@ -51,7 +52,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
+    } = supabase.auth.onAuthStateChange((event: AuthChangeEvent) => {
       if (event === "SIGNED_OUT") {
         setCurrentUser(null);
       } else if (event === "SIGNED_IN") {
