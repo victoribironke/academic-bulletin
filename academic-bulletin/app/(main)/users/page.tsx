@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { usePermission, useUser } from "@/contexts/user-context";
 import { useRouter } from "next/navigation";
 import { getRoleDisplayName } from "@/lib/auth";
@@ -76,6 +76,7 @@ export default function UsersPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
+  const [roleUpdatingUserId, setRoleUpdatingUserId] = useState<string | null>(null);
   const [filterRole, setFilterRole] = useState<string>("all");
   const { hasPermission } = usePermission();
   const { currentUser } = useUser();
@@ -106,9 +107,6 @@ export default function UsersPage() {
       }
       if (deptsRes.ok) {
         const data = await deptsRes.json();
-        // The API returns nested 'school' objects, we just need basic fields plus schoolId
-        // which might not be at the top level in GET /api/departments natively, but wait...
-        // let's just use what's returned.
         setDepartments(data);
       }
     } catch (err) {
@@ -146,6 +144,7 @@ export default function UsersPage() {
   const handleRoleChange = async (user: User, newRole: string) => {
     if (!canManage) return;
 
+    setRoleUpdatingUserId(user.id);
     try {
       const response = await fetch(`/api/users/${user.id}`, {
         method: "PATCH",
@@ -158,6 +157,8 @@ export default function UsersPage() {
       }
     } catch (err) {
       console.error("Failed to update user role:", err);
+    } finally {
+      setRoleUpdatingUserId(null);
     }
   };
 
@@ -180,6 +181,156 @@ export default function UsersPage() {
 
   const filteredUsers =
     filterRole === "all" ? users : users.filter((u) => u.role === filterRole);
+
+  const userTable = useMemo(() => (
+    filteredUsers.length === 0 ? (
+      <div className="text-center py-8 text-muted-foreground">
+        No users found matching the filter.
+      </div>
+    ) : (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>User</TableHead>
+            <TableHead>Role</TableHead>
+            <TableHead>School</TableHead>
+            <TableHead>Department</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filteredUsers.map((user) => (
+            <TableRow
+              key={user.id}
+              className={!user.isActive ? "opacity-50" : ""}
+            >
+              <TableCell>
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="text-xs">
+                      {getInitials(user.firstName, user.lastName)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <div className="font-medium">
+                      {user.firstName} {user.lastName}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {user.email}
+                    </div>
+                  </div>
+                </div>
+              </TableCell>
+              <TableCell>
+                {canManage &&
+                (isSuperAdmin ||
+                  getRoleTier(currentUser!.role) > getRoleTier(user.role)) ? (
+                  <Select
+                    value={user.role}
+                    onValueChange={(value) =>
+                      handleRoleChange(user, value)
+                    }
+                    disabled={roleUpdatingUserId === user.id}
+                  >
+                    <SelectTrigger className="w-40 cursor-pointer [&>span]:truncate">
+                      <SelectValue>
+                        <Badge variant={getRoleBadgeVariant(user.role)}>
+                          {roleUpdatingUserId === user.id ? "Updating..." : user.role.split("_").join(" ")}
+                        </Badge>
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="HOD">
+                        {getRoleDisplayName("HOD")}
+                      </SelectItem>
+                      <SelectItem value="DEAN">
+                        {getRoleDisplayName("DEAN")}
+                      </SelectItem>
+                      <SelectItem value="ADMIN">
+                        {getRoleDisplayName("ADMIN")}
+                      </SelectItem>
+                      {isSuperAdmin && (
+                        <SelectItem value="SUPER_ADMIN">
+                          Super Admin
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Badge variant={getRoleBadgeVariant(user.role)}>
+                    {user.role.split("_").join(" ")}
+                  </Badge>
+                )}
+              </TableCell>
+              <TableCell>
+                {user.school ? (
+                  <Badge variant="outline" className="truncate max-w-[150px]">{user.school.code}</Badge>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </TableCell>
+              <TableCell>
+                {user.department ? (
+                  <Badge variant="outline" className="truncate max-w-[150px]">{user.department.code}</Badge>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </TableCell>
+              <TableCell>
+                {user.isActive ? (
+                  <Badge variant="default" className="bg-green-500">
+                    Active
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary">Inactive</Badge>
+                )}
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex items-center justify-end gap-2">
+                  {canManage && (
+                    <EditUserDialog
+                      user={user}
+                      schools={schools}
+                      departments={departments}
+                      onSuccess={fetchData}
+                    />
+                  )}
+                  {isSuperAdmin && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleToggleActive(user)}
+                      disabled={togglingUserId === user.id}
+                      className="cursor-pointer"
+                    >
+                    {togglingUserId === user.id ? (
+                      <>
+                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                        Processing...
+                      </>
+                    ) : user.isActive ? (
+                      <>
+                        <UserX className="mr-1 h-4 w-4" />
+                        Deactivate
+                      </>
+                    ) : (
+                      <>
+                        <UserCheck className="mr-1 h-4 w-4" />
+                        Activate
+                      </>
+                    )}
+                  </Button>
+                )}
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [filteredUsers, canManage, isSuperAdmin, currentUser, togglingUserId, roleUpdatingUserId, schools, departments]);
 
   if (isLoading) {
     return (
@@ -220,7 +371,7 @@ export default function UsersPage() {
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">Filter by Role:</span>
               <Select value={filterRole} onValueChange={setFilterRole}>
-                <SelectTrigger className="w-48">
+                <SelectTrigger className="w-48 [&>span]:truncate">
                   <SelectValue placeholder="All Roles" />
                 </SelectTrigger>
                 <SelectContent>
@@ -258,151 +409,7 @@ export default function UsersPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {filteredUsers.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No users found matching the filter.
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>School</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredUsers.map((user) => (
-                  <TableRow
-                    key={user.id}
-                    className={!user.isActive ? "opacity-50" : ""}
-                  >
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback className="text-xs">
-                            {getInitials(user.firstName, user.lastName)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="font-medium">
-                            {user.firstName} {user.lastName}
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            {user.email}
-                          </div>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {canManage &&
-                      (isSuperAdmin ||
-                        getRoleTier(currentUser!.role) > getRoleTier(user.role)) ? (
-                        <Select
-                          value={user.role}
-                          onValueChange={(value) =>
-                            handleRoleChange(user, value)
-                          }
-                        >
-                          <SelectTrigger className="w-40 cursor-pointer">
-                            <SelectValue>
-                              <Badge variant={getRoleBadgeVariant(user.role)}>
-                                {user.role.split("_").join(" ")}
-                              </Badge>
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="HOD">
-                              {getRoleDisplayName("HOD")}
-                            </SelectItem>
-                            <SelectItem value="DEAN">
-                              {getRoleDisplayName("DEAN")}
-                            </SelectItem>
-                            <SelectItem value="ADMIN">
-                              {getRoleDisplayName("ADMIN")}
-                            </SelectItem>
-                            {isSuperAdmin && (
-                              <SelectItem value="SUPER_ADMIN">
-                                Super Admin
-                              </SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Badge variant={getRoleBadgeVariant(user.role)}>
-                          {user.role.split("_").join(" ")}
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {user.school ? (
-                        <Badge variant="outline">{user.school.code}</Badge>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {user.department ? (
-                        <Badge variant="outline">{user.department.code}</Badge>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {user.isActive ? (
-                        <Badge variant="default" className="bg-green-500">
-                          Active
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary">Inactive</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        {canManage && (
-                          <EditUserDialog
-                            user={user}
-                            schools={schools}
-                            departments={departments}
-                            onSuccess={fetchData}
-                          />
-                        )}
-                        {isSuperAdmin && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleToggleActive(user)}
-                            disabled={togglingUserId === user.id}
-                            className="cursor-pointer"
-                          >
-                          {togglingUserId === user.id ? (
-                            <>
-                              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                              Processing...
-                            </>
-                          ) : user.isActive ? (
-                            <>
-                              <UserX className="mr-1 h-4 w-4" />
-                              Deactivate
-                            </>
-                          ) : (
-                            <>
-                              <UserCheck className="mr-1 h-4 w-4" />
-                              Activate
-                            </>
-                          )}
-                        </Button>
-                      )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          {userTable}
         </CardContent>
       </Card>
     </div>
