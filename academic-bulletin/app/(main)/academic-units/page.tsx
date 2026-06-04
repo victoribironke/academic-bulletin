@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { usePermission } from "@/contexts/user-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -82,6 +82,9 @@ export default function AcademicUnitsPage() {
 
   const [parentSchoolId, setParentSchoolId] = useState<string | null>(null);
   const [parentDeptId, setParentDeptId] = useState<string | null>(null);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -180,6 +183,7 @@ export default function AcademicUnitsPage() {
 
   const handleSave = async (type: "school" | "department" | "programme") => {
     setError("");
+    setIsSubmitting(true);
     const sanitize = (str: string) => str.replace(/<[^>]*>?/gm, "");
     const baseData = {
       name: sanitize(formData.name),
@@ -233,6 +237,8 @@ export default function AcademicUnitsPage() {
     } catch (err) {
       console.error(err);
       setError(`An unexpected error occurred while saving ${type}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -248,6 +254,7 @@ export default function AcademicUnitsPage() {
     )
       return;
 
+    setDeletingId(id);
     try {
       const url = `/api/${type}s/${id}`;
       const response = await fetch(url, { method: "DELETE" });
@@ -264,34 +271,12 @@ export default function AcademicUnitsPage() {
     } catch (err) {
       console.error(err);
       toast.error(`An unexpected error occurred while deleting ${type}`);
+    } finally {
+      setDeletingId(null);
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
-        Loading academic units...
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Academic Units</h1>
-          <p className="text-muted-foreground">
-            Manage schools, departments, and programmes
-          </p>
-        </div>
-        {canManage && (
-          <Button onClick={() => openSchoolForm()}>
-            <Plus className="mr-2 h-4 w-4" />
-            New School
-          </Button>
-        )}
-      </div>
-
+  const unitTree = useMemo(() => (
       <div className="space-y-4">
         {schools.length === 0 ? (
           <Card>
@@ -329,6 +314,7 @@ export default function AcademicUnitsPage() {
                         variant="ghost"
                         size="icon"
                         onClick={() => openSchoolForm(school)}
+                        disabled={deletingId === school.id}
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -336,6 +322,7 @@ export default function AcademicUnitsPage() {
                         variant="ghost"
                         size="icon"
                         className="text-destructive"
+                        disabled={deletingId === school.id}
                         onClick={() =>
                           handleDelete("school", school.id, school.name)
                         }
@@ -409,6 +396,7 @@ export default function AcademicUnitsPage() {
                                   variant="ghost"
                                   size="icon"
                                   className="h-8 w-8"
+                                  disabled={deletingId === dept.id}
                                   onClick={() => openDeptForm(school.id, dept)}
                                 >
                                   <Pencil className="h-3.5 w-3.5" />
@@ -417,6 +405,7 @@ export default function AcademicUnitsPage() {
                                   variant="ghost"
                                   size="icon"
                                   className="h-8 w-8 text-destructive"
+                                  disabled={deletingId === dept.id}
                                   onClick={() =>
                                     handleDelete(
                                       "department",
@@ -495,6 +484,7 @@ export default function AcademicUnitsPage() {
                                             variant="ghost"
                                             size="icon"
                                             className="h-7 w-7"
+                                            disabled={deletingId === prog.id}
                                             onClick={() =>
                                               openProgForm(dept.id, prog)
                                             }
@@ -505,6 +495,7 @@ export default function AcademicUnitsPage() {
                                             variant="ghost"
                                             size="icon"
                                             className="h-7 w-7 text-destructive"
+                                            disabled={deletingId === prog.id}
                                             onClick={() =>
                                               handleDelete(
                                                 "programme",
@@ -533,6 +524,34 @@ export default function AcademicUnitsPage() {
           ))
         )}
       </div>
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [schools, expandedSchools, expandedDepartments, canManage, deletingId]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        Loading academic units...
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Academic Units</h1>
+          <p className="text-muted-foreground">
+            Manage schools, departments, and programmes
+          </p>
+        </div>
+        {canManage && (
+          <Button onClick={() => openSchoolForm()}>
+            <Plus className="mr-2 h-4 w-4" />
+            New School
+          </Button>
+        )}
+      </div>
+      {unitTree}
 
       {/* Shared Form Handlers below */}
       {/* School Form */}
@@ -594,12 +613,13 @@ export default function AcademicUnitsPage() {
               <Button
                 type="button"
                 variant="outline"
+                disabled={isSubmitting}
                 onClick={() => setIsSchoolDialogOpen(false)}
               >
                 Cancel
               </Button>
-              <Button type="submit">
-                {editingSchool ? "Save Changes" : "Create School"}
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Saving..." : editingSchool ? "Save Changes" : "Create School"}
               </Button>
             </DialogFooter>
           </form>
@@ -665,12 +685,13 @@ export default function AcademicUnitsPage() {
               <Button
                 type="button"
                 variant="outline"
+                disabled={isSubmitting}
                 onClick={() => setIsDeptDialogOpen(false)}
               >
                 Cancel
               </Button>
-              <Button type="submit">
-                {editingDept ? "Save Changes" : "Create Department"}
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Saving..." : editingDept ? "Save Changes" : "Create Department"}
               </Button>
             </DialogFooter>
           </form>
@@ -752,12 +773,13 @@ export default function AcademicUnitsPage() {
               <Button
                 type="button"
                 variant="outline"
+                disabled={isSubmitting}
                 onClick={() => setIsProgDialogOpen(false)}
               >
                 Cancel
               </Button>
-              <Button type="submit">
-                {editingProg ? "Save Changes" : "Create Programme"}
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Saving..." : editingProg ? "Save Changes" : "Create Programme"}
               </Button>
             </DialogFooter>
           </form>
