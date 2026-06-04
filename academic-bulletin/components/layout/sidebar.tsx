@@ -9,6 +9,9 @@ import {
   FileText,
   Users,
   Network,
+  BookOpen,
+  UserCog,
+  CalendarClock,
 } from "lucide-react";
 
 interface NavItem {
@@ -36,6 +39,24 @@ const navItems: NavItem[] = [
     href: "/academic-units",
     icon: <Network className="h-5 w-5 shrink-0" />,
     permission: "view:schools",
+  },
+  {
+    title: "Master Courses",
+    href: "/master-courses",
+    icon: <BookOpen className="h-5 w-5 shrink-0" />,
+    permission: "view:schools",
+  },
+  {
+    title: "Staff",
+    href: "/staff",
+    icon: <UserCog className="h-5 w-5 shrink-0" />,
+    permission: "view:staff",
+  },
+  {
+    title: "Review Cycles",
+    href: "/review-cycles",
+    icon: <CalendarClock className="h-5 w-5 shrink-0" />,
+    permission: "admin:all",
   },
   {
     title: "Users",
@@ -80,8 +101,8 @@ export function SidebarContent() {
           const isSubmissions = item.href === "/submissions";
           const isActive = isSubmissions
             ? pathname === href ||
-            pathname.startsWith("/submissions/") ||
-            pathname === "/submissions/browse"
+              pathname.startsWith("/submissions/") ||
+              pathname === "/submissions/browse"
             : pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <Link
