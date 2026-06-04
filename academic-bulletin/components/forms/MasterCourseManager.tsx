@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useUser } from "@/contexts/user-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -101,9 +101,9 @@ export function MasterCourseManager({
   const [isCreating, setIsCreating] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
-  const [selectedCourse, setSelectedCourse] = useState<MasterCourse | null>(
-    null,
-  );
+  const [selectedCourse, setSelectedCourse] = useState<MasterCourse | null>(null);
+  const [isLinkingCourseId, setIsLinkingCourseId] = useState<string | null>(null);
+  const [isTogglingCourseId, setIsTogglingCourseId] = useState<string | null>(null);
 
   // New course form state
   const [newCourse, setNewCourse] = useState({
@@ -182,6 +182,7 @@ export function MasterCourseManager({
 
   const handleLinkProgrammes = async (programmeIds: string[]) => {
     if (!selectedCourse) return;
+    setIsLinkingCourseId(selectedCourse.id);
 
     try {
       const res = await fetch(`/api/master-courses/${selectedCourse.id}/programmes`, {
@@ -226,10 +227,13 @@ export function MasterCourseManager({
       setLinkDialogOpen(false);
     } catch (error) {
       console.error("Failed to link programmes:", error);
+    } finally {
+      setIsLinkingCourseId(null);
     }
   };
 
   const handleToggleDiscoverable = async (course: MasterCourse) => {
+    setIsTogglingCourseId(course.id);
     const newValue = !course.discoverable;
     setCourses((prev) =>
       prev.map((c) =>
@@ -255,6 +259,8 @@ export function MasterCourseManager({
           c.id === course.id ? { ...c, discoverable: !newValue } : c,
         ),
       );
+    } finally {
+      setIsTogglingCourseId(null);
     }
   };
 
@@ -307,6 +313,76 @@ export function MasterCourseManager({
       </div>
     );
   };
+
+  const coursesTable = useMemo(() => (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Code</TableHead>
+          <TableHead>Title</TableHead>
+          <TableHead>Units</TableHead>
+          <TableHead>Type</TableHead>
+          <TableHead>Ownership</TableHead>
+          <TableHead>Level</TableHead>
+          <TableHead>Sem</TableHead>
+          <TableHead>Programmes</TableHead>
+          <TableHead className="text-center">Discoverable</TableHead>
+          <TableHead>Actions</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {courses.length === 0 ? (
+          <TableRow>
+            <TableCell
+              colSpan={10}
+              className="text-center text-muted-foreground"
+            >
+              No master courses found. Create one to get started.
+            </TableCell>
+          </TableRow>
+        ) : (
+          courses.map((course) => (
+            <TableRow key={course.id}>
+              <TableCell className="font-mono">{course.code}</TableCell>
+              <TableCell>{course.title}</TableCell>
+              <TableCell>{course.units}</TableCell>
+              <TableCell>{getCourseTypeBadge(course.type)}</TableCell>
+              <TableCell>{getOwnershipBadge(course)}</TableCell>
+              <TableCell>{course.level}</TableCell>
+              <TableCell>{course.semester}</TableCell>
+              <TableCell>
+                <Badge variant="outline">
+                  {course._count?.programmeLinks || 0}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-center">
+                <Checkbox
+                  checked={course.discoverable}
+                  onCheckedChange={() => handleToggleDiscoverable(course)}
+                  disabled={isTogglingCourseId === course.id}
+                />
+              </TableCell>
+              <TableCell>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedCourse(course);
+                      setLinkDialogOpen(true);
+                    }}
+                  >
+                    <Link className="h-4 w-4" />
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))
+        )}
+      </TableBody>
+    </Table>
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [courses, isTogglingCourseId]);
 
   if (isLoading) {
     return (
@@ -468,7 +544,7 @@ export function MasterCourseManager({
                       setNewCourse({ ...newCourse, ownerDeptId: v })
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="[&>span]:truncate">
                       <SelectValue placeholder="Select department" />
                     </SelectTrigger>
                     <SelectContent>
@@ -497,71 +573,7 @@ export function MasterCourseManager({
         </Dialog>
       </CardHeader>
       <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Code</TableHead>
-              <TableHead>Title</TableHead>
-              <TableHead>Units</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Ownership</TableHead>
-              <TableHead>Level</TableHead>
-              <TableHead>Sem</TableHead>
-              <TableHead>Programmes</TableHead>
-              <TableHead className="text-center">Discoverable</TableHead>
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {courses.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={10}
-                  className="text-center text-muted-foreground"
-                >
-                  No master courses found. Create one to get started.
-                </TableCell>
-              </TableRow>
-            ) : (
-              courses.map((course) => (
-                <TableRow key={course.id}>
-                  <TableCell className="font-mono">{course.code}</TableCell>
-                  <TableCell>{course.title}</TableCell>
-                  <TableCell>{course.units}</TableCell>
-                  <TableCell>{getCourseTypeBadge(course.type)}</TableCell>
-                  <TableCell>{getOwnershipBadge(course)}</TableCell>
-                  <TableCell>{course.level}</TableCell>
-                  <TableCell>{course.semester}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {course._count?.programmeLinks || 0}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Checkbox
-                      checked={course.discoverable}
-                      onCheckedChange={() => handleToggleDiscoverable(course)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setSelectedCourse(course);
-                          setLinkDialogOpen(true);
-                        }}
-                      >
-                        <Link className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+        {coursesTable}
 
         {/* Link Programmes Dialog */}
         <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
@@ -589,9 +601,10 @@ export function MasterCourseManager({
                     ) : (
                       <Button
                         size="sm"
+                        disabled={isLinkingCourseId === selectedCourse?.id}
                         onClick={() => handleLinkProgrammes([prog.id])}
                       >
-                        Link
+                        {isLinkingCourseId === selectedCourse?.id ? "Linking..." : "Link"}
                       </Button>
                     )}
                   </div>
