@@ -19,6 +19,25 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:
+  # ── PostgreSQL Database ─────────────────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    container_name: abrms-db-local
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Persists your database data on your disk
+    ports:
+      - "5432:5432" # Allows you to connect using external tools (like DBeaver or pgAdmin)
+    networks:
+      - abrms-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   # ── Database Migration ──────────────────────────────────────────────────────
   # Runs once at deploy time, pushes the Prisma schema, then exits successfully.
@@ -36,11 +55,9 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - DIRECT_URL=${DIRECT_URL}
     restart: on-failure
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    depends_on:
+      db:
+        condition: service_healthy # Wait until the local DB is fully ready
     networks:
       - abrms-network
 
@@ -120,3 +137,6 @@ services:
 networks:
   abrms-network:
     driver: bridge
+
+volumes:
+  postgres_data:
