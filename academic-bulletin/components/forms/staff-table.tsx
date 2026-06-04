@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { DynamicTable, Column } from "./dynamic-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -457,6 +457,12 @@ export function StaffTable({
     }
   };
 
+  const allStaffForPhotos = useMemo(() => 
+    [...academicStaff, ...adjunctStaff, ...nonAcademicStaff].filter(
+      (s) => s.id && s.surname?.trim(),
+    ),
+  [academicStaff, adjunctStaff, nonAcademicStaff]);
+
   if (isLoading) {
     return (
       <Card>
@@ -466,10 +472,6 @@ export function StaffTable({
       </Card>
     );
   }
-
-  const allStaffForPhotos = [...academicStaff, ...adjunctStaff, ...nonAcademicStaff].filter(
-    (s) => s.id && s.surname?.trim(),
-  );
 
   return (
     <Card>
