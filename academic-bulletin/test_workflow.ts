@@ -9,6 +9,7 @@ async function runTest() {
   console.log("\n[1] Setting up mock data...");
   const adminUser = await prisma.user.create({
     data: {
+      id: "admin_" + Date.now(),
       email: "test_admin_" + Date.now() + "@babcock.edu.ng",
       firstName: "Test",
       lastName: "Admin",
@@ -18,6 +19,7 @@ async function runTest() {
 
   const hodUser = await prisma.user.create({
     data: {
+      id: "hod_" + Date.now(),
       email: "test_hod_" + Date.now() + "@babcock.edu.ng",
       firstName: "Test",
       lastName: "HOD",
@@ -29,8 +31,8 @@ async function runTest() {
     data: {
       name: "Test Cycle " + Date.now(),
       isActive: true,
-      startDate: new Date(),
-      endDate: new Date(Date.now() + 86400000),
+      startedAt: new Date(),
+      createdById: adminUser.id,
     },
   });
 
@@ -57,14 +59,19 @@ async function runTest() {
     },
   });
 
-  let submission = await prisma.submission.create({
+  let submission: any = await prisma.submission.create({
     data: {
+      title: "Test Submission " + Date.now(),
       cycleId: cycle.id,
       programmeId: programme.id,
       createdById: hodUser.id,
       status: "DRAFT",
       currentPhase: 1, // DRAFT phase is ignored, status is DRAFT
-      content: { version: "1.0" },
+      content: {
+        create: {
+          philosophy: "Test philosophy",
+        }
+      },
     },
   });
 
