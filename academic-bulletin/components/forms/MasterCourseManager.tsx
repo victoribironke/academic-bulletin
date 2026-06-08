@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Plus, BookOpen, Link } from "lucide-react";
+import { Loader2, Plus, BookOpen, Link, Trash } from "lucide-react";
 
 // Types
 interface MasterCourse {
@@ -104,6 +104,7 @@ export function MasterCourseManager({
   const [selectedCourse, setSelectedCourse] = useState<MasterCourse | null>(null);
   const [isLinkingCourseId, setIsLinkingCourseId] = useState<string | null>(null);
   const [isTogglingCourseId, setIsTogglingCourseId] = useState<string | null>(null);
+  const [isDeletingCourseId, setIsDeletingCourseId] = useState<string | null>(null);
 
   // New course form state
   const [newCourse, setNewCourse] = useState({
@@ -229,6 +230,78 @@ export function MasterCourseManager({
       console.error("Failed to link programmes:", error);
     } finally {
       setIsLinkingCourseId(null);
+    }
+  };
+
+  const handleUnlinkProgramme = async (programmeId: string) => {
+    if (!selectedCourse) return;
+    setIsLinkingCourseId(selectedCourse.id);
+
+    try {
+      const res = await fetch(`/api/master-courses/${selectedCourse.id}/programmes?programmeId=${programmeId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setCourses((prev) =>
+          prev.map((c) => {
+            if (c.id === selectedCourse.id) {
+              const newLinks = c.programmeLinks?.filter(l => l.programme.id !== programmeId) || [];
+              return {
+                ...c,
+                programmeLinks: newLinks,
+                _count: {
+                  ...c._count,
+                  programmeLinks: newLinks.length,
+                },
+              };
+            }
+            return c;
+          }),
+        );
+        setSelectedCourse((prev) =>
+          prev
+            ? {
+              ...prev,
+              programmeLinks: prev.programmeLinks?.filter(l => l.programme.id !== programmeId) || [],
+            }
+            : prev,
+        );
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to unlink programme");
+      }
+    } catch (error) {
+      console.error("Failed to unlink programme:", error);
+    } finally {
+      setIsLinkingCourseId(null);
+    }
+  };
+
+  const handleDeleteCourse = async (courseId: string) => {
+    if (!confirm("Are you sure you want to delete this master course? This cannot be undone.")) return;
+    setIsDeletingCourseId(courseId);
+
+    try {
+      const res = await fetch(`/api/master-courses/${courseId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setCourses((prev) => prev.filter((c) => c.id !== courseId));
+        if (selectedCourse?.id === courseId) {
+          setLinkDialogOpen(false);
+          setSelectedCourse(null);
+        }
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to delete course");
+      }
+    } catch (error) {
+      console.error("Failed to delete master course:", error);
+      alert("Failed to delete course");
+    } finally {
+      setIsDeletingCourseId(null);
     }
   };
 
@@ -371,8 +444,22 @@ export function MasterCourseManager({
                       setSelectedCourse(course);
                       setLinkDialogOpen(true);
                     }}
+                    title="Link Programmes"
                   >
                     <Link className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => handleDeleteCourse(course.id)}
+                    disabled={isDeletingCourseId === course.id}
+                    title="Delete Course"
+                  >
+                    {isDeletingCourseId === course.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash className="h-4 w-4" />
+                    )}
                   </Button>
                 </div>
               </TableCell>
@@ -597,7 +684,17 @@ export function MasterCourseManager({
                       {prog.name} ({prog.code})
                     </span>
                     {isLinked ? (
-                      <Badge variant="secondary">Linked</Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">Linked</Badge>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={isLinkingCourseId === selectedCourse?.id}
+                          onClick={() => handleUnlinkProgramme(prog.id)}
+                        >
+                          Unlink
+                        </Button>
+                      </div>
                     ) : (
                       <Button
                         size="sm"
