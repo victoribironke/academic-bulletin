@@ -81,3 +81,45 @@ export async function GET(
     );
   }
 }
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params;
+
+    const existing = await prisma.reviewCycle.findUnique({
+      where: { id },
+      include: {
+        _count: { select: { submissions: true } },
+      },
+    });
+
+    if (!existing) {
+      return NextResponse.json(
+        { error: "Review cycle not found" },
+        { status: 404 },
+      );
+    }
+
+    if (existing._count.submissions > 0) {
+      return NextResponse.json(
+        { error: "Cannot delete review cycle with submissions. Remove submissions first." },
+        { status: 400 },
+      );
+    }
+
+    await prisma.reviewCycle.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Failed to delete review cycle:", error);
+    return NextResponse.json(
+      { error: "Failed to delete review cycle" },
+      { status: 500 },
+    );
+  }
+}
