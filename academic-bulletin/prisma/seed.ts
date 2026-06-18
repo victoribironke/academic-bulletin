@@ -100,7 +100,7 @@ async function main() {
   // ============================================================================
 
   await seedUser(
-    "super@babcockuniversity.edu.ng",
+    "super@university.edu",
     "Super",
     "Admin",
     UserRole.SUPER_ADMIN,
