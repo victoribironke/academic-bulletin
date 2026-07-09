@@ -30,7 +30,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data # Persists your database data on your disk
     ports:
-      - "5432:5432" # Allows you to connect using external tools (like DBeaver or pgAdmin)
+      - "5433:5432" # Allows you to connect using external tools (like DBeaver or pgAdmin)
     networks:
       - abrms-network
     healthcheck:
@@ -112,7 +112,7 @@ services:
     # This prevents the public internet from reaching Next.js directly,
     # but allows the host's native Apache to proxy to it.
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3300:3000"
 
     depends_on:
       grace:
