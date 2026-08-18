@@ -11,10 +11,21 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient() {
+  // Guard: fail fast with a clear message if DATABASE_URL is missing.
+  // Without this, Prisma v7's driver adapter throws a cryptic
+  // "Cannot read properties of undefined (reading 'searchParams')" error.
+  if (!process.env.DATABASE_URL) {
+    throw new Error(
+      "[Prisma] DATABASE_URL environment variable is not set. " +
+        "Make sure the .env file is present in the standalone directory or " +
+        "that PM2 / Apache passes the environment variables to the process."
+    );
+  }
+
   // Reuse existing pool if available (important for serverless)
   if (!globalForPrisma.pool) {
     globalForPrisma.pool = new Pool({
-      connectionString: process.env.DATABASE_URL!,
+      connectionString: process.env.DATABASE_URL,
       ssl: {
         rejectUnauthorized: false,
       },
