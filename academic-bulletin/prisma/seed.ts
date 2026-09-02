@@ -6,107 +6,196 @@ import { UserRole } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { createClient } from "@supabase/supabase-js";
 
-import crypto from "crypto";
+async function createOrGetAuthUser(
+  email: string,
+  firstName: string,
+  lastName: string,
+  password = "Password123!",
+): Promise<string> {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+  // 1. Direct GoTrue REST probe (works inside Docker network & localhost)
+  const directEndpoints = ["http://auth:9999", "http://127.0.0.1:9999"];
+
+  for (const base of directEndpoints) {
+    try {
+      const healthCheck = await fetch(`${base}/health`, {
+        signal: AbortSignal.timeout(2000),
+      });
+      if (healthCheck.ok) {
+        // Try creating user directly
+        const createRes = await fetch(`${base}/admin/users`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${serviceKey}`,
+            apikey: serviceKey,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: { first_name: firstName, last_name: lastName },
+          }),
+        });
+
+        if (createRes.ok) {
+          const data = (await createRes.json()) as { id: string };
+          console.log(`✅ GoTrue Auth: Created ${email} (ID: ${data.id})`);
+          return data.id;
+        }
+
+        // User may already exist — fetch user list to find ID
+        const listRes = await fetch(`${base}/admin/users`, {
+          headers: {
+            Authorization: `Bearer ${serviceKey}`,
+            apikey: serviceKey,
+          },
+        });
+
+        if (listRes.ok) {
+          const listData = (await listRes.json()) as {
+            users?: Array<{ id: string; email: string }>;
+          };
+          const existing = listData.users?.find((u) => u.email === email);
+          if (existing) {
+            // Update password
+            await fetch(`${base}/admin/users/${existing.id}`, {
+              method: "PUT",
+              headers: {
+                Authorization: `Bearer ${serviceKey}`,
+                apikey: serviceKey,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ password }),
+            });
+            console.log(
+              `✅ GoTrue Auth: User ${email} already exists (password reset to ${password}).`,
+            );
+            return existing.id;
+          }
+        }
+      }
+    } catch {
+      // Continue to next probe or fallback
+    }
+  }
+
+  // 2. Fallback to Supabase SDK client (Supabase Cloud or external proxy)
+  const targetUrl =
+    process.env.INTERNAL_SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    "http://127.0.0.1:3000";
+
+  const supabaseAdmin = createClient(targetUrl, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  const { data: createData, error: createError } =
+    await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { first_name: firstName, last_name: lastName },
+    });
+
+  if (!createError && createData.user) {
+    console.log(`✅ Supabase Auth SDK: Created ${email}`);
+    return createData.user.id;
+  }
+
+  const { data: usersData, error: listError } =
+    await supabaseAdmin.auth.admin.listUsers();
+  if (listError) throw listError;
+
+  const existingUser = usersData.users.find((u) => u.email === email);
+  if (!existingUser) {
+    throw new Error(
+      `Failed to create or find user ${email}: ${createError?.message || "unknown error"}`,
+    );
+  }
+
+  await supabaseAdmin.auth.admin.updateUserById(existingUser.id, { password });
+  console.log(`✅ Supabase Auth SDK: User ${email} password reset.`);
+  return existingUser.id;
+}
+
+async function ensureStorageBucket() {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  const endpoints = ["http://storage:5000", "http://127.0.0.1:5000"];
+
+  for (const base of endpoints) {
+    try {
+      const res = await fetch(`${base}/status`, {
+        signal: AbortSignal.timeout(2000),
+      });
+      if (res.ok) {
+        await fetch(`${base}/bucket`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${serviceKey}`,
+            apikey: serviceKey,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: "staff-photos",
+            name: "staff-photos",
+            public: true,
+            file_size_limit: 5242880,
+            allowed_mime_types: [
+              "image/jpeg",
+              "image/png",
+              "image/webp",
+            ],
+          }),
+        });
+        console.log("✅ Storage API: 'staff-photos' bucket verified/created.");
+        return;
+      }
+    } catch {
+      // Storage might not be reachable from this environment, ignore
+    }
+  }
+}
 
 async function main() {
   console.log("🌱 Starting database seed...\n");
 
-  // Helper to create or fetch user from Supabase and Prisma
-  async function seedUser(
-    email: string,
-    firstName: string,
-    lastName: string,
-    role: UserRole,
-    schoolId: string | null = null,
-    departmentId: string | null = null,
-  ) {
-    let authUserId: string;
-
-    // 1. Create or get user in Supabase Auth
-    const { data: createData, error: createError } =
-      await supabaseAdmin.auth.admin.createUser({
-        email,
-        password: "Password123!",
-        email_confirm: true,
-        user_metadata: {
-          first_name: firstName,
-          last_name: lastName,
-        },
-      });
-
-    if (createError) {
-      // If user already exists, let's fetch them
-      const { data: usersData, error: listError } =
-        await supabaseAdmin.auth.admin.listUsers();
-      if (listError) throw listError;
-
-      const existingUser = usersData.users.find((u) => u.email === email);
-      if (!existingUser) {
-        throw new Error(
-          `Failed to create or find user ${email} in Supabase: ${createError.message}`,
-        );
-      }
-      authUserId = existingUser.id;
-
-      // Update the password so the admin knows what it is
-      await supabaseAdmin.auth.admin.updateUserById(authUserId, {
-        password: "Password123!",
-      });
-
-      console.log(
-        `✅ Supabase Auth: User ${email} already exists (password reset to Password123!).`,
-      );
-    } else {
-      authUserId = createData.user.id;
-      console.log(
-        `✅ Supabase Auth: Created ${email} with password Password123!`,
-      );
-    }
-
-    // 2. Upsert in Prisma
-    const user = await prisma.user.upsert({
-      where: { email },
-      update: {
-        id: authUserId, // Important: ID must match Supabase Auth ID
-        firstName,
-        lastName,
-        role,
-        isActive: true,
-        schoolId,
-        departmentId,
-      },
-      create: {
-        email,
-        id: authUserId, // Important: ID must match Supabase Auth ID
-        firstName,
-        lastName,
-        role,
-        isActive: true,
-        schoolId,
-        departmentId,
-      },
-    });
-    console.log(`✅ Prisma: Synced user ${email} (${role})`);
-    return user;
-  }
-
-  // ============================================================================
-  // Create Super Admin User (Syncing with Supabase Auth)
-  // ============================================================================
-
-  await seedUser(
+  const authUserId = await createOrGetAuthUser(
     "super@university.edu",
     "Super",
     "Admin",
-    UserRole.SUPER_ADMIN,
-    null,
-    null,
+    "Password123!",
   );
+
+  // Sync with Prisma PostgreSQL database
+  const user = await prisma.user.upsert({
+    where: { email: "super@university.edu" },
+    update: {
+      id: authUserId,
+      firstName: "Super",
+      lastName: "Admin",
+      role: UserRole.SUPER_ADMIN,
+      isActive: true,
+      schoolId: null,
+      departmentId: null,
+    },
+    create: {
+      email: "super@university.edu",
+      id: authUserId,
+      firstName: "Super",
+      lastName: "Admin",
+      role: UserRole.SUPER_ADMIN,
+      isActive: true,
+      schoolId: null,
+      departmentId: null,
+    },
+  });
+
+  console.log(`✅ Prisma: Synced user ${user.email} (${user.role})`);
+
+  // Ensure storage bucket exists
+  await ensureStorageBucket();
 
   console.log("\n✅ Super Admin created successfully");
   console.log("=================================================");

@@ -3,16 +3,18 @@ import { cookies } from "next/headers";
 
 export async function createClient() {
   const cookieStore = await cookies();
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
-
-  // Defensive check to prevent compilation crashes during Next.js build
-  if (!url || !key) {
-    console.warn("Supabase server environment variables are missing during compile/build.");
-    return null as any;
-  }
+  const url =
+    process.env.INTERNAL_SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    "http://127.0.0.1:3000";
+  const key =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY ||
+    "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJyb2xlIjogImFub24iLCAiaXNzIjogInN1cGFiYXNlLWxvY2FsIiwgImlhdCI6IDE3ODgzNDQyNDAsICJleHAiOiAzMjUwMzY4MDAwMH0.KVDpu5JE0WzTf5tLvcGl5laDpav_Y3kmRbBCVqF_a2M";
 
   return createServerClient(url, key, {
+    cookieOptions: {
+      name: "abrms-auth-token",
+    },
     cookies: {
       getAll() {
         return cookieStore.getAll();
@@ -23,8 +25,7 @@ export async function createClient() {
             cookieStore.set(name, value, options),
           );
         } catch {
-          // The `setAll` method was called from a Server Component.
-          // This can be ignored if you have middleware refreshing user sessions.
+          // Can be ignored if called from a Server Component
         }
       },
     },

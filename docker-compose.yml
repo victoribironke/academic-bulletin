@@ -1,24 +1,27 @@
-# ─── Production Compose ───────────────────────────────────────────────────────
+# ─── Development Compose (Docker) ────────────────────────────────────────────
+# Self-contained stack: PostgreSQL, GoTrue Auth, Supabase Storage API,
+# GRACE Vision AI, and Next.js — all running inside Docker with no external
+# Supabase cloud dependencies.
+#
 # Usage:
-#   cp .env.example .env   # first time only — fill in real secrets
-#   docker compose up -d --build
+#   docker compose down -v   # wipe volumes on first run (so init SQL fires)
+#   docker compose up --build
+#
+# NOTE: In PRODUCTION the auth and storage services run as native systemd units
+#       on the bare-metal server and Apache proxies /auth/v1/* and /storage/v1/*.
+#       In DEVELOPMENT Next.js rewrites (next.config.ts) handle the same routing.
 #
 # Services:
-#   db-migrate         — runs `prisma db push` once then exits
-#   grace              — GRACE Vision AI (FastAPI), internal only
-#   academic-bulletin  — Next.js production server (port 3000, internal only)
-#   apache             — Apache reverse proxy (port 80, exposed to host/internet)
-#
-# Users connect to :80 (Apache) → Apache forwards to :3000 (academic-bulletin).
-# Port 3000 is NEVER directly accessible from outside the Docker network.
-# GRACE (:7860) is internal only — only academic-bulletin calls it.
-#
-# TLS: Run `certbot --apache -d your-domain.com` on the Debian host after first
-#      deploy. Certbot adds the :443 VirtualHost automatically — no compose
-#      changes needed. Then run: docker compose restart apache
+#   db              — PostgreSQL 15 with auth + storage schemas pre-created
+#   auth            — GoTrue (Supabase Auth engine) on :9999, internal only
+#   storage         — Supabase Storage API on :5000, internal only
+#   db-migrate      — runs `prisma db push` once then exits
+#   grace           — GRACE Vision AI (FastAPI), internal only
+#   academic-bulletin — Next.js production server, exposed on host :3300
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:
+
   # ── PostgreSQL Database ─────────────────────────────────────────────────────
   db:
     image: postgres:15-alpine
@@ -28,19 +31,133 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - postgres_data:/var/lib/postgresql/data # Persists your database data on your disk
+      - postgres_data:/var/lib/postgresql/data
+      # Runs once on a fresh volume — creates auth & storage schemas
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
     ports:
-      - "5433:5432" # Allows you to connect using external tools (like DBeaver or pgAdmin)
+      - "5433:5432"
     networks:
       - abrms-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  # ── GoTrue — Self-hosted Supabase Auth ──────────────────────────────────────
+  # Handles user login, sessions, and password management.
+  # Next.js rewrites /auth/v1/* → http://auth:9999/* (dev only).
+  # In production, Apache mod_proxy handles the same routing.
+  auth:
+    image: supabase/gotrue:v2.158.1
+    container_name: abrms-auth
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    environment:
+      GOTRUE_API_HOST: "0.0.0.0"
+      PORT: 9999
+
+      # Database — GoTrue auto-migrates the auth schema on first start.
+      # Uses supabase_auth_admin whose search_path is set to 'auth' at the role
+      # level — GoTrue's pop ORM ignores search_path in the connection URL.
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: "postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable"
+
+      # JWT — must match the keys in .env
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+
+      # Site URL — in dev this is the Next.js host address
+      GOTRUE_SITE_URL: "http://localhost:3300"
+      API_EXTERNAL_URL: "http://localhost:3300"
+      GOTRUE_URI_ALLOW_LIST: "http://localhost:3300/**,http://localhost:3300"
+
+      # Auto-confirm accounts without SMTP during local development.
+      # Set to false and configure SMTP before going to production.
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_PASSWORD_MIN_LENGTH: 8
+    expose:
+      - "9999"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:9999/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - abrms-network
+
+  # ── Supabase Storage API ─────────────────────────────────────────────────────
+  # Handles file uploads (staff photos, submission images).
+  # Next.js rewrites /storage/v1/* → http://storage:5000/* (dev only).
+  # In production, Apache mod_proxy handles the same routing.
+  storage:
+    image: supabase/storage-api:v1.11.13
+    container_name: abrms-storage
+    depends_on:
+      db:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: 5000
+      REGION: local
+
+      # Database — Storage API auto-migrates the storage schema on first start.
+      # Uses supabase_storage_admin whose search_path is set to 'storage' at the role level.
+      DATABASE_URL: "postgres://supabase_storage_admin:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable"
+      DB_INSTALL_ROLES: "false"
+
+      # JWT — must match JWT_SECRET
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      AUTH_JWT_ALGORITHM: HS256
+      ANON_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY}
+      SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+
+      # File storage — files are written to a named Docker volume
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      UPLOAD_FILE_SIZE_LIMIT: 5242880
+      UPLOAD_FILE_SIZE_LIMIT_STANDARD: 5242880
+
+      # Single-tenant mode (one university)
+      IS_MULTITENANT: "false"
+      TENANT_ID: stub
+
+      # This app uses service_role key only — PostgREST is not needed.
+      # Point to self as a safe no-op placeholder.
+      POSTGREST_URL: "http://storage:5000"
+    volumes:
+      - storage_data:/var/lib/storage
+    expose:
+      - "5000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:5000/status || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - abrms-network
+
   # ── Database Migration ──────────────────────────────────────────────────────
-  # Runs once at deploy time, pushes the Prisma schema, then exits successfully.
+  # Runs `prisma db push` once at deploy time, then exits successfully.
   # academic-bulletin will not start until this completes.
   db-migrate:
     build:
@@ -50,23 +167,23 @@ services:
       args:
         - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
         - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY}
-    command: sh -c "npm run db:push && npm run db:seed"
+    command: sh -c "npm run db:push"
     env_file:
       - .env
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - DIRECT_URL=${DIRECT_URL}
+      - INTERNAL_SUPABASE_URL=http://academic-bulletin:3000
     restart: on-failure
     depends_on:
       db:
-        condition: service_healthy # Wait until the local DB is fully ready
+        condition: service_healthy
+      auth:
+        condition: service_healthy
     networks:
       - abrms-network
 
   # ── GRACE Vision AI ─────────────────────────────────────────────────────────
-  # Internal-only FastAPI service. Only academic-bulletin calls it via:
-  #   http://grace:7860
-  # Port 7860 is NOT exposed to the host or internet.
   grace:
     build:
       context: ./GRACE
@@ -92,8 +209,6 @@ services:
       - abrms-network
 
   # ── Next.js Application Server ──────────────────────────────────────────────
-  # Port 3000 is intentionally NOT mapped to the host.
-  # Only Apache (via abrms-network) can reach it.
   academic-bulletin:
     build:
       context: ./academic-bulletin
@@ -107,20 +222,20 @@ services:
       - .env
     environment:
       - GRACE_VISION_SPACE_URL=http://grace:7860
-    
-    # Map Next.js to the host's loopback interface only.
-    # This prevents the public internet from reaching Next.js directly,
-    # but allows the host's native Apache to proxy to it.
+      - INTERNAL_SUPABASE_URL=http://127.0.0.1:3000
     ports:
       - "127.0.0.1:3300:3000"
-
     depends_on:
       grace:
         condition: service_healthy
       db-migrate:
         condition: service_completed_successfully
+      auth:
+        condition: service_healthy
+      storage:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/ || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -133,12 +248,11 @@ services:
     networks:
       - abrms-network
 
-# ── Private Network ────────────────────────────────────────────────────────────
-# All services communicate over this isolated bridge network.
-# Only Apache's port 80 is reachable from outside — everything else is internal.
+# ── Private Network ─────────────────────────────────────────────────────────────
 networks:
   abrms-network:
     driver: bridge
 
 volumes:
   postgres_data:
+  storage_data:

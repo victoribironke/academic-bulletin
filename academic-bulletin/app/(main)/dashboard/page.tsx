@@ -137,8 +137,10 @@ export default function DashboardPage() {
       if (currentUser.role === "ADMIN" || currentUser.role === "SUPER_ADMIN") {
         fetchCycles();
       }
+    } else if (!userLoading) {
+      setIsLoading(false);
     }
-  }, [currentUser, fetchStats, fetchCycles]);
+  }, [currentUser, userLoading, fetchStats, fetchCycles]);
 
   const handleCreateCycle = async () => {
     if (!newCycleName.trim() || !currentUser) return;

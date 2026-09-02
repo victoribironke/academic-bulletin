@@ -2,14 +2,31 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+
+  // Immediately bypass middleware for internal proxy endpoints & API routes
+  if (
+    pathname.startsWith("/auth/v1") ||
+    pathname.startsWith("/storage/v1") ||
+    pathname.startsWith("/api")
+  ) {
+    return NextResponse.next();
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   });
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!,
+    process.env.INTERNAL_SUPABASE_URL ||
+      process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      "http://127.0.0.1:3000",
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY ||
+      "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJyb2xlIjogImFub24iLCAiaXNzIjogInN1cGFiYXNlLWxvY2FsIiwgImlhdCI6IDE3ODgzNDQyNDAsICJleHAiOiAzMjUwMzY4MDAwMH0.KVDpu5JE0WzTf5tLvcGl5laDpav_Y3kmRbBCVqF_a2M",
     {
+      cookieOptions: {
+        name: "abrms-auth-token",
+      },
       cookies: {
         getAll() {
           return request.cookies.getAll();
@@ -34,16 +51,14 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const pathname = request.nextUrl.pathname;
   const isLoginRoute = pathname.startsWith("/login");
   const isInviteFlowRoute =
     pathname.startsWith("/confirm") || pathname.startsWith("/invite-accept");
   const isPasswordRecoveryRoute = pathname.startsWith("/forgot-password");
   const isAuthRoute =
     isLoginRoute || isInviteFlowRoute || isPasswordRecoveryRoute;
-  const isApiRoute = request.nextUrl.pathname.startsWith("/api");
 
-  if (!user && !isAuthRoute && !isApiRoute) {
+  if (!user && !isAuthRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
