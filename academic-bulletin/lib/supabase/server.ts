@@ -3,10 +3,14 @@ import { cookies } from "next/headers";
 
 export async function createClient() {
   const cookieStore = await cookies();
+  const port = process.env.PORT || "3000";
+  // Always prefer internal local address for server-side requests so auth calls
+  // route directly via Next.js internal rewrites to GoTrue, avoiding hairpin
+  // NAT, DNS resolution, Apache redirects, and SSL issues on bare metal / production.
   const url =
     process.env.INTERNAL_SUPABASE_URL ||
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    "http://127.0.0.1:3000";
+    `http://127.0.0.1:${port}`;
+
   const key =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY ||
     "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJyb2xlIjogImFub24iLCAiaXNzIjogInN1cGFiYXNlLWxvY2FsIiwgImlhdCI6IDE3ODgzNDQyNDAsICJleHAiOiAzMjUwMzY4MDAwMH0.KVDpu5JE0WzTf5tLvcGl5laDpav_Y3kmRbBCVqF_a2M";

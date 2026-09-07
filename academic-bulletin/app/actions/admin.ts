@@ -14,7 +14,15 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
   } = await serverSupabase.auth.getUser();
 
   if (authError || !currentUser) {
-    return { error: "Authentication required" };
+    console.error("adminCreateUser: auth.getUser() failed:", {
+      authError: authError?.message || authError,
+      hasUser: !!currentUser,
+    });
+    return {
+      error:
+        authError?.message ||
+        "Authentication required. Please refresh the page and sign in again.",
+    };
   }
 
   const requestingUser = await prisma.user.findUnique({
@@ -25,6 +33,10 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
     !requestingUser ||
     (requestingUser.role !== "ADMIN" && requestingUser.role !== "SUPER_ADMIN")
   ) {
+    console.error("adminCreateUser: Unauthorized user attempted creation:", {
+      id: currentUser.id,
+      role: requestingUser?.role,
+    });
     return { error: "Unauthorized: Only Admins can create new users." };
   }
 
@@ -52,11 +64,17 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
     };
   }
 
-  const supabaseUrl = process.env.INTERNAL_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const port = process.env.PORT || "3000";
+  const supabaseUrl =
+    process.env.INTERNAL_SUPABASE_URL ||
+    `http://127.0.0.1:${port}`;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !supabaseServiceKey) {
-    console.error("Missing Supabase Service Role configuration.");
+    console.error("Missing Supabase Service Role configuration:", {
+      hasUrl: !!supabaseUrl,
+      hasKey: !!supabaseServiceKey,
+    });
     return { error: "Server configuration error. Contact administrator." };
   }
 

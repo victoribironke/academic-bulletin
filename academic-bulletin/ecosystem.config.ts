@@ -11,6 +11,7 @@ module.exports = {
 
         SUPABASE_URL:"http://bulletin.babcock.edu.ng",
         NEXT_PUBLIC_SUPABASE_URL:"http://bulletin.babcock.edu.ng",
+        INTERNAL_SUPABASE_URL:"http://127.0.0.1:3000",
 
         // === GRACE Vision AI (FastAPI) ===
         GOOGLE_API_KEY:"AIzaSyArvx2hr8wqfLw5-u_KYE9V6C9_MAavZnU",

@@ -8,7 +8,8 @@ const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const BUCKET_NAME = "staff-photos";
 
 function getSupabaseAdmin() {
-  const url = process.env.INTERNAL_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const port = process.env.PORT || "3000";
+  const url = process.env.INTERNAL_SUPABASE_URL || `http://127.0.0.1:${port}`;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) {
     throw new Error("Supabase env vars not configured");

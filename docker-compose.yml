@@ -223,6 +223,8 @@ services:
     environment:
       - GRACE_VISION_SPACE_URL=http://grace:7860
       - INTERNAL_SUPABASE_URL=http://127.0.0.1:3000
+      - GOTRUE_INTERNAL_URL=http://auth:9999
+      - STORAGE_INTERNAL_URL=http://storage:5000
     ports:
       - "127.0.0.1:3300:3000"
     depends_on:
