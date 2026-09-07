@@ -360,6 +360,7 @@ export default function UsersPage() {
             schools={schools}
             departments={departments}
             isSuperAdmin={isSuperAdmin}
+            onSuccess={fetchData}
           />
         )}
       </div>

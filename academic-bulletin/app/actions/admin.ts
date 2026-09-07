@@ -69,32 +69,38 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
   });
 
   try {
-    // 4. Invite User via Supabase (sends invite email automatically)
-    const siteUrl = process.env.NODE_ENV === "production"
-      ? "https://academic-bulletin.vercel.app"
-      : "http://localhost:3000";
-    const { data: authData, error: inviteError } =
-      await adminAuthClient.auth.admin.inviteUserByEmail(email, {
-        data: {
-          firstName,
-          lastName,
+    // 4. Generate invite link via Supabase admin API.
+    //    We use generateLink instead of inviteUserByEmail so that the invite URL
+    //    is returned directly — no SMTP required. The admin copies and shares it.
+    const siteUrl =
+      process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/auth\/v1\/?$/, "") ||
+      (process.env.NODE_ENV === "production"
+        ? "http://bulletin.babcock.edu.ng"
+        : "http://localhost:3300");
+
+    const { data: linkData, error: linkError } =
+      await adminAuthClient.auth.admin.generateLink({
+        type: "invite",
+        email,
+        options: {
+          data: { firstName, lastName },
+          redirectTo: `${siteUrl}/invite-accept`,
         },
-        redirectTo: `${siteUrl}/confirm`,
       });
 
-    if (inviteError) {
-      console.error("Supabase Invite Error:", inviteError);
-      return { error: inviteError.message };
+    if (linkError) {
+      console.error("Supabase generateLink Error:", linkError);
+      return { error: linkError.message };
     }
 
-    if (!authData.user) {
-      return { error: "Failed to invite user." };
+    if (!linkData.user || !linkData.properties?.action_link) {
+      return { error: "Failed to generate invite link." };
     }
 
     // 5. Create Profile in Prisma
     await prisma.user.create({
       data: {
-        id: authData.user.id,
+        id: linkData.user.id,
         email: email,
         firstName,
         lastName,
@@ -105,7 +111,7 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
     });
 
     revalidatePath("/users");
-    return { success: true };
+    return { success: true, inviteLink: linkData.properties.action_link };
   } catch (error) {
     console.error("Admin user creation failed:", error);
     return { error: "An unexpected error occurred during user creation." };

@@ -1,18 +1,38 @@
 "use client";
 
 import Link from "next/link";
-
+import { useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { logIn } from "@/app/actions/auth";
 import { BrandedShell } from "@/components/auth/branded-shell";
 import { useActionState } from "react";
 
 const initialState = { error: "" };
 
+function InviteRedirect() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  useEffect(() => {
+    const token = searchParams.get("token");
+    const type = searchParams.get("type");
+    if (token && (type === "invite" || type === "recovery")) {
+      router.replace(`/invite-accept?token_hash=${token}&type=${type}`);
+    }
+  }, [searchParams, router]);
+
+  return null;
+}
+
 export default function LoginPage() {
   const [state, formAction, isPending] = useActionState(logIn, initialState);
 
   return (
     <BrandedShell>
+      <Suspense fallback={null}>
+        <InviteRedirect />
+      </Suspense>
+
       <div className="space-y-2 text-center">
         <h1 className="text-2xl font-semibold tracking-tight text-primary">
           Sign in
@@ -25,10 +45,7 @@ export default function LoginPage() {
       <form action={formAction} className="mt-8 space-y-6">
         <div className="space-y-4">
           <div className="space-y-2">
-            <label
-              htmlFor="email"
-              className="text-sm font-medium leading-none"
-            >
+            <label htmlFor="email" className="text-sm font-medium leading-none">
               Email
             </label>
             <input
@@ -42,16 +59,10 @@ export default function LoginPage() {
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label
-                htmlFor="password"
-                className="text-sm font-medium leading-none"
-              >
+              <label htmlFor="password" className="text-sm font-medium leading-none">
                 Password
               </label>
-              <Link
-                href="/forgot-password"
-                className="text-sm font-medium text-primary hover:underline"
-              >
+              <Link href="/forgot-password" className="text-sm font-medium text-primary hover:underline">
                 Forgot password?
               </Link>
             </div>

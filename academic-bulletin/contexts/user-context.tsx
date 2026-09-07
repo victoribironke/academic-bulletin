@@ -24,7 +24,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const isFetching = React.useRef(false);
+
   const fetchUser = useCallback(async () => {
+    if (isFetching.current) return;
+    isFetching.current = true;
     try {
       const response = await fetch("/api/users/me", {
         headers: {
@@ -43,6 +47,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       setCurrentUser(null);
     } finally {
       setIsLoading(false);
+      isFetching.current = false;
     }
   }, []);
 
