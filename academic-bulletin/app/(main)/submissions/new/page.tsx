@@ -147,7 +147,6 @@ export default function NewSubmissionPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
-          createdById: currentUser.id,
           cycleId: activeCycle.id,
         }),
       });
