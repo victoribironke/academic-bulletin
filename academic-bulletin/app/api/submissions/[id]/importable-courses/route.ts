@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { canViewSubmission, requireApiUser } from "@/lib/api-auth";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -10,6 +11,12 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+    if (!(await canViewSubmission(auth.user, id))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const { searchParams } = new URL(request.url);
     const sourceSubmissionId = searchParams.get("sourceSubmissionId");
 
@@ -24,6 +31,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     // If a source submission is specified, return its courses
     if (sourceSubmissionId) {
+      const source = await prisma.submission.findUnique({
+        where: { id: sourceSubmissionId },
+        select: { programmeId: true },
+      });
+      if (
+        !source ||
+        source.programmeId !== submission.programmeId ||
+        !(await canViewSubmission(auth.user, sourceSubmissionId))
+      ) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
       const courses = await prisma.course.findMany({
         where: { submissionId: sourceSubmissionId },
         include: {
