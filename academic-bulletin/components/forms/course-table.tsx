@@ -32,6 +32,10 @@ import {
 } from "@/components/ui/select";
 import { Loader2, Save, BookOpen, Import, History } from "lucide-react";
 import { toast } from "sonner";
+import {
+  courseFromPreviousBulletin,
+  courseFromRegistry,
+} from "@/lib/courses/import";
 
 // Updated Course interface - removed lecturerId, added prerequisites
 // interface Course {
@@ -60,6 +64,7 @@ interface MasterCourse {
   ownership: string;
   ownerDepartment?: { code: string; name: string };
   ownerSchool?: { code: string; name: string };
+  description?: string;
 }
 
 interface PreviousSubmission {
@@ -110,6 +115,7 @@ interface Course {
   masterCourseId?: string;
   isNew?: boolean;
   isMandatory?: boolean; // New flag for locking
+  importedDescription?: PreviousCourse["description"];
 }
 
 export function CourseTable({
@@ -187,72 +193,12 @@ export function CourseTable({
         setAllMasterCourses(await allMasterRes.json());
       }
 
-      // Check for mandatory courses to inject
-      if (departmentId) {
-        // Fetch all context courses including mandatory ones
-        const masterRes = await fetch(
-          `/api/master-courses?departmentId=${departmentId}`,
-        );
-        if (masterRes.ok) {
-          const masterData: MasterCourse[] = await masterRes.json();
-          const mandatoryCourses = masterData.filter(
-            (mc) => mc.ownership === "INSTITUTIONAL",
-          );
-
-          // Inject missing mandatory courses
-          const newCoursesByLevel = { ...grouped };
-          let added = false;
-
-          mandatoryCourses.forEach((mc) => {
-            // Check if already present in any level
-            let exists = false;
-            LEVELS.forEach((l) => {
-              if (grouped[l]?.some((c) => c.code === mc.code)) exists = true;
-            });
-
-            if (!exists) {
-              const level = mc.level as 100 | 200 | 300 | 400 | 500 | 600;
-              if (!newCoursesByLevel[level]) newCoursesByLevel[level] = [];
-
-              newCoursesByLevel[level].push({
-                code: mc.code,
-                title: mc.title,
-                units: mc.units,
-                status: "CORE", // Mandatory are always CORE
-                semester: mc.semester,
-                level: mc.level,
-                prerequisites: "",
-                masterCourseId: mc.id,
-                isNew: true,
-                isMandatory: true,
-              });
-              added = true;
-            }
-          });
-
-          // Mark existing courses as mandatory if they match
-          LEVELS.forEach((l) => {
-            newCoursesByLevel[l] = newCoursesByLevel[l].map((c) => {
-              const match = mandatoryCourses.find((mc) => mc.code === c.code);
-              if (match) return { ...c, isMandatory: true };
-              return c;
-            });
-          });
-
-          if (added) {
-            setCoursesByLevel(newCoursesByLevel);
-          } else {
-            // If we just mapped existing to mandatory without adding new ones, update state
-            setCoursesByLevel(newCoursesByLevel);
-          }
-        }
-      }
     } catch (error) {
       console.error("Failed to fetch data:", error);
     } finally {
       setIsLoading(false);
     }
-  }, [submissionId, departmentId, LEVELS]);
+  }, [submissionId, LEVELS]);
 
   useEffect(() => {
     if (submissionId && departmentId) {
@@ -380,17 +326,7 @@ export function CourseTable({
       const level = mc.level as 100 | 200 | 300 | 400 | 500 | 600;
       if (!newCoursesByLevel[level]) newCoursesByLevel[level] = [];
 
-      const newCourse: Course = {
-        code: mc.code,
-        title: mc.title,
-        units: mc.units,
-        status: mc.type === "ELECTIVE" ? "ELECTIVE" : "CORE",
-        semester: mc.semester,
-        level: mc.level,
-        prerequisites: "",
-        masterCourseId: mc.id,
-        isNew: true,
-      };
+      const newCourse: Course = courseFromRegistry(mc);
 
       newCoursesByLevel[level] = [...newCoursesByLevel[level], newCourse];
     });
@@ -497,16 +433,7 @@ export function CourseTable({
 
       newCoursesByLevel[level] = [
         ...newCoursesByLevel[level],
-        {
-          code: pc.code,
-          title: pc.title,
-          units: pc.units,
-          status: pc.status,
-          semester: pc.semester,
-          level: pc.level,
-          prerequisites: pc.prerequisites || "",
-          isNew: true,
-        },
+        courseFromPreviousBulletin(pc),
       ];
     });
 
@@ -626,6 +553,30 @@ export function CourseTable({
               const created = await res.json();
               createdMap.set(course.code, { id: created.id, code: course.code, level });
               currentCourseIds.add(created.id);
+
+              if (course.importedDescription) {
+                const descriptionRes = await fetch(
+                  `/api/courses/${created.id}/description`,
+                  {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      learningOutcomes:
+                        course.importedDescription.learningOutcomes || [],
+                      courseContent:
+                        course.importedDescription.courseContent || "",
+                      labWork: course.importedDescription.labWork || "",
+                      entrepreneurialAspect:
+                        course.importedDescription.entrepreneurialAspect || "",
+                    }),
+                  },
+                );
+                if (!descriptionRes.ok) {
+                  errors.push(
+                    `Created ${course.code} but failed to import its details`,
+                  );
+                }
+              }
             }
           } else {
             const res = await fetch(`/api/courses/${course.id}`, {
