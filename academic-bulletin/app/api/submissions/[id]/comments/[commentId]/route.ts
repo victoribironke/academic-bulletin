@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import {
+  canViewSubmission,
+  isAdministrator,
+  requireApiUser,
+} from "@/lib/api-auth";
 
 interface RouteParams {
   params: Promise<{ id: string; commentId: string }>;
@@ -8,9 +13,37 @@ interface RouteParams {
 // PATCH /api/submissions/[id]/comments/[commentId] - Update comment (resolve/unresolve)
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
-    const { commentId } = await params;
+    const { id, commentId } = await params;
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+    if (!(await canViewSubmission(auth.user, id))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { status, content } = body;
+
+    if (status !== undefined && !["OPEN", "RESOLVED"].includes(status)) {
+      return NextResponse.json({ error: "Invalid comment status." }, { status: 400 });
+    }
+    if (content !== undefined && !content?.trim()) {
+      return NextResponse.json({ error: "Content is required." }, { status: 400 });
+    }
+
+    const existing = await prisma.comment.findFirst({
+      where: { id: commentId, submissionId: id },
+      select: { authorId: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Comment not found" }, { status: 404 });
+    }
+    if (
+      content !== undefined &&
+      existing.authorId !== auth.user.id &&
+      !isAdministrator(auth.user)
+    ) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const comment = await prisma.comment.update({
       where: { id: commentId },
@@ -18,7 +51,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         ...(status && { status }),
         ...(status === "RESOLVED" && { resolvedAt: new Date() }),
         ...(status === "OPEN" && { resolvedAt: null }),
-        ...(content && { content }),
+        ...(content && { content: content.trim() }),
       },
       include: {
         author: {
@@ -55,7 +88,26 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 // DELETE /api/submissions/[id]/comments/[commentId] - Delete a comment
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    const { commentId } = await params;
+    const { id, commentId } = await params;
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+    if (!(await canViewSubmission(auth.user, id))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const existing = await prisma.comment.findFirst({
+      where: { id: commentId, submissionId: id },
+      select: { authorId: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Comment not found" }, { status: 404 });
+    }
+    if (
+      existing.authorId !== auth.user.id &&
+      !isAdministrator(auth.user)
+    ) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     await prisma.comment.delete({
       where: { id: commentId },
