@@ -41,6 +41,13 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         setCurrentUser(fullUser);
       } else {
         setCurrentUser(null);
+        if (response.status === 401 || response.status === 403) {
+          const supabase = createClient();
+          await supabase.auth.signOut({ scope: "local" });
+          if (typeof window !== "undefined") {
+            window.location.assign("/login");
+          }
+        }
       }
     } catch (error) {
       console.error("Failed to fetch user:", error);
