@@ -31,6 +31,7 @@ export type Permission =
   | "manage:users"
   | "view:staff"
   | "manage:staff"
+  | "manage:cycles"
   | "admin:all";
 
 // Role-based permission mapping
@@ -70,7 +71,7 @@ const rolePermissions: Record<UserRole, Permission[]> = {
     "manage:users",
     "view:staff",
     "manage:staff",
-    "admin:all",
+    "manage:cycles",
   ],
   SUPER_ADMIN: [
     // Super Admin has all permissions
@@ -91,6 +92,7 @@ const rolePermissions: Record<UserRole, Permission[]> = {
     "manage:users",
     "view:staff",
     "manage:staff",
+    "manage:cycles",
     "admin:all",
   ],
 };
@@ -102,7 +104,7 @@ export function hasPermission(
   user: User | null,
   permission: Permission,
 ): boolean {
-  if (!user) return false;
+  if (!user || !user.isActive) return false;
   const permissions = rolePermissions[user.role];
   return permissions.includes(permission) || permissions.includes("admin:all");
 }
