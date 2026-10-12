@@ -43,6 +43,10 @@ next-env.d.ts
 prd.md
 
 prisma/migrations
+!prisma/migrations/
+prisma/migrations/*
+!prisma/migrations/20261012170000_add_corrections_required_status/
+!prisma/migrations/20261012170000_add_corrections_required_status/migration.sql
 
 # local
 *.log
