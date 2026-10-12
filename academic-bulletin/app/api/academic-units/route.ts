@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { requireApiUser } from "@/lib/api-auth";
 
 // GET /api/academic-units - Fetch the full tree (Schools -> Departments -> Programmes)
 export async function GET() {
   try {
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+
     const units = await prisma.school.findMany({
       orderBy: { name: "asc" },
       include: {
