@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getApiUser, requireSubmissionWriteAccess } from "@/lib/api-auth";
+import {
+  canViewSubmission,
+  getApiUser,
+  requireApiUser,
+  requireSubmissionWriteAccess,
+} from "@/lib/api-auth";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -10,6 +15,11 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+    if (!(await canViewSubmission(auth.user, id))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const submission = await prisma.submission.findUnique({
       where: { id },
