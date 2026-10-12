@@ -50,6 +50,7 @@ interface DashboardStats {
   submissions: {
     total: number;
     draft: number;
+    correctionsRequired: number;
     inReview: number;
     approved: number;
     rejected: number;
@@ -151,7 +152,6 @@ export default function DashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newCycleName,
-          createdById: currentUser.id,
         }),
       });
       if (res.ok) {
@@ -205,6 +205,11 @@ export default function DashboardPage() {
   const statusPieData = stats
     ? [
       { name: "Draft", value: stats.submissions.draft, color: "#94a3b8" },
+      {
+        name: "Corrections Required",
+        value: stats.submissions.correctionsRequired,
+        color: "#f97316",
+      },
       {
         name: "In Review",
         value: stats.submissions.inReview,
