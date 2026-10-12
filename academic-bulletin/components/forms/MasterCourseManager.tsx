@@ -84,7 +84,7 @@ const COURSE_TYPES = [
 const OWNERSHIP_TYPES = [
   { value: "DEPARTMENT", label: "Department" },
   { value: "SCHOOL", label: "School" },
-  { value: "INSTITUTIONAL", label: "Institutional" },
+  { value: "INSTITUTIONAL", label: "University-wide" },
 ];
 
 const LEVELS = [100, 200, 300, 400, 500];
@@ -152,10 +152,7 @@ export function MasterCourseManager({
       const res = await fetch("/api/master-courses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...newCourse,
-          userRole: currentUser?.role,
-        }),
+        body: JSON.stringify(newCourse),
       });
 
       if (res.ok) {
