@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { requireApiUser } from "@/lib/api-auth";
 
 // GET /api/departments - List all departments (with optional school filter)
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+
     const { searchParams } = new URL(request.url);
     const schoolId = searchParams.get("schoolId");
 
@@ -33,6 +37,9 @@ export async function GET(request: NextRequest) {
 // POST /api/departments - Create a new department
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireApiUser(["ADMIN", "SUPER_ADMIN"]);
+    if (!auth.ok) return auth.response;
+
     const body = await request.json();
     const { name, code, description, schoolId } = body;
 
