@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { requireApiUser } from "@/lib/api-auth";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -8,9 +10,12 @@ interface RouteParams {
 // GET /api/users/[id] - Get a single user
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
+    const auth = await requireApiUser(["ADMIN", "SUPER_ADMIN"]);
+    if (!auth.ok) return auth.response;
+
     const { id } = await params;
 
-    let user = await prisma.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id },
       select: {
         id: true,
@@ -29,53 +34,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
       },
     });
-
-    // Auto-sync fallback: If Prisma user record is missing, check auth session and auto-provision
-    if (!user) {
-      const { createClient } = await import("@/lib/supabase/server");
-      const supabase = await createClient();
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser();
-
-      if (authUser && (authUser.id === id || authUser.email === id)) {
-        const isSuper = authUser.email === "super@university.edu";
-        user = await prisma.user.upsert({
-          where: { email: authUser.email! },
-          update: {
-            id: authUser.id,
-            isActive: true,
-          },
-          create: {
-            id: authUser.id,
-            email: authUser.email!,
-            firstName:
-              authUser.user_metadata?.first_name ||
-              (isSuper ? "Super" : "User"),
-            lastName:
-              authUser.user_metadata?.last_name || (isSuper ? "Admin" : ""),
-            role: isSuper ? "SUPER_ADMIN" : "HOD",
-            isActive: true,
-          },
-          select: {
-            id: true,
-            email: true,
-            firstName: true,
-            lastName: true,
-            role: true,
-            isActive: true,
-            schoolId: true,
-            departmentId: true,
-            school: {
-              select: { id: true, name: true, code: true },
-            },
-            department: {
-              select: { id: true, name: true, code: true },
-            },
-          },
-        });
-      }
-    }
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -110,6 +68,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const body = await request.json();
     const { role, isActive, schoolId, departmentId } = body;
 
+    if (role !== undefined && !(role in ROLE_TIERS)) {
+      return NextResponse.json(
+        { error: "Invalid system role." },
+        { status: 400 },
+      );
+    }
+    if (isActive !== undefined && typeof isActive !== "boolean") {
+      return NextResponse.json(
+        { error: "isActive must be a boolean." },
+        { status: 400 },
+      );
+    }
+
     // 1. Get the requesting user from the Supabase session
     const { createClient } = await import("@/lib/supabase/server");
     const supabase = await createClient();
@@ -130,6 +101,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     if (
       !requestingUser ||
+      !requestingUser.isActive ||
       getRoleTier(requestingUser.role) < getRoleTier("ADMIN")
     ) {
       return NextResponse.json(
@@ -183,6 +155,75 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         { error: "You cannot demote yourself." },
         { status: 403 }
       );
+    }
+
+    if (requestingUser.id === id && isActive === false) {
+      return NextResponse.json(
+        { error: "You cannot deactivate your own account." },
+        { status: 403 },
+      );
+    }
+
+    const nextRole = role ?? targetUser.role;
+    const nextSchoolId = schoolId !== undefined ? schoolId : targetUser.schoolId;
+    const nextDepartmentId =
+      departmentId !== undefined ? departmentId : targetUser.departmentId;
+
+    if (nextRole === "HOD" && !nextDepartmentId) {
+      return NextResponse.json(
+        { error: "A Head of Department must be assigned to a department." },
+        { status: 400 },
+      );
+    }
+    if (nextRole === "DEAN" && !nextSchoolId) {
+      return NextResponse.json(
+        { error: "A Dean must be assigned to a school." },
+        { status: 400 },
+      );
+    }
+    if (nextDepartmentId) {
+      const department = await prisma.department.findUnique({
+        where: { id: nextDepartmentId },
+        select: { schoolId: true },
+      });
+      if (!department || department.schoolId !== nextSchoolId) {
+        return NextResponse.json(
+          {
+            error:
+              "The selected department does not belong to the selected school.",
+          },
+          { status: 400 },
+        );
+      }
+    }
+
+    if (isActive !== undefined && isActive !== targetUser.isActive) {
+      const adminAuthClient = createAdminClient();
+      const { data: authData, error: authLookupError } =
+        await adminAuthClient.auth.admin.getUserById(targetUser.id);
+
+      if (authLookupError || !authData.user) {
+        return NextResponse.json(
+          { error: "Unable to update the authentication account." },
+          { status: 502 },
+        );
+      }
+
+      const { error: authUpdateError } =
+        await adminAuthClient.auth.admin.updateUserById(targetUser.id, {
+          ban_duration: isActive ? "none" : "876000h",
+          app_metadata: {
+            ...authData.user.app_metadata,
+            account_active: isActive,
+          },
+        });
+
+      if (authUpdateError) {
+        return NextResponse.json(
+          { error: "Unable to update the authentication account." },
+          { status: 502 },
+        );
+      }
     }
 
     const user = await prisma.user.update({
