@@ -5,6 +5,7 @@ import {
   isValidCourseCode,
   formatCourseCode,
 } from "@/lib/validation/name-format";
+import { requireApiUser } from "@/lib/api-auth";
 import { propagateMasterCourseChanges } from "@/lib/courses/propagation";
 
 // Valid enum values
@@ -26,6 +27,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+
     const { id } = await params;
 
     const course = await prisma.masterCourse.findUnique({
@@ -73,6 +77,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const auth = await requireApiUser(["ADMIN", "SUPER_ADMIN"]);
+    if (!auth.ok) return auth.response;
+
     const { id } = await params;
     const body = await request.json();
     const {
@@ -203,6 +210,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const auth = await requireApiUser(["ADMIN", "SUPER_ADMIN"]);
+    if (!auth.ok) return auth.response;
+
     const { id } = await params;
 
     // Check if course exists and has dependencies
