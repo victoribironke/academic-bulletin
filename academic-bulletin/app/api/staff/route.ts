@@ -5,6 +5,7 @@ import {
   isValidName,
   toTitleCase,
 } from "@/lib/validation/name-format";
+import { canAccessDepartment, requireApiUser } from "@/lib/api-auth";
 
 // Valid enum values for validation
 const VALID_TITLES = [
@@ -35,14 +36,35 @@ const VALID_TYPES = ["ACADEMIC", "ADJUNCT", "NON_ACADEMIC"];
 // GET /api/staff - Get all staff (optionally filtered by department)
 export async function GET(request: Request) {
   try {
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+    if (auth.user.role === "HOD" && !auth.user.departmentId) {
+      return NextResponse.json(
+        { error: "Your account is not assigned to a department." },
+        { status: 403 },
+      );
+    }
+
     const { searchParams } = new URL(request.url);
-    const departmentId = searchParams.get("departmentId");
+    const departmentId =
+      auth.user.role === "HOD"
+        ? auth.user.departmentId
+        : searchParams.get("departmentId");
     const type = searchParams.get("type");
     const rank = searchParams.get("rank");
     const qualification = searchParams.get("qualification");
 
     const where: Record<string, unknown> = { isActive: true };
     if (departmentId) where.departmentId = departmentId;
+    if (auth.user.role === "DEAN") {
+      if (!auth.user.schoolId) {
+        return NextResponse.json(
+          { error: "Your account is not assigned to a school." },
+          { status: 403 },
+        );
+      }
+      where.department = { schoolId: auth.user.schoolId };
+    }
     if (type && VALID_TYPES.includes(type)) where.type = type;
     if (rank && VALID_RANKS.includes(rank)) where.academicRank = rank;
     if (qualification && VALID_QUALIFICATIONS.includes(qualification)) {
@@ -89,6 +111,9 @@ export async function GET(request: Request) {
 // POST /api/staff - Create a new staff member
 export async function POST(request: Request) {
   try {
+    const auth = await requireApiUser(["HOD", "ADMIN", "SUPER_ADMIN"]);
+    if (!auth.ok) return auth.response;
+
     const body = await request.json();
     const {
       title,
@@ -104,6 +129,10 @@ export async function POST(request: Request) {
       type,
       departmentId,
     } = body;
+
+    if (!(await canAccessDepartment(auth.user, departmentId))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     // Required field validation
     if (
