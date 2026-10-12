@@ -73,7 +73,12 @@ interface Submission {
   title: string;
 
   currentPhase: number;
-  status: "DRAFT" | "IN_REVIEW" | "APPROVED" | "REJECTED";
+  status:
+    | "DRAFT"
+    | "CORRECTIONS_REQUIRED"
+    | "IN_REVIEW"
+    | "APPROVED"
+    | "REJECTED";
   submittedAt: string | null;
   approvedAt: string | null;
   programme: {
@@ -433,7 +438,7 @@ export default function SubmissionDetailPage({
 
   const canEdit =
     hasPermission("edit:submission") &&
-    submission?.status === "DRAFT" &&
+    ["DRAFT", "CORRECTIONS_REQUIRED"].includes(submission?.status || "") &&
     isOwnDepartment;
   const canComment =
     hasPermission("comment:submission") || hasPermission("review:submission");
@@ -442,7 +447,7 @@ export default function SubmissionDetailPage({
   const canSubmit =
     currentUser &&
     ["HOD", "SUPER_ADMIN"].includes(currentUser.role) &&
-    submission?.status === "DRAFT" &&
+    ["DRAFT", "CORRECTIONS_REQUIRED"].includes(submission?.status || "") &&
     isOwnDepartment;
 
   const fetchSubmission = useCallback(async () => {
@@ -778,7 +783,6 @@ export default function SubmissionDetailPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action,
-          performedById: currentUser.id,
           remarks,
         }),
       });
@@ -872,7 +876,6 @@ export default function SubmissionDetailPage({
           content: newComment,
           section: activeSection,
           type: commentType,
-          authorId: currentUser.id,
         }),
       });
 
@@ -1017,7 +1020,9 @@ export default function SubmissionDetailPage({
             variant={submission.status === "APPROVED" ? "default" : "secondary"}
             className={submission.status === "APPROVED" ? "bg-green-500" : ""}
           >
-            {submission.status}
+            {submission.status === "CORRECTIONS_REQUIRED"
+              ? "Corrections Required"
+              : submission.status.replaceAll("_", " ")}
           </Badge>
           <Badge variant="outline">
             Phase {submission.currentPhase}:{" "}
