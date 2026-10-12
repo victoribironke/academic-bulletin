@@ -14,6 +14,10 @@ const storageTarget =
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  experimental: {
+    // Keep production builds within modest school-server resource limits.
+    cpus: 1,
+  },
 
   // ── Auth & Storage Rewrites ───────────────────────────────────────────────
   // In DEVELOPMENT (Docker), rewrites proxy to GoTrue & Storage on the Docker network.
