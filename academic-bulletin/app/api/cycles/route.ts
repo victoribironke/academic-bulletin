@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { requireApiUser } from "@/lib/api-auth";
 
 export async function GET() {
   try {
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+
     const cycles = await prisma.reviewCycle.findMany({
       orderBy: { startedAt: "desc" },
       include: {
@@ -29,19 +33,16 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { name, description, createdById } = await request.json();
+    const auth = await requireApiUser(["ADMIN", "SUPER_ADMIN"]);
+    if (!auth.ok) return auth.response;
 
-    if (!name || !createdById) {
+    const { name, description } = await request.json();
+
+    if (!name) {
       return NextResponse.json(
-        { error: "Name and creator ID are required" },
+        { error: "Name is required" },
         { status: 400 },
       );
-    }
-
-    // Check if user exists and is authorized (for safety, but mostly handled client side)
-    const user = await prisma.user.findUnique({ where: { id: createdById } });
-    if (!user || (user.role !== "ADMIN" && user.role !== "SUPER_ADMIN")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
     // Set any currently active cycles to inactive
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
       data: {
         name,
         description,
-        createdById,
+        createdById: auth.user.id,
         isActive: true,
       },
     });
