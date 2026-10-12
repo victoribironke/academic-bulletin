@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getApiUser, requireSubmissionWriteAccess } from "@/lib/api-auth";
+import {
+  canViewSubmission,
+  getApiUser,
+  requireSubmissionWriteAccess,
+} from "@/lib/api-auth";
+import { resolveWorkflowTransition } from "@/lib/submissions/workflow";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -11,11 +16,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { action, toPhase, remarks, performedById } = body;
+    const { action, remarks } = body;
 
-    if (!action || !performedById) {
+    if (!action) {
       return NextResponse.json(
-        { error: "Action and performedById are required" },
+        { error: "Action is required" },
         { status: 400 },
       );
     }
@@ -24,10 +29,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (user.id !== performedById) {
+    if (!(await canViewSubmission(user, id))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-
     if (action === "SUBMIT") {
       const gate = await requireSubmissionWriteAccess(user, id);
       if (!gate.ok) {
@@ -60,37 +64,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const fromPhase = submission.currentPhase;
-    let newPhase = fromPhase;
-    let newStatus = submission.status;
-
-    // Determine new phase and status based on action
-    switch (action) {
-      case "APPROVE":
-        // Move to next phase (max 11)
-        newPhase = toPhase || Math.min(fromPhase + 1, 11);
-        newStatus = newPhase === 11 ? "APPROVED" : "IN_REVIEW";
-        break;
-      case "REJECT":
-        // Return to draft status
-        newPhase = 1;
-        newStatus = "REJECTED";
-        break;
-      case "RETURN":
-        // Return to previous phase
-        newPhase = toPhase || Math.max(fromPhase - 1, 1);
-        newStatus = "IN_REVIEW";
-        break;
-      case "SUBMIT":
-        // Submit for review (move from draft to phase 1 in review)
-        newPhase = 1;
-        newStatus = "IN_REVIEW";
-        break;
-      default:
-        return NextResponse.json(
-          { error: "Invalid action. Use APPROVE, REJECT, RETURN, or SUBMIT" },
-          { status: 400 },
-        );
+    const resolved = resolveWorkflowTransition({
+      action,
+      currentPhase: fromPhase,
+      currentStatus: submission.status,
+      remarks,
+    });
+    if (!resolved.ok) {
+      return NextResponse.json(
+        { error: resolved.message },
+        { status: resolved.statusCode },
+      );
     }
+    const newPhase = resolved.phase;
+    const newStatus = resolved.status;
 
     // Create transition record and update submission in a transaction
     const [transition, updated] = await prisma.$transaction([
@@ -101,7 +88,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           toPhase: newPhase,
           action,
           remarks,
-          performedById,
+          performedById: user.id,
         },
         include: {
           performedBy: {
