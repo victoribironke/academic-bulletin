@@ -21,6 +21,15 @@ function InviteRedirect() {
     }
   }, [searchParams, router]);
 
+  if (searchParams.get("error") === "account_deactivated") {
+    return (
+      <div className="mb-4 rounded-md bg-destructive/10 p-3 text-center text-sm font-medium text-destructive">
+        This account has been deactivated. Contact an administrator for
+        assistance.
+      </div>
+    );
+  }
+
   return null;
 }
 
