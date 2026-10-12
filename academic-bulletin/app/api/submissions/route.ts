@@ -1,24 +1,72 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { requireApiUser } from "@/lib/api-auth";
+
+const SUBMISSION_STATUSES = [
+  "DRAFT",
+  "CORRECTIONS_REQUIRED",
+  "IN_REVIEW",
+  "APPROVED",
+  "REJECTED",
+] as const;
 
 // GET /api/submissions - List submissions with filters
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+    if (
+      (auth.user.role === "HOD" && !auth.user.departmentId) ||
+      (auth.user.role === "DEAN" && !auth.user.schoolId)
+    ) {
+      return NextResponse.json(
+        { error: "Your account is not assigned to an academic unit." },
+        { status: 403 },
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const phase = searchParams.get("phase");
     const programmeId = searchParams.get("programmeId");
-    const departmentId = searchParams.get("departmentId");
-    const schoolId = searchParams.get("schoolId");
+    const departmentId =
+      auth.user.role === "HOD"
+        ? auth.user.departmentId
+        : searchParams.get("departmentId");
+    const schoolId =
+      auth.user.role === "DEAN"
+        ? auth.user.schoolId
+        : searchParams.get("schoolId");
     const createdById = searchParams.get("createdById");
     const cycleId = searchParams.get("cycleId");
+
+    if (
+      status &&
+      !SUBMISSION_STATUSES.includes(
+        status as (typeof SUBMISSION_STATUSES)[number],
+      )
+    ) {
+      return NextResponse.json({ error: "Invalid status filter." }, { status: 400 });
+    }
+    const phaseNumber = phase ? Number(phase) : null;
+    if (
+      phaseNumber !== null &&
+      (!Number.isInteger(phaseNumber) || phaseNumber < 1 || phaseNumber > 11)
+    ) {
+      return NextResponse.json({ error: "Invalid phase filter." }, { status: 400 });
+    }
 
     const submissions = await prisma.submission.findMany({
       where: {
         ...(status && {
-          status: status as "DRAFT" | "IN_REVIEW" | "APPROVED" | "REJECTED",
+          status: status as
+            | "DRAFT"
+            | "CORRECTIONS_REQUIRED"
+            | "IN_REVIEW"
+            | "APPROVED"
+            | "REJECTED",
         }),
-        ...(phase && { currentPhase: parseInt(phase) }),
+        ...(phaseNumber !== null && { currentPhase: phaseNumber }),
         ...(programmeId && { programmeId }),
         ...(departmentId && { programme: { departmentId } }),
         ...(schoolId && { programme: { department: { schoolId } } }),
@@ -74,12 +122,15 @@ export async function GET(request: NextRequest) {
 // POST /api/submissions - Create a new submission
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { title, programmeId, createdById, cycleId } = body;
+    const auth = await requireApiUser(["SUPER_ADMIN"]);
+    if (!auth.ok) return auth.response;
 
-    if (!title || !programmeId || !createdById || !cycleId) {
+    const body = await request.json();
+    const { title, programmeId, cycleId } = body;
+
+    if (!title || !programmeId || !cycleId) {
       return NextResponse.json(
-        { error: "Title, programme, creator, and cycle are required" },
+        { error: "Title, programme, and cycle are required" },
         { status: 400 },
       );
     }
@@ -89,7 +140,7 @@ export async function POST(request: NextRequest) {
       data: {
         title,
         programmeId,
-        createdById,
+        createdById: auth.user.id,
         cycleId,
         status: "DRAFT",
         currentPhase: 1,
