@@ -5,10 +5,15 @@ import {
   generateInstitutionBulletin,
   ExportLevel,
 } from "@/lib/bulletin/generation";
+import { requireApiUser } from "@/lib/api-auth";
+import { canExportBulletin } from "@/lib/bulletin/access";
 
 // GET /api/bulletin/generate - Generate bulletin data
 export async function GET(request: Request) {
   try {
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+
     const { searchParams } = new URL(request.url);
     const level = searchParams.get("level") as ExportLevel;
     const programmeId = searchParams.get("programmeId");
@@ -26,6 +31,17 @@ export async function GET(request: Request) {
         { error: "level must be 'department', 'school', or 'institution'" },
         { status: 400 },
       );
+    }
+
+    if (
+      !(await canExportBulletin(auth.user, {
+        level,
+        programmeId,
+        schoolId,
+        submissionId,
+      }))
+    ) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     let bulletinData;
