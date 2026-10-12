@@ -44,7 +44,12 @@ interface Submission {
   id: string;
   title: string;
   currentPhase: number;
-  status: "DRAFT" | "IN_REVIEW" | "APPROVED" | "REJECTED";
+  status:
+    | "DRAFT"
+    | "CORRECTIONS_REQUIRED"
+    | "IN_REVIEW"
+    | "APPROVED"
+    | "REJECTED";
   submittedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -101,6 +106,11 @@ const phaseNames: Record<number, string> = {
 
 const statusConfig = {
   DRAFT: { label: "Draft", variant: "outline" as const, icon: Clock },
+  CORRECTIONS_REQUIRED: {
+    label: "Corrections Required",
+    variant: "destructive" as const,
+    icon: AlertCircle,
+  },
   IN_REVIEW: {
     label: "In Review",
     variant: "default" as const,
@@ -159,7 +169,7 @@ export default function SubmissionsPage() {
       const response = await fetch("/api/submissions/initialize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cycleId: filterCycle, createdById: currentUser?.id })
+        body: JSON.stringify({ cycleId: filterCycle }),
       });
 
       if (response.ok) {
@@ -306,6 +316,9 @@ export default function SubmissionsPage() {
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
                   <SelectItem value="DRAFT">Draft</SelectItem>
+                  <SelectItem value="CORRECTIONS_REQUIRED">
+                    Corrections Required
+                  </SelectItem>
                   <SelectItem value="IN_REVIEW">In Review</SelectItem>
                   <SelectItem value="APPROVED">Approved</SelectItem>
                   <SelectItem value="REJECTED">Rejected</SelectItem>
