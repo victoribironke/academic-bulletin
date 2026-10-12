@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { canViewSubmission, requireApiUser } from "@/lib/api-auth";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -9,6 +10,12 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+    if (!(await canViewSubmission(auth.user, id))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const { searchParams } = new URL(request.url);
     const section = searchParams.get("section");
     const status = searchParams.get("status");
@@ -46,14 +53,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
-    const body = await request.json();
-    const { content, section, type, authorId } = body;
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+    if (!(await canViewSubmission(auth.user, id))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
-    if (!content || !authorId) {
+    const body = await request.json();
+    const { content, section, type } = body;
+
+    if (!content?.trim()) {
       return NextResponse.json(
-        { error: "Content and authorId are required" },
+        { error: "Content is required" },
         { status: 400 }
       );
+    }
+    if (
+      type &&
+      !["SUGGESTION", "ISSUE", "QUESTION", "APPROVAL"].includes(type)
+    ) {
+      return NextResponse.json({ error: "Invalid comment type." }, { status: 400 });
     }
 
     // Get current phase of submission
@@ -71,12 +90,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const comment = await prisma.comment.create({
       data: {
-        content,
-        section,
+        content: content.trim(),
+        section: typeof section === "string" ? section.trim() : null,
         type: type || "SUGGESTION",
         phase: submission.currentPhase,
         submissionId: id,
-        authorId,
+        authorId: auth.user.id,
       },
       include: {
         author: {
