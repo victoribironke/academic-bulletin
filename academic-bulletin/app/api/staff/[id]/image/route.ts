@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { createClient } from "@supabase/supabase-js";
 import { checkProfessionalImageFile } from "@/lib/grace-vision";
+import { canAccessDepartment, requireApiUser } from "@/lib/api-auth";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -25,6 +26,8 @@ interface RouteParams {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
+    const auth = await requireApiUser(["HOD", "ADMIN", "SUPER_ADMIN"]);
+    if (!auth.ok) return auth.response;
 
     const staff = await prisma.staff.findUnique({
       where: { id },
@@ -33,11 +36,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         imageDriveFileId: true,
         surname: true,
         firstName: true,
+        departmentId: true,
       },
     });
 
     if (!staff) {
       return NextResponse.json({ error: "Staff not found" }, { status: 404 });
+    }
+    if (!(await canAccessDepartment(auth.user, staff.departmentId))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const formData = await request.formData();
@@ -127,14 +134,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
+    const auth = await requireApiUser(["HOD", "ADMIN", "SUPER_ADMIN"]);
+    if (!auth.ok) return auth.response;
 
     const staff = await prisma.staff.findUnique({
       where: { id },
-      select: { id: true, imageDriveFileId: true },
+      select: { id: true, imageDriveFileId: true, departmentId: true },
     });
 
     if (!staff) {
       return NextResponse.json({ error: "Staff not found" }, { status: 404 });
+    }
+    if (!(await canAccessDepartment(auth.user, staff.departmentId))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     if (staff.imageDriveFileId) {
