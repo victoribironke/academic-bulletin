@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getApiUser, requireSubmissionWriteAccess } from "@/lib/api-auth";
+import {
+  canViewSubmission,
+  getApiUser,
+  requireApiUser,
+  requireSubmissionWriteAccess,
+} from "@/lib/api-auth";
 
 // GET /api/courses/[id]/description - Get course description
 export async function GET(
@@ -19,6 +24,7 @@ export async function GET(
             code: true,
             title: true,
             units: true,
+            submissionId: true,
           },
         },
       },
@@ -29,6 +35,12 @@ export async function GET(
         { error: "Course description not found" },
         { status: 404 },
       );
+    }
+
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+    if (!(await canViewSubmission(auth.user, description.course.submissionId))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     return NextResponse.json(description);
