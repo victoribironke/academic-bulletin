@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Copy, Check, CircleCheck } from "lucide-react";
+import { Plus, CircleCheck } from "lucide-react";
 
 export function CreateUserDialog({
   schools,
@@ -37,17 +37,18 @@ export function CreateUserDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [selectedSchool, setSelectedSchool] = useState<string>("none");
+  const [selectedDepartment, setSelectedDepartment] =
+    useState<string>("none");
   const [selectedRole, setSelectedRole] = useState<string>("HOD");
-  const [inviteLink, setInviteLink] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [invitedEmail, setInvitedEmail] = useState<string | null>(null);
   const [state, formAction, isPending] = useActionState(adminCreateUser, null);
 
   useEffect(() => {
-    if (state?.success && state.inviteLink) {
-      setInviteLink(state.inviteLink);
+    if (state?.success && state.email) {
+      setInvitedEmail(state.email);
       onSuccess?.();
-      toast.success("User created", {
-        description: "Copy the invite link below and share it with the user.",
+      toast.success("Invitation sent", {
+        description: `Login instructions were sent to ${state.email}.`,
       });
     }
     if (state?.error) {
@@ -56,20 +57,12 @@ export function CreateUserDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 
-  const handleCopy = async () => {
-    if (!inviteLink) return;
-    await navigator.clipboard.writeText(inviteLink);
-    setCopied(true);
-    toast.success("Invite link copied to clipboard");
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   const handleOpenChange = (isOpen: boolean) => {
     setOpen(isOpen);
     if (!isOpen) {
-      setInviteLink(null);
-      setCopied(false);
+      setInvitedEmail(null);
       setSelectedSchool("none");
+      setSelectedDepartment("none");
       setSelectedRole("HOD");
     }
   };
@@ -89,46 +82,18 @@ export function CreateUserDialog({
       </DialogTrigger>
 
       <DialogContent className="sm:max-w-[425px]">
-        {inviteLink ? (
+        {invitedEmail ? (
           <div className="space-y-4">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <CircleCheck className="h-5 w-5 text-green-500" />
-                User Created
+                Invitation Sent
               </DialogTitle>
               <DialogDescription>
-                No email was sent automatically. Copy the invite link below and
-                share it with the user so they can set their password.
+                Login instructions were sent directly to {invitedEmail}. The
+                recipient can use the email link to set their password.
               </DialogDescription>
             </DialogHeader>
-
-            <div className="space-y-3">
-              <Label>Invite Link</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  readOnly
-                  value={inviteLink}
-                  className="flex-1 font-mono text-xs"
-                  onClick={(e) => (e.target as HTMLInputElement).select()}
-                />
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="outline"
-                  onClick={handleCopy}
-                  title="Copy invite link"
-                >
-                  {copied ? (
-                    <Check className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                This link is single-use and expires in 24 hours.
-              </p>
-            </div>
 
             <DialogFooter>
               <Button onClick={() => handleOpenChange(false)}>Done</Button>
@@ -139,8 +104,8 @@ export function CreateUserDialog({
             <DialogHeader>
               <DialogTitle>Create New User</DialogTitle>
               <DialogDescription>
-                Add a new user to the system. You will receive an invite link to
-                share with them so they can set their password.
+                Add a new user and send password setup instructions directly to
+                their email address.
               </DialogDescription>
             </DialogHeader>
 
@@ -170,7 +135,14 @@ export function CreateUserDialog({
               <div className="space-y-2">
                 <Label htmlFor="role">System Role</Label>
                 <input type="hidden" name="role" value={selectedRole} />
-                <Select defaultValue="HOD" onValueChange={setSelectedRole}>
+                <Select
+                  value={selectedRole}
+                  onValueChange={(role) => {
+                    setSelectedRole(role);
+                    setSelectedSchool("none");
+                    setSelectedDepartment("none");
+                  }}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a role" />
                   </SelectTrigger>
@@ -187,12 +159,16 @@ export function CreateUserDialog({
                 </Select>
               </div>
 
+              {(selectedRole === "HOD" || selectedRole === "DEAN") && (
               <div className="space-y-2">
-                <Label htmlFor="schoolId">School (Optional)</Label>
+                <Label htmlFor="schoolId">School</Label>
                 <Select
                   name="schoolId"
                   value={selectedSchool}
-                  onValueChange={setSelectedSchool}
+                  onValueChange={(schoolId) => {
+                    setSelectedSchool(schoolId);
+                    setSelectedDepartment("none");
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a school" />
@@ -207,11 +183,16 @@ export function CreateUserDialog({
                   </SelectContent>
                 </Select>
               </div>
+              )}
 
-              {selectedSchool !== "none" && (
+              {selectedRole === "HOD" && selectedSchool !== "none" && (
                 <div className="space-y-2">
-                  <Label htmlFor="departmentId">Department (Optional)</Label>
-                  <Select name="departmentId" defaultValue="none">
+                  <Label htmlFor="departmentId">Department</Label>
+                  <Select
+                    name="departmentId"
+                    value={selectedDepartment}
+                    onValueChange={setSelectedDepartment}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select a department" />
                     </SelectTrigger>
