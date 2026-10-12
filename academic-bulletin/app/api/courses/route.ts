@@ -5,7 +5,12 @@ import {
   formatCourseCode,
   isValidCourseCode,
 } from "@/lib/validation/name-format";
-import { getApiUser, requireSubmissionWriteAccess } from "@/lib/api-auth";
+import {
+  canViewSubmission,
+  getApiUser,
+  requireApiUser,
+  requireSubmissionWriteAccess,
+} from "@/lib/api-auth";
 
 // GET /api/courses - Get courses for a submission
 export async function GET(request: Request) {
@@ -21,6 +26,12 @@ export async function GET(request: Request) {
       );
     }
 
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+    if (!(await canViewSubmission(auth.user, submissionId))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const where: Record<string, unknown> = { submissionId };
     if (level) where.level = parseInt(level);
 
@@ -33,6 +44,9 @@ export async function GET(request: Request) {
             learningOutcomes: true,
             courseContent: true,
             labWork: true,
+            entrepreneurialAspect: true,
+            gracePass: true,
+            graceResult: true,
           },
         },
         masterCourse: {
