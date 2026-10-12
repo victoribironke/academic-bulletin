@@ -58,6 +58,14 @@ export async function updateSession(request: NextRequest) {
   const isAuthRoute =
     isLoginRoute || isInviteFlowRoute || isPasswordRecoveryRoute;
 
+  if (user?.app_metadata?.account_active === false) {
+    await supabase.auth.signOut({ scope: "local" });
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("error", "account_deactivated");
+    return NextResponse.redirect(url);
+  }
+
   if (!user && !isAuthRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
