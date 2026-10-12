@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { GRACE_VISION_SPACE_URL, parseGraceAnalysis } from "@/lib/grace-vision";
+import {
+  canViewSubmission,
+  getApiUser,
+  requireApiUser,
+  requireSubmissionWriteAccess,
+} from "@/lib/api-auth";
 
 const GRACE_API_URL = `${GRACE_VISION_SPACE_URL}/check-grace`;
 
@@ -15,6 +21,27 @@ export async function POST(request: NextRequest) {
         { error: "title and content are required" },
         { status: 400 },
       );
+    }
+
+    let targetSubmissionId = submissionId as string | undefined;
+    if (type === "course" && courseId) {
+      const course = await prisma.course.findUnique({
+        where: { id: courseId },
+        select: { submissionId: true },
+      });
+      targetSubmissionId = course?.submissionId;
+    }
+    if (!targetSubmissionId) {
+      return NextResponse.json(
+        { error: "A valid submission or course is required." },
+        { status: 400 },
+      );
+    }
+
+    const user = await getApiUser();
+    const gate = await requireSubmissionWriteAccess(user, targetSubmissionId);
+    if (!gate.ok) {
+      return NextResponse.json({ error: gate.message }, { status: gate.status });
     }
 
     // Call external GRACE API
@@ -74,9 +101,15 @@ export async function POST(request: NextRequest) {
         },
       });
     } else if (type === "course" && courseId) {
-      await prisma.courseDescription.update({
+      await prisma.courseDescription.upsert({
         where: { courseId },
-        data: {
+        update: {
+          gracePass: graceResult.passed,
+          graceResult: graceResult,
+        },
+        create: {
+          courseId,
+          submissionId: targetSubmissionId,
           gracePass: graceResult.passed,
           graceResult: graceResult,
         },
@@ -97,7 +130,13 @@ export async function GET(request: NextRequest) {
   const courseId = searchParams.get("courseId");
 
   try {
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+
     if (submissionId) {
+      if (!(await canViewSubmission(auth.user, submissionId))) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
       const content = await prisma.submissionContent.findUnique({
         where: { submissionId },
         select: { philosophyGracePass: true, philosophyGrace: true },
@@ -109,6 +148,16 @@ export async function GET(request: NextRequest) {
     }
 
     if (courseId) {
+      const course = await prisma.course.findUnique({
+        where: { id: courseId },
+        select: { submissionId: true },
+      });
+      if (
+        !course ||
+        !(await canViewSubmission(auth.user, course.submissionId))
+      ) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
       const desc = await prisma.courseDescription.findUnique({
         where: { courseId },
         select: { gracePass: true, graceResult: true },
