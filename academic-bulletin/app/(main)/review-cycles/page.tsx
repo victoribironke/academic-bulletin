@@ -63,7 +63,7 @@ export default function ReviewCyclesPage() {
   });
   const [error, setError] = useState("");
 
-  const canManage = hasPermission("admin:all");
+  const canManage = hasPermission("manage:cycles");
 
   const fetchData = async () => {
     try {
@@ -113,7 +113,6 @@ export default function ReviewCyclesPage() {
       name: sanitize(formData.name),
       description: sanitize(formData.description),
       isActive: formData.isActive,
-      createdById: currentUser.id,
     };
 
     try {
