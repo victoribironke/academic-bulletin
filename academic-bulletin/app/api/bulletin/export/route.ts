@@ -7,10 +7,15 @@ import {
 import { generateBulletinDocx } from "@/lib/bulletin/export-docx";
 import { generateBulletinPdf } from "@/lib/bulletin/export-pdf";
 import prisma from "@/lib/prisma";
+import { requireApiUser } from "@/lib/api-auth";
+import { canExportBulletin } from "@/lib/bulletin/access";
 
 // GET /api/bulletin/export?level=...&format=docx|pdf&submissionId=...&programmeId=...&departmentId=...&schoolId=...
 export async function GET(request: Request) {
   try {
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+
     const { searchParams } = new URL(request.url);
     const format = searchParams.get("format") || "docx";
     const level = searchParams.get("level") || "programme";
@@ -24,6 +29,18 @@ export async function GET(request: Request) {
         { error: "format must be 'docx' or 'pdf'" },
         { status: 400 },
       );
+    }
+
+    if (
+      !(await canExportBulletin(auth.user, {
+        level,
+        submissionId,
+        programmeId,
+        departmentId,
+        schoolId,
+      }))
+    ) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     let bulletinData;
