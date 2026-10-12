@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { requireApiUser } from "@/lib/api-auth";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -8,6 +9,9 @@ interface RouteParams {
 // GET /api/schools/[id] - Get a single school
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+
     const { id } = await params;
 
     const school = await prisma.school.findUnique({
@@ -43,6 +47,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 // PUT /api/schools/[id] - Update a school
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
+    const auth = await requireApiUser(["ADMIN", "SUPER_ADMIN"]);
+    if (!auth.ok) return auth.response;
+
     const { id } = await params;
     const body = await request.json();
     const { name, code, description } = body;
@@ -85,6 +92,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 // DELETE /api/schools/[id] - Delete a school
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
+    const auth = await requireApiUser(["ADMIN", "SUPER_ADMIN"]);
+    if (!auth.ok) return auth.response;
+
     const { id } = await params;
 
     await prisma.school.delete({
