@@ -5,6 +5,7 @@ import {
   formatCourseCode,
   isValidCourseCode,
 } from "@/lib/validation/name-format";
+import { requireApiUser } from "@/lib/api-auth";
 
 // Valid enum values
 const VALID_COURSE_TYPES = [
@@ -22,6 +23,9 @@ const VALID_SEMESTERS = [1, 2];
 // GET /api/master-courses - Get all master courses with filters
 export async function GET(request: Request) {
   try {
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+
     const { searchParams } = new URL(request.url);
     const departmentId = searchParams.get("departmentId");
     const schoolId = searchParams.get("schoolId");
@@ -143,6 +147,9 @@ export async function GET(request: Request) {
 // POST /api/master-courses - Create a new master course (Admin only)
 export async function POST(request: Request) {
   try {
+    const auth = await requireApiUser(["ADMIN", "SUPER_ADMIN"]);
+    if (!auth.ok) return auth.response;
+
     const body = await request.json();
     const {
       code,
@@ -156,7 +163,6 @@ export async function POST(request: Request) {
       ownerDeptId,
       ownerSchoolId,
       prerequisiteIds,
-      userRole, // Passed from client context for validation
     } = body;
 
     // Required field validation
@@ -166,19 +172,6 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-
-    // Ownership Permission Check
-    // "INSTITUTIONAL" courses can only be created by ADMIN or SUPER_ADMIN
-    if (ownership === "INSTITUTIONAL") {
-      if (userRole !== "ADMIN" && userRole !== "SUPER_ADMIN") {
-        return NextResponse.json(
-          { error: "Only Administrators can create Institutional courses." },
-          { status: 403 },
-        );
-      }
-    }
-
-    // "SCHOOL" courses restriction (optional, usually DEAN/ADMIN but we'll enforce basic role check on client)
 
     // Course code validation
     if (!isValidCourseCode(code)) {
