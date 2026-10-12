@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { requireApiUser } from "@/lib/api-auth";
 
 // POST /api/submissions/initialize - Idempotent bulk creation of submissions
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { cycleId, createdById } = body;
+    const auth = await requireApiUser(["SUPER_ADMIN"]);
+    if (!auth.ok) return auth.response;
 
-    if (!cycleId || !createdById) {
+    const body = await request.json();
+    const { cycleId } = body;
+
+    if (!cycleId) {
       return NextResponse.json(
-        { error: "cycleId and createdById are required" },
+        { error: "cycleId is required" },
         { status: 400 }
       );
     }
@@ -55,7 +59,7 @@ export async function POST(request: NextRequest) {
         data: {
           title: `Academic Bulletin Submission - ${programme.name}`,
           programmeId: programme.id,
-          createdById,
+          createdById: auth.user.id,
           cycleId,
           status: "DRAFT",
           currentPhase: 1,
