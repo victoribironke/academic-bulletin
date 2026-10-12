@@ -32,6 +32,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Users, UserCheck, UserX, Loader2 } from "lucide-react";
 import { CreateUserDialog } from "@/components/users/create-user-dialog";
 import { EditUserDialog } from "@/components/users/edit-user-dialog";
+import { toast } from "sonner";
 
 interface School {
   id: string;
@@ -132,7 +133,13 @@ export default function UsersPage() {
       });
 
       if (response.ok) {
-        fetchData();
+        await fetchData();
+        toast.success(
+          user.isActive ? "User deactivated" : "User activated",
+        );
+      } else {
+        const data = await response.json().catch(() => ({}));
+        toast.error(data.error || "Failed to update user status");
       }
     } catch (err) {
       console.error("Failed to toggle user status:", err);
@@ -153,7 +160,11 @@ export default function UsersPage() {
       });
 
       if (response.ok) {
-        fetchData();
+        await fetchData();
+        toast.success("User role updated");
+      } else {
+        const data = await response.json().catch(() => ({}));
+        toast.error(data.error || "Failed to update user role");
       }
     } catch (err) {
       console.error("Failed to update user role:", err);
