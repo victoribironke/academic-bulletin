@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { requireApiUser } from "@/lib/api-auth";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -8,6 +9,9 @@ interface RouteParams {
 // GET /api/master-courses/[id]/programmes - Get all programmes linked to this course
 export async function GET(request: Request, { params }: RouteParams) {
   try {
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+
     const { id } = await params;
 
     const course = await prisma.masterCourse.findUnique({
@@ -61,6 +65,9 @@ export async function GET(request: Request, { params }: RouteParams) {
 // POST /api/master-courses/[id]/programmes - Link course to multiple programmes at once
 export async function POST(request: Request, { params }: RouteParams) {
   try {
+    const auth = await requireApiUser(["ADMIN", "SUPER_ADMIN"]);
+    if (!auth.ok) return auth.response;
+
     const { id } = await params;
     const body = await request.json();
     const { programmeIds, isCore = true } = body;
@@ -155,6 +162,9 @@ export async function POST(request: Request, { params }: RouteParams) {
 // DELETE /api/master-courses/[id]/programmes - Unlink programmes from course
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
+    const auth = await requireApiUser(["ADMIN", "SUPER_ADMIN"]);
+    if (!auth.ok) return auth.response;
+
     const { id } = await params;
     const { searchParams } = new URL(request.url);
     const programmeId = searchParams.get("programmeId");
