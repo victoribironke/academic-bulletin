@@ -21,7 +21,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    let user = await prisma.user.findFirst({
+    const user = await prisma.user.findFirst({
       where: {
         OR: [{ id: authUser.id }, { email: authUser.email! }],
       },
@@ -43,42 +43,20 @@ export async function GET() {
       },
     });
 
-    // Auto-provision Super Admin or initial profile if not in Prisma yet
     if (!user) {
-      const isSuper = authUser.email === "super@university.edu";
-      user = await prisma.user.upsert({
-        where: { email: authUser.email! },
-        update: {
-          id: authUser.id,
-          isActive: true,
-        },
-        create: {
-          id: authUser.id,
-          email: authUser.email!,
-          firstName:
-            authUser.user_metadata?.first_name || (isSuper ? "Super" : "User"),
-          lastName:
-            authUser.user_metadata?.last_name || (isSuper ? "Admin" : ""),
-          role: isSuper ? "SUPER_ADMIN" : "HOD",
-          isActive: true,
-        },
-        select: {
-          id: true,
-          email: true,
-          firstName: true,
-          lastName: true,
-          role: true,
-          isActive: true,
-          schoolId: true,
-          departmentId: true,
-          school: {
-            select: { id: true, name: true, code: true },
-          },
-          department: {
-            select: { id: true, name: true, code: true },
-          },
-        },
-      });
+      await supabase.auth.signOut({ scope: "global" });
+      return NextResponse.json(
+        { error: "Account is not provisioned" },
+        { status: 403 },
+      );
+    }
+
+    if (!user.isActive) {
+      await supabase.auth.signOut({ scope: "global" });
+      return NextResponse.json(
+        { error: "Account deactivated" },
+        { status: 403 },
+      );
     }
 
     return NextResponse.json(user);
