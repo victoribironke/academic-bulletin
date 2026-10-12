@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { requireApiUser } from "@/lib/api-auth";
 
 // GET /api/schools - List all schools
 export async function GET() {
   try {
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+
     const schools = await prisma.school.findMany({
       include: {
         _count: {
@@ -26,6 +30,9 @@ export async function GET() {
 // POST /api/schools - Create a new school
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireApiUser(["ADMIN", "SUPER_ADMIN"]);
+    if (!auth.ok) return auth.response;
+
     const body = await request.json();
     const { name, code, description } = body;
 
