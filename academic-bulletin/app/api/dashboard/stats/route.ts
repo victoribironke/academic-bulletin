@@ -1,12 +1,31 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { requireApiUser } from "@/lib/api-auth";
 
 // GET /api/dashboard/stats - Get dashboard statistics
 export async function GET(request: Request) {
   try {
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+    if (
+      (auth.user.role === "HOD" && !auth.user.departmentId) ||
+      (auth.user.role === "DEAN" && !auth.user.schoolId)
+    ) {
+      return NextResponse.json(
+        { error: "Your account is not assigned to an academic unit." },
+        { status: 403 },
+      );
+    }
+
     const { searchParams } = new URL(request.url);
-    const departmentId = searchParams.get("departmentId");
-    const schoolId = searchParams.get("schoolId");
+    const departmentId =
+      auth.user.role === "HOD"
+        ? auth.user.departmentId
+        : searchParams.get("departmentId");
+    const schoolId =
+      auth.user.role === "DEAN"
+        ? auth.user.schoolId
+        : searchParams.get("schoolId");
 
     const whereClause: any = {};
     if (departmentId) {
@@ -19,12 +38,16 @@ export async function GET(request: Request) {
     const [
       totalSubmissions,
       draftCount,
+      correctionsRequiredCount,
       inReviewCount,
       approvedCount,
       rejectedCount,
     ] = await Promise.all([
       prisma.submission.count({ where: whereClause }),
       prisma.submission.count({ where: { ...whereClause, status: "DRAFT" } }),
+      prisma.submission.count({
+        where: { ...whereClause, status: "CORRECTIONS_REQUIRED" },
+      }),
       prisma.submission.count({ where: { ...whereClause, status: "IN_REVIEW" } }),
       prisma.submission.count({ where: { ...whereClause, status: "APPROVED" } }),
       prisma.submission.count({ where: { ...whereClause, status: "REJECTED" } }),
@@ -111,6 +134,7 @@ export async function GET(request: Request) {
       submissions: {
         total: totalSubmissions,
         draft: draftCount,
+        correctionsRequired: correctionsRequiredCount,
         inReview: inReviewCount,
         approved: approvedCount,
         rejected: rejectedCount,
