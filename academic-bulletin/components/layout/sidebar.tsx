@@ -56,7 +56,7 @@ const navItems: NavItem[] = [
     title: "Review Cycles",
     href: "/review-cycles",
     icon: <CalendarClock className="h-5 w-5 shrink-0" />,
-    permission: "admin:all",
+    permission: "manage:cycles",
   },
   {
     title: "Users",
