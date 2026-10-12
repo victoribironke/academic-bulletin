@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { toTitleCase, isValidName } from "@/lib/validation/name-format";
+import { canAccessDepartment, requireApiUser } from "@/lib/api-auth";
 
 // GET /api/staff/[id] - Get single staff member
 export async function GET(
@@ -9,6 +10,8 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
 
     const staff = await prisma.staff.findUnique({
       where: { id },
@@ -34,6 +37,10 @@ export async function GET(
       return NextResponse.json({ error: "Staff not found" }, { status: 404 });
     }
 
+    if (!(await canAccessDepartment(auth.user, staff.department.id))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     return NextResponse.json(staff);
   } catch (error) {
     console.error("Failed to fetch staff:", error);
@@ -51,6 +58,9 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
+    const auth = await requireApiUser(["HOD", "ADMIN", "SUPER_ADMIN"]);
+    if (!auth.ok) return auth.response;
+
     const body = await request.json();
     const {
       title,
@@ -71,6 +81,9 @@ export async function PATCH(
     const existing = await prisma.staff.findUnique({ where: { id } });
     if (!existing) {
       return NextResponse.json({ error: "Staff not found" }, { status: 404 });
+    }
+    if (!(await canAccessDepartment(auth.user, existing.departmentId))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     // Validate names if provided
@@ -165,6 +178,8 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    const auth = await requireApiUser(["HOD", "ADMIN", "SUPER_ADMIN"]);
+    if (!auth.ok) return auth.response;
 
     // Check if staff exists
     const existing = await prisma.staff.findUnique({
@@ -173,6 +188,9 @@ export async function DELETE(
 
     if (!existing) {
       return NextResponse.json({ error: "Staff not found" }, { status: 404 });
+    }
+    if (!(await canAccessDepartment(auth.user, existing.departmentId))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     await prisma.staff.delete({ where: { id } });
