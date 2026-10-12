@@ -5,7 +5,12 @@ import {
   formatCourseCode,
   isValidCourseCode,
 } from "@/lib/validation/name-format";
-import { getApiUser, requireSubmissionWriteAccess } from "@/lib/api-auth";
+import {
+  canViewSubmission,
+  getApiUser,
+  requireApiUser,
+  requireSubmissionWriteAccess,
+} from "@/lib/api-auth";
 
 // GET /api/courses/[id] - Get single course with description
 export async function GET(
@@ -40,6 +45,12 @@ export async function GET(
 
     if (!course) {
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
+    }
+
+    const auth = await requireApiUser();
+    if (!auth.ok) return auth.response;
+    if (!(await canViewSubmission(auth.user, course.submission.id))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     return NextResponse.json(course);
