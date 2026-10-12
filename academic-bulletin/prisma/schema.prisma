@@ -24,6 +24,7 @@ enum UserRole {
 
 enum SubmissionStatus {
   DRAFT
+  CORRECTIONS_REQUIRED
   IN_REVIEW
   APPROVED
   REJECTED
@@ -100,7 +101,7 @@ enum CourseType {
 enum CourseOwnership {
   DEPARTMENT // Created and owned by a department
   SCHOOL // Shared at school level
-  INSTITUTIONAL // Institution-wide (GDS, GST)
+  INSTITUTIONAL // University-wide GST courses
 }
 
 // ============================================================================
