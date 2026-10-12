@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { Loader2, Printer, Download, BookOpen } from "lucide-react";
 import { BulletinData } from "@/lib/bulletin/generation";
 import { BulletinProgrammeView } from "@/components/preview/bulletin-programme-view";
+import { useUser } from "@/contexts/user-context";
 
 interface School {
   id: string;
@@ -23,10 +24,14 @@ interface School {
 }
 
 export function BulletinGenerator() {
+  const { currentUser } = useUser();
   const [level, setLevel] = useState<"school" | "institution">("school");
   const [schools, setSchools] = useState<School[]>([]);
   const [selectedSchoolId, setSelectedSchoolId] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
+  const [exportingFormat, setExportingFormat] = useState<
+    "docx" | "pdf" | null
+  >(null);
   const [generatedData, setGeneratedData] = useState<BulletinData | null>(null);
 
   useEffect(() => {
@@ -36,7 +41,14 @@ export function BulletinGenerator() {
         const res = await fetch("/api/schools");
         if (res.ok) {
           const data = await res.json();
-          setSchools(data);
+          const availableSchools =
+            currentUser?.role === "DEAN"
+              ? data.filter((school: School) => school.id === currentUser.schoolId)
+              : data;
+          setSchools(availableSchools);
+          if (currentUser?.role === "DEAN" && currentUser.schoolId) {
+            setSelectedSchoolId(currentUser.schoolId);
+          }
         }
       } catch (error) {
         console.error("Failed to fetch schools", error);
@@ -45,7 +57,7 @@ export function BulletinGenerator() {
     };
 
     fetchSchools();
-  }, []);
+  }, [currentUser]);
 
   const handleGenerate = async () => {
     if (level === "school" && !selectedSchoolId) {
@@ -91,6 +103,38 @@ export function BulletinGenerator() {
     window.print();
   };
 
+  const handleExport = async (format: "docx" | "pdf") => {
+    if (!generatedData) return;
+    setExportingFormat(format);
+    try {
+      const params = new URLSearchParams({ level, format });
+      if (level === "school") params.set("schoolId", selectedSchoolId);
+
+      const response = await fetch(`/api/bulletin/export?${params}`);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Export failed");
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${generatedData.title
+        .replace(/[^a-zA-Z0-9\s]/g, "")
+        .replace(/\s+/g, "_")}.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`${format === "docx" ? "Word" : "PDF"} export ready.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Export failed.");
+    } finally {
+      setExportingFormat(null);
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Controls - Hidden when printing */}
@@ -114,7 +158,11 @@ export function BulletinGenerator() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="school">School Level</SelectItem>
-                  <SelectItem value="institution">Institution (All)</SelectItem>
+                  {currentUser?.role !== "DEAN" && (
+                    <SelectItem value="institution">
+                      Institution (All)
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -161,9 +209,29 @@ export function BulletinGenerator() {
             <Printer className="mr-2 h-4 w-4" />
             Print / Save as PDF
           </Button>
-          <Button variant="outline" disabled>
-            <Download className="mr-2 h-4 w-4" />
-            Export Raw Data
+          <Button
+            variant="outline"
+            onClick={() => handleExport("docx")}
+            disabled={exportingFormat !== null}
+          >
+            {exportingFormat === "docx" ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
+            Export Word
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => handleExport("pdf")}
+            disabled={exportingFormat !== null}
+          >
+            {exportingFormat === "pdf" ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
+            Export PDF
           </Button>
         </div>
       )}
