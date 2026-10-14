@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { BrandedShell } from "@/components/auth/branded-shell";
@@ -15,9 +15,44 @@ function InviteContent() {
   const tokenHash = searchParams.get("token_hash");
   const typeParam = searchParams.get("type") || "invite";
 
+  useEffect(() => {
+    // 1. If an active session already exists (e.g. from GoTrue /verify redirect), forward to password setup
+    const checkSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session) {
+        router.replace("/confirm");
+      }
+    };
+    checkSession();
+
+    // 2. Listen for auth state changes if client is parsing hash fragments (#access_token=...)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session && (event === "SIGNED_IN" || event === "USER_UPDATED")) {
+        router.replace("/confirm");
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [supabase.auth, router]);
+
   const handleAccept = async () => {
+    // If already authenticated, proceed directly to confirm
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session) {
+      router.push("/confirm");
+      return;
+    }
+
     if (!tokenHash) {
-      setError("No valid token found in the URL.");
+      setError("No valid token found in the URL. If you received an invitation email, please click the button in the email.");
       return;
     }
 
@@ -68,7 +103,7 @@ function InviteContent() {
       <button
         type="button"
         onClick={handleAccept}
-        disabled={isLoading || !tokenHash}
+        disabled={isLoading}
         className="mt-8 inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
       >
         {isLoading

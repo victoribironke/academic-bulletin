@@ -8,6 +8,7 @@ export async function updateSession(request: NextRequest) {
   if (
     pathname.startsWith("/auth/v1") ||
     pathname.startsWith("/storage/v1") ||
+    pathname.startsWith("/verify") ||
     pathname.startsWith("/api")
   ) {
     return NextResponse.next();
@@ -53,30 +54,38 @@ export async function updateSession(request: NextRequest) {
 
   const isLoginRoute = pathname.startsWith("/login");
   const isInviteFlowRoute =
-    pathname.startsWith("/confirm") || pathname.startsWith("/invite-accept");
+    pathname.startsWith("/confirm") ||
+    pathname.startsWith("/invite-accept") ||
+    pathname.startsWith("/verify");
   const isPasswordRecoveryRoute = pathname.startsWith("/forgot-password");
   const isAuthRoute =
     isLoginRoute || isInviteFlowRoute || isPasswordRecoveryRoute;
 
+  // Resolve base URL safely from request headers to prevent redirecting to container-internal port (e.g. 3000)
+  const host =
+    request.headers.get("x-forwarded-host") || request.headers.get("host");
+  const proto =
+    request.headers.get("x-forwarded-proto") ||
+    request.nextUrl.protocol.replace(":", "");
+  const baseUrl = host
+    ? `${proto}://${host}`
+    : process.env.NEXT_PUBLIC_SITE_URL || request.nextUrl.origin;
+
   if (user?.app_metadata?.account_active === false) {
     await supabase.auth.signOut({ scope: "local" });
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("error", "account_deactivated");
+    const url = new URL("/login?error=account_deactivated", baseUrl);
     return NextResponse.redirect(url);
   }
 
   if (!user && !isAuthRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    const url = new URL("/login", baseUrl);
     return NextResponse.redirect(url);
   }
 
   // Keep login guest-only, but allow authenticated users to complete
   // invite/recovery flows on /invite-accept and /confirm.
   if (user && isLoginRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    const url = new URL("/dashboard", baseUrl);
     return NextResponse.redirect(url);
   }
 

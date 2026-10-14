@@ -9,6 +9,7 @@ module.exports = {
         PORT: "3000",
         HOSTNAME: "0.0.0.0",
 
+        NEXT_PUBLIC_SITE_URL:"http://bulletin.babcock.edu.ng",
         SUPABASE_URL:"http://bulletin.babcock.edu.ng",
         NEXT_PUBLIC_SUPABASE_URL:"http://bulletin.babcock.edu.ng",
         INTERNAL_SUPABASE_URL:"http://127.0.0.1:3000",

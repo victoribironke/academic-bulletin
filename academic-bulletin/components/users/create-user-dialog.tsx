@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, CircleCheck } from "lucide-react";
+import { Plus, CircleCheck, Copy, Check } from "lucide-react";
 
 export function CreateUserDialog({
   schools,
@@ -41,26 +41,44 @@ export function CreateUserDialog({
     useState<string>("none");
   const [selectedRole, setSelectedRole] = useState<string>("HOD");
   const [invitedEmail, setInvitedEmail] = useState<string | null>(null);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [state, formAction, isPending] = useActionState(adminCreateUser, null);
 
   useEffect(() => {
-    if (state?.success && state.email) {
+    if (state && "success" in state && state.success) {
       setInvitedEmail(state.email);
+      if (state.inviteLink) {
+        setInviteLink(state.inviteLink);
+        toast.success("User created", {
+          description: "Copy the invite link below to share with the user.",
+        });
+      } else {
+        toast.success("Invitation sent", {
+          description: `Login instructions were sent to ${state.email}.`,
+        });
+      }
       onSuccess?.();
-      toast.success("Invitation sent", {
-        description: `Login instructions were sent to ${state.email}.`,
-      });
-    }
-    if (state?.error) {
+    } else if (state && "error" in state && state.error) {
       toast.error("Failed to create user", { description: state.error });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 
+  const handleCopy = async () => {
+    if (!inviteLink) return;
+    await navigator.clipboard.writeText(inviteLink);
+    setCopied(true);
+    toast.success("Invite link copied to clipboard");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const handleOpenChange = (isOpen: boolean) => {
     setOpen(isOpen);
     if (!isOpen) {
       setInvitedEmail(null);
+      setInviteLink(null);
+      setCopied(false);
       setSelectedSchool("none");
       setSelectedDepartment("none");
       setSelectedRole("HOD");
@@ -87,13 +105,44 @@ export function CreateUserDialog({
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <CircleCheck className="h-5 w-5 text-green-500" />
-                Invitation Sent
+                {inviteLink ? "User Created" : "Invitation Sent"}
               </DialogTitle>
               <DialogDescription>
-                Login instructions were sent directly to {invitedEmail}. The
-                recipient can use the email link to set their password.
+                {inviteLink
+                  ? `User account was created for ${invitedEmail}. Direct email delivery is not configured, so please copy the invite link below and share it with the user.`
+                  : `Login instructions were sent directly to ${invitedEmail}. The recipient can use the email link to set their password.`}
               </DialogDescription>
             </DialogHeader>
+
+            {inviteLink && (
+              <div className="space-y-3">
+                <Label>Invite Link</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    readOnly
+                    value={inviteLink}
+                    className="flex-1 font-mono text-xs"
+                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                  />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    onClick={handleCopy}
+                    title="Copy invite link"
+                  >
+                    {copied ? (
+                      <Check className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  This single-use link allows the user to set their password.
+                </p>
+              </div>
+            )}
 
             <DialogFooter>
               <Button onClick={() => handleOpenChange(false)}>Done</Button>
@@ -208,7 +257,7 @@ export function CreateUserDialog({
                 </div>
               )}
 
-              {state?.error && (
+              {state && "error" in state && state.error && (
                 <div className="text-sm font-medium text-destructive">
                   {state.error}
                 </div>

@@ -35,7 +35,7 @@ services:
       # Runs once on a fresh volume — creates auth & storage schemas
       - ./postgres-init:/docker-entrypoint-initdb.d:ro
     ports:
-      - "5433:5432"
+      - "5434:5432"
     networks:
       - abrms-network
     healthcheck:
@@ -71,16 +71,29 @@ services:
       GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
 
       # Site URL — in dev this is the Next.js host address
-      GOTRUE_SITE_URL: "http://localhost:3300"
-      API_EXTERNAL_URL: "http://localhost:3300"
-      GOTRUE_URI_ALLOW_LIST: "http://localhost:3300/**,http://localhost:3300"
+      GOTRUE_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3300}
+      API_EXTERNAL_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3300}
+      GOTRUE_API_EXTERNAL_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3300}
+      GOTRUE_MAILER_EXTERNAL_HOSTS: "localhost:3300,localhost,127.0.0.1:3300,bulletin.babcock.edu.ng"
+      GOTRUE_URI_ALLOW_LIST: "${NEXT_PUBLIC_SITE_URL:-http://localhost:3300}/**,${NEXT_PUBLIC_SITE_URL:-http://localhost:3300},http://localhost:3300/confirm,http://localhost:3300/invite-accept,http://bulletin.babcock.edu.ng/**,http://bulletin.babcock.edu.ng"
+      GOTRUE_MAILER_URLPATHS_INVITE: /verify
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /verify
 
-      # Auto-confirm accounts without SMTP during local development.
-      # Set to false and configure SMTP before going to production.
-      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      # Mailer & SMTP configuration
+      GOTRUE_MAILER_AUTOCONFIRM: ${GOTRUE_MAILER_AUTOCONFIRM:-false}
       GOTRUE_DISABLE_SIGNUP: "false"
       GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
       GOTRUE_PASSWORD_MIN_LENGTH: 8
+      GOTRUE_SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      GOTRUE_SMTP_PORT: ${SMTP_PORT:-587}
+      GOTRUE_SMTP_USER: ${SMTP_USER}
+      GOTRUE_SMTP_PASS: ${SMTP_PASS}
+      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL:-${SMTP_USER}}
+      GOTRUE_SMTP_SENDER_NAME: ${SMTP_SENDER_NAME:-Babcock Academic Bulletin}
+    ports:
+      - "9999:9999"
     expose:
       - "9999"
     healthcheck:
@@ -140,6 +153,8 @@ services:
       POSTGREST_URL: "http://storage:5000"
     volumes:
       - storage_data:/var/lib/storage
+    ports:
+      - "5000:5000"
     expose:
       - "5000"
     healthcheck:
@@ -167,6 +182,9 @@ services:
       args:
         - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
         - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY}
+        - NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
+        - GOTRUE_INTERNAL_URL=http://auth:9999
+        - STORAGE_INTERNAL_URL=http://storage:5000
     command: sh -c "npm run db:push"
     env_file:
       - .env
@@ -216,11 +234,18 @@ services:
       args:
         - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
         - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY}
+        - NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
+        - GOTRUE_INTERNAL_URL=http://auth:9999
+        - STORAGE_INTERNAL_URL=http://storage:5000
     container_name: abrms-nextjs-prod
     restart: always
     env_file:
       - .env
     environment:
+      - DOCKER_ENV=true
+      - IS_DOCKER=true
+      - NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL:-http://localhost:3300}
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-http://localhost:3300}
       - GRACE_VISION_SPACE_URL=http://grace:7860
       - INTERNAL_SUPABASE_URL=http://127.0.0.1:3000
       - GOTRUE_INTERNAL_URL=http://auth:9999

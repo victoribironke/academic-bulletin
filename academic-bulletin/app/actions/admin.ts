@@ -108,29 +108,51 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
     // Send login instructions through the configured Supabase email provider.
     const siteUrl =
       process.env.NEXT_PUBLIC_SITE_URL ||
-      (process.env.NODE_ENV === "production"
-        ? "https://bulletin.babcock.edu.ng"
+      (process.env.NODE_ENV === "production" && !process.env.IS_DOCKER
+        ? "http://bulletin.babcock.edu.ng"
         : "http://localhost:3300");
+
+    let userId: string;
+    let inviteLink: string | null = null;
 
     const { data: inviteData, error: inviteError } =
       await adminAuthClient.auth.admin.inviteUserByEmail(email, {
         data: { first_name: firstName.trim(), last_name: lastName.trim() },
-        redirectTo: `${siteUrl}/invite-accept`,
+        redirectTo: `${siteUrl}/confirm`,
       });
 
-    if (inviteError) {
-      console.error("Supabase invitation error:", inviteError);
-      return { error: inviteError.message };
-    }
+    if (inviteError || !inviteData?.user) {
+      // Fallback: If SMTP is not configured or delivery fails, generate invite link directly
+      const { data: linkData, error: linkError } =
+        await adminAuthClient.auth.admin.generateLink({
+          type: "invite",
+          email,
+          options: {
+            data: { first_name: firstName.trim(), last_name: lastName.trim() },
+            redirectTo: `${siteUrl}/confirm`,
+          },
+        });
 
-    if (!inviteData.user) {
-      return { error: "The invitation service did not create a user." };
+      if (linkError || !linkData?.user) {
+        console.error("Supabase user invitation failed:", inviteError || linkError);
+        return {
+          error:
+            inviteError?.message ||
+            linkError?.message ||
+            "The invitation service did not create a user.",
+        };
+      }
+
+      userId = linkData.user.id;
+      inviteLink = linkData.properties?.action_link || null;
+    } else {
+      userId = inviteData.user.id;
     }
 
     try {
       await prisma.user.create({
         data: {
-          id: inviteData.user.id,
+          id: userId,
           email,
           firstName: firstName.trim(),
           lastName: lastName.trim(),
@@ -140,12 +162,19 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
         },
       });
     } catch (profileError) {
-      await adminAuthClient.auth.admin.deleteUser(inviteData.user.id);
+      await adminAuthClient.auth.admin.deleteUser(userId);
       throw profileError;
     }
 
     revalidatePath("/users");
-    return { success: true, email };
+    const result: { success: true; email: string; inviteLink?: string } = {
+      success: true,
+      email,
+    };
+    if (inviteLink) {
+      result.inviteLink = inviteLink;
+    }
+    return result;
   } catch (error) {
     console.error("Admin user creation failed:", error);
     return { error: "An unexpected error occurred during user creation." };

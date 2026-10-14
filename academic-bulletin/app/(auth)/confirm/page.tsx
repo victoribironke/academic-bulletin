@@ -38,6 +38,18 @@ export default function ConfirmPage() {
       }
     };
     checkSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        setIsVerifying(false);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [supabase.auth]);
 
   const handleSetPassword = async (e: React.FormEvent) => {

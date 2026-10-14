@@ -29,6 +29,10 @@ const nextConfig: NextConfig = {
         destination: `${authTarget}/:path*`,
       },
       {
+        source: "/verify",
+        destination: `${authTarget}/verify`,
+      },
+      {
         source: "/storage/v1/:path*",
         destination: `${storageTarget}/:path*`,
       },
