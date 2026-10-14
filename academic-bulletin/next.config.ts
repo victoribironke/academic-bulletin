@@ -14,6 +14,7 @@ const storageTarget =
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  outputFileTracingRoot: process.cwd(),
   experimental: {
     // Keep production builds within modest school-server resource limits.
     cpus: 1,

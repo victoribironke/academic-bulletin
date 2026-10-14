@@ -70,5 +70,25 @@ if (fs.existsSync(localEnvSrc)) {
   copyFile(parentEnvSrc, envDest, "../.env");
 }
 
+// 4. Handle nested standalone app structures (e.g. monorepo or subfolder tracing)
+const nestedAppDir = path.join(standaloneDir, "academic-bulletin");
+if (fs.existsSync(nestedAppDir)) {
+  console.log("ℹ️  Found nested app directory in standalone. Synchronizing nested targets...");
+  copyDirectory(nextStaticSrc, path.join(nestedAppDir, ".next", "static"), "nested .next/static");
+  copyDirectory(publicSrc, path.join(nestedAppDir, "public"), "nested public");
+  if (fs.existsSync(localEnvSrc)) {
+    copyFile(localEnvSrc, path.join(nestedAppDir, ".env"), "nested .env");
+  } else if (fs.existsSync(parentEnvSrc)) {
+    copyFile(parentEnvSrc, path.join(nestedAppDir, ".env"), "nested .env");
+  }
+
+  // Ensure server.js exists at the root of standalone as well for PM2 compatibility
+  const nestedServerJs = path.join(nestedAppDir, "server.js");
+  const rootServerJs = path.join(standaloneDir, "server.js");
+  if (fs.existsSync(nestedServerJs) && !fs.existsSync(rootServerJs)) {
+    copyFile(nestedServerJs, rootServerJs, "server.js (from nested folder)");
+  }
+}
+
 console.log("✨ [Standalone Assets] Static files and assets synchronized successfully!\n");
 
