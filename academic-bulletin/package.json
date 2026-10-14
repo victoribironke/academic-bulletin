@@ -6,6 +6,8 @@
     "postinstall": "prisma generate",
     "dev": "next dev",
     "build": "next build --webpack",
+    "postbuild": "node scripts/copy-standalone-assets.mjs",
+    "copy:standalone": "node scripts/copy-standalone-assets.mjs",
     "start": "next start",
     "ts-lint": "tsc --noEmit --incremental",
     "lint": "eslint",
