@@ -56,6 +56,9 @@ import { POST as checkGrace } from "@/app/api/grace-check/route";
 import { GET as listMasterCourses } from "@/app/api/master-courses/route";
 import { canExportBulletin } from "@/lib/bulletin/access";
 import { GET as getCurrentUser } from "@/app/api/users/me/route";
+import { POST as bulkImportStaff } from "@/app/api/staff/bulk/route";
+import { POST as bulkImportCourses } from "@/app/api/courses/bulk/route";
+import { POST as bulkImportMasterCourses } from "@/app/api/master-courses/bulk/route";
 
 const ids = {
   schoolA: "test-school-a",
@@ -552,6 +555,164 @@ describe("route authorization", () => {
         }),
       ]),
     );
+  });
+
+  it("hides another department's discoverable courses from an HOD", async () => {
+    authState.userId = ids.admin;
+    await prisma.masterCourse.create({
+      data: {
+        code: "OUT 201",
+        title: "Outside Department Course",
+        units: 2,
+        type: "CORE",
+        ownership: "DEPARTMENT",
+        ownerDeptId: ids.departmentB,
+        level: 200,
+        semester: 1,
+        discoverable: true,
+      },
+    });
+
+    authState.userId = ids.hod;
+    const response = await listMasterCourses(
+      new Request("http://localhost/api/master-courses?discoverable=true"),
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).map((course: { code: string }) => course.code)).not.toContain(
+      "OUT 201",
+    );
+  });
+
+  it("bulk imports staff only into the HOD's department", async () => {
+    authState.userId = ids.hod;
+    const row = {
+      type: "ACADEMIC",
+      title: "DR",
+      gender: "FEMALE",
+      surname: "Bulk",
+      firstName: "Staff",
+      middleName: "",
+      highestQualification: "PHD",
+      academicRank: "LECTURER_I",
+      customJobTitle: "",
+      specialization: "Testing",
+      email: "bulk.staff@example.edu",
+    };
+    const allowed = await bulkImportStaff(
+      new Request("http://localhost/api/staff/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ departmentId: ids.departmentA, rows: [row] }),
+      }),
+    );
+    expect(allowed.status).toBe(201);
+    expect(
+      await prisma.staff.count({
+        where: { departmentId: ids.departmentA, email: row.email },
+      }),
+    ).toBe(1);
+
+    const denied = await bulkImportStaff(
+      new Request("http://localhost/api/staff/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          departmentId: ids.departmentB,
+          rows: [{ ...row, email: "outside.staff@example.edu" }],
+        }),
+      }),
+    );
+    expect(denied.status).toBe(403);
+  });
+
+  it("bulk imports courses with their complete learning details", async () => {
+    authState.userId = ids.hod;
+    const response = await bulkImportCourses(
+      new Request("http://localhost/api/courses/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionId: ids.submission,
+          rows: [
+            {
+              code: "BLK 201",
+              title: "Bulk Import Course",
+              units: 3,
+              status: "CORE",
+              semester: 1,
+              level: 200,
+              prerequisites: "",
+              learningOutcomes: ["Validate imported course data"],
+              courseContent: "Detailed imported content",
+              labWork: "Import exercises",
+              entrepreneurialAspect: "Prepare a reusable template",
+            },
+          ],
+        }),
+      }),
+    );
+    expect(response.status).toBe(201);
+    expect(
+      await prisma.course.findUnique({
+        where: {
+          code_submissionId: { code: "BLK 201", submissionId: ids.submission },
+        },
+        include: { description: true },
+      }),
+    ).toMatchObject({
+      description: {
+        learningOutcomes: ["Validate imported course data"],
+        courseContent: "Detailed imported content",
+        labWork: "Import exercises",
+        entrepreneurialAspect: "Prepare a reusable template",
+      },
+    });
+  });
+
+  it("allows only administrators to bulk upload Registry courses", async () => {
+    const payload = {
+      rows: [
+        {
+          code: "GST 202",
+          title: "University Enterprise Studies",
+          units: 2,
+          type: "GST_BU",
+          ownership: "INSTITUTIONAL",
+          level: 200,
+          semester: 2,
+          description: "University-wide GST course",
+          ownerDepartmentCode: "",
+          ownerSchoolCode: "",
+          discoverable: true,
+        },
+      ],
+    };
+
+    authState.userId = ids.hod;
+    expect(
+      (
+        await bulkImportMasterCourses(
+          new Request("http://localhost/api/master-courses/bulk", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          }),
+        )
+      ).status,
+    ).toBe(403);
+
+    authState.userId = ids.admin;
+    const response = await bulkImportMasterCourses(
+      new Request("http://localhost/api/master-courses/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    );
+    expect(response.status).toBe(201);
+    expect(
+      await prisma.masterCourse.findUnique({ where: { code: "GST 202" } }),
+    ).toMatchObject({ ownership: "INSTITUTIONAL", type: "GST_BU" });
   });
 
   it("persists a course GRACE result even before details are saved", async () => {

@@ -27,20 +27,40 @@ export async function GET(request: Request) {
     if (!auth.ok) return auth.response;
 
     const { searchParams } = new URL(request.url);
-    const departmentId = searchParams.get("departmentId");
-    const schoolId = searchParams.get("schoolId");
+    let departmentId = searchParams.get("departmentId");
+    let schoolId = searchParams.get("schoolId");
     const type = searchParams.get("type");
     const ownership = searchParams.get("ownership");
     const level = searchParams.get("level");
     const semester = searchParams.get("semester");
     const discoverable = searchParams.get("discoverable");
 
+    if (auth.user.role === "HOD") {
+      if (!auth.user.departmentId) {
+        return NextResponse.json(
+          { error: "Your account is not assigned to a department." },
+          { status: 403 },
+        );
+      }
+      departmentId = auth.user.departmentId;
+      schoolId = null;
+    } else if (auth.user.role === "DEAN") {
+      if (!auth.user.schoolId) {
+        return NextResponse.json(
+          { error: "Your account is not assigned to a school." },
+          { status: 403 },
+        );
+      }
+      departmentId = null;
+      schoolId = auth.user.schoolId;
+    }
+
     const where: Record<string, unknown> = {};
 
     // When the import dialog requests only discoverable courses, filter accordingly
-    if (discoverable === "true") {
-      where.discoverable = true;
-    } else if (departmentId || schoolId) {
+    if (discoverable === "true") where.discoverable = true;
+
+    if (departmentId || schoolId) {
       const OR: Array<Record<string, unknown>> = [];
 
       if (departmentId) {

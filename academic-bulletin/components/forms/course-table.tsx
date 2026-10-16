@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
   SelectContent,
@@ -30,8 +31,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Save, BookOpen, Import, History } from "lucide-react";
+import { Loader2, Save, BookOpen, Import, History, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { BulkImportDialog } from "@/components/imports/bulk-import-dialog";
+import {
+  COURSE_TEMPLATE_COLUMNS,
+  COURSE_TEMPLATE_EXAMPLES,
+  courseDuplicateKeys,
+  validateCourseImportRows,
+  type CourseImportData,
+} from "@/lib/imports/courses";
 import {
   courseFromPreviousBulletin,
   courseFromRegistry,
@@ -147,6 +156,7 @@ export function CourseTable({
   >(new Set());
   const [isLoadingMasterCourses, setIsLoadingMasterCourses] = useState(false);
   const [allMasterCourses, setAllMasterCourses] = useState<MasterCourse[]>([]);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
 
   // Import from previous bulletin state
   const [bulletinDialogOpen, setBulletinDialogOpen] = useState(false);
@@ -188,7 +198,9 @@ export function CourseTable({
       setCoursesByLevel(grouped);
       setOriginalCourseIds(ids);
 
-      const allMasterRes = await fetch(`/api/master-courses`);
+      const allMasterRes = await fetch(
+        `/api/master-courses?departmentId=${departmentId}`,
+      );
       if (allMasterRes.ok) {
         setAllMasterCourses(await allMasterRes.json());
       }
@@ -198,7 +210,7 @@ export function CourseTable({
     } finally {
       setIsLoading(false);
     }
-  }, [submissionId, LEVELS]);
+  }, [submissionId, departmentId, LEVELS]);
 
   useEffect(() => {
     if (submissionId && departmentId) {
@@ -270,7 +282,9 @@ export function CourseTable({
   const fetchMasterCourses = useCallback(async () => {
     setIsLoadingMasterCourses(true);
     try {
-      const res = await fetch(`/api/master-courses?discoverable=true`);
+      const res = await fetch(
+        `/api/master-courses?discoverable=true&departmentId=${departmentId}`,
+      );
       if (res.ok) {
         const data = await res.json();
         setMasterCourses(data);
@@ -280,7 +294,7 @@ export function CourseTable({
     } finally {
       setIsLoadingMasterCourses(false);
     }
-  }, []);
+  }, [departmentId]);
 
   // Open import dialog and load courses
   const openImportDialog = async () => {
@@ -707,9 +721,24 @@ export function CourseTable({
               <History className="h-4 w-4 mr-2" />
               Previous Bulletin
             </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (isDirty) {
+                  toast.error(
+                    "Save the current course changes before starting a bulk upload.",
+                  );
+                  return;
+                }
+                setBulkImportOpen(true);
+              }}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Bulk Upload
+            </Button>
             <Button variant="outline" onClick={openImportDialog}>
               <Import className="h-4 w-4 mr-2" />
-              Import from Registry
+              Select from Registry
             </Button>
             <Button onClick={() => saveCourses(false)} disabled={isSaving}>
               {isSaving ? (
@@ -803,8 +832,16 @@ export function CourseTable({
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
           <DialogHeader className="shrink-0">
-            <DialogTitle>Import Courses from Registry</DialogTitle>
+            <DialogTitle>Select Courses from Registry</DialogTitle>
           </DialogHeader>
+
+          <Alert className="mx-1">
+            <AlertDescription>
+              Select centrally maintained courses that apply to this department,
+              including school-wide and university-wide GST courses. This does not
+              upload a spreadsheet.
+            </AlertDescription>
+          </Alert>
 
           <div className="flex-1 min-h-0 overflow-hidden">
             {isLoadingMasterCourses ? (
@@ -847,6 +884,7 @@ export function CourseTable({
                       <TableHead className="whitespace-nowrap">Level</TableHead>
                       <TableHead className="whitespace-nowrap">Sem</TableHead>
                       <TableHead className="whitespace-nowrap">Type</TableHead>
+                      <TableHead className="whitespace-nowrap">Source</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -897,6 +935,13 @@ export function CourseTable({
                               {mc.type}
                             </Badge>
                           </TableCell>
+                          <TableCell className="whitespace-nowrap p-2 text-xs text-muted-foreground">
+                            {mc.ownership === "INSTITUTIONAL"
+                              ? "University-wide"
+                              : mc.ownership === "SCHOOL"
+                                ? mc.ownerSchool?.code || "School-wide"
+                                : mc.ownerDepartment?.code || "Department"}
+                          </TableCell>
                         </TableRow>
                       );
                     })}
@@ -929,6 +974,51 @@ export function CourseTable({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <BulkImportDialog<CourseImportData>
+        open={bulkImportOpen}
+        onOpenChange={setBulkImportOpen}
+        title="Bulk Upload Departmental Courses"
+        description="Upload an Excel or CSV file for this bulletin submission. Course details and learning content are validated before the complete batch is saved."
+        templateFilename="course-structure-bulk-upload-template.csv"
+        templateColumns={COURSE_TEMPLATE_COLUMNS}
+        templateRows={COURSE_TEMPLATE_EXAMPLES}
+        previewColumns={[
+          { label: "Code", value: (row) => row.code },
+          { label: "Title", value: (row) => row.title },
+          { label: "Level", value: (row) => row.level },
+          { label: "Semester", value: (row) => row.semester },
+          { label: "Units", value: (row) => row.units },
+        ]}
+        validateRows={(rows) => {
+          const existing = LEVELS.flatMap(
+            (level) => coursesByLevel[level] || [],
+          );
+          return validateCourseImportRows(rows, {
+            allowedLevels: LEVELS,
+            existingCodes: existing.map(
+              (course) => courseDuplicateKeys(course).code,
+            ),
+            existingTitles: existing.map(
+              (course) => courseDuplicateKeys(course).title,
+            ),
+          });
+        }}
+        onImport={async (rows) => {
+          const response = await fetch("/api/courses/bulk", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ submissionId, rows }),
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error || "Failed to import courses.");
+          }
+          toast.success(`${data.imported} course(s) imported successfully.`);
+          await fetchData();
+        }}
+      />
+
       {/* Import from Previous Bulletin Dialog */}
       <Dialog open={bulletinDialogOpen} onOpenChange={setBulletinDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">

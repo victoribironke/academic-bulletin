@@ -31,8 +31,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, RefreshCw, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { BulkImportDialog } from "@/components/imports/bulk-import-dialog";
+import {
+  STAFF_TEMPLATE_COLUMNS,
+  STAFF_TEMPLATE_EXAMPLES,
+  staffDuplicateKey,
+  validateStaffImportRows,
+  type StaffImportData,
+} from "@/lib/imports/staff";
 import {
   formatStaffName,
   getAcademicRankDisplay,
@@ -74,6 +82,7 @@ export default function StaffPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [deptFilter, setDeptFilter] = useState("ALL");
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
 
   // Form State
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -115,6 +124,9 @@ export default function StaffPage() {
       if (response.ok) {
         const data = await response.json();
         setStaff(data);
+      } else {
+        const data = await response.json().catch(() => ({}));
+        toast.error(data.error || "Failed to refresh the staff directory");
       }
     } catch (err) {
       console.error("Failed to fetch data:", err);
@@ -203,13 +215,13 @@ export default function StaffPage() {
 
     try {
       const url = editingStaff ? `/api/staff/${editingStaff.id}` : "/api/staff";
-      const method = editingStaff ? "PUT" : "POST";
+      const method = editingStaff ? "PATCH" : "POST";
 
       const payload: any = { ...formData };
       payload.departmentId = formData.department;
       delete payload.department;
 
-      if (payload.type !== "NON_ACADEMIC" && payload.academicRank === "OTHER") {
+      if (payload.academicRank !== "OTHER") {
         payload.customJobTitle = "";
       }
 
@@ -382,6 +394,21 @@ export default function StaffPage() {
 
   if (!canView && !canManage) return null;
 
+  const importDepartmentId =
+    currentUser?.role === "HOD"
+      ? currentUser.departmentId || ""
+      : deptFilter !== "ALL"
+        ? deptFilter
+        : "";
+
+  const openBulkImport = () => {
+    if (!importDepartmentId) {
+      toast.error("Select a department before starting a bulk staff upload.");
+      return;
+    }
+    setBulkImportOpen(true);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -391,12 +418,24 @@ export default function StaffPage() {
             Manage academic and non-academic staff across departments
           </p>
         </div>
-        {canManage && (
-          <Button onClick={() => openForm()}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Staff
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={fetchData} disabled={isLoading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+            Refresh
           </Button>
-        )}
+          {canManage && (
+            <>
+              <Button variant="outline" onClick={openBulkImport}>
+                <Upload className="mr-2 h-4 w-4" />
+                Bulk Upload
+              </Button>
+              <Button onClick={() => openForm()}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Staff
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
@@ -679,6 +718,41 @@ export default function StaffPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <BulkImportDialog<StaffImportData>
+        open={bulkImportOpen}
+        onOpenChange={setBulkImportOpen}
+        title="Bulk Upload Staff"
+        description="Upload an Excel or CSV file. All rows are checked before anything is saved, and every imported staff member is assigned to the selected department. Photos remain individually managed."
+        templateFilename="staff-bulk-upload-template.csv"
+        templateColumns={STAFF_TEMPLATE_COLUMNS}
+        templateRows={STAFF_TEMPLATE_EXAMPLES}
+        previewColumns={[
+          { label: "Name", value: (row) => `${row.surname}, ${row.firstName}` },
+          { label: "Type", value: (row) => row.type },
+          { label: "Rank / Role", value: (row) => row.customJobTitle || row.academicRank },
+          { label: "Email", value: (row) => row.email || "-" },
+        ]}
+        validateRows={(rows) =>
+          validateStaffImportRows(
+            rows,
+            staff
+              .filter((member) => member.departmentId === importDepartmentId)
+              .map(staffDuplicateKey),
+          )
+        }
+        onImport={async (rows) => {
+          const response = await fetch("/api/staff/bulk", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ departmentId: importDepartmentId, rows }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Failed to import staff members.");
+          toast.success(`${data.imported} staff member(s) imported successfully.`);
+          await fetchData();
+        }}
+      />
     </div>
   );
 }

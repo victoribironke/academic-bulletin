@@ -81,7 +81,7 @@ try {
     const createdb = postgresBinary("createdb");
     dataDirectory =
       process.env.TEST_POSTGRES_DATA_DIR ||
-      join(tmpdir(), "academic-bulletin-vitest-postgres");
+      join(tmpdir(), "academic-bulletin-vitest-postgres-v2");
     mkdirSync(dataDirectory, { recursive: true });
 
     if (!existsSync(join(dataDirectory, "PG_VERSION"))) {

@@ -31,7 +31,16 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Plus, BookOpen, Link, Trash } from "lucide-react";
+import { Loader2, Plus, BookOpen, Link, Trash, Upload } from "lucide-react";
+import { toast } from "sonner";
+import { BulkImportDialog } from "@/components/imports/bulk-import-dialog";
+import {
+  MASTER_COURSE_TEMPLATE_COLUMNS,
+  MASTER_COURSE_TEMPLATE_EXAMPLES,
+  courseDuplicateKeys,
+  validateMasterCourseImportRows,
+  type MasterCourseImportData,
+} from "@/lib/imports/courses";
 
 // Types
 interface MasterCourse {
@@ -105,6 +114,10 @@ export function MasterCourseManager({
   const [isLinkingCourseId, setIsLinkingCourseId] = useState<string | null>(null);
   const [isTogglingCourseId, setIsTogglingCourseId] = useState<string | null>(null);
   const [isDeletingCourseId, setIsDeletingCourseId] = useState<string | null>(null);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
+
+  const canManageRegistry =
+    currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
 
   // New course form state
   const [newCourse, setNewCourse] = useState({
@@ -397,14 +410,14 @@ export function MasterCourseManager({
           <TableHead>Sem</TableHead>
           <TableHead>Programmes</TableHead>
           <TableHead className="text-center">Discoverable</TableHead>
-          <TableHead>Actions</TableHead>
+          {canManageRegistry && <TableHead>Actions</TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
         {courses.length === 0 ? (
           <TableRow>
             <TableCell
-              colSpan={10}
+              colSpan={canManageRegistry ? 10 : 9}
               className="text-center text-muted-foreground"
             >
               No master courses found. Create one to get started.
@@ -429,10 +442,10 @@ export function MasterCourseManager({
                 <Checkbox
                   checked={course.discoverable}
                   onCheckedChange={() => handleToggleDiscoverable(course)}
-                  disabled={isTogglingCourseId === course.id}
+                  disabled={!canManageRegistry || isTogglingCourseId === course.id}
                 />
               </TableCell>
-              <TableCell>
+              {canManageRegistry && <TableCell>
                 <div className="flex gap-2">
                   <Button
                     size="sm"
@@ -459,14 +472,14 @@ export function MasterCourseManager({
                     )}
                   </Button>
                 </div>
-              </TableCell>
+              </TableCell>}
             </TableRow>
           ))
         )}
       </TableBody>
     </Table>
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ), [courses, isTogglingCourseId]);
+  ), [courses, isTogglingCourseId, isDeletingCourseId, canManageRegistry]);
 
   if (isLoading) {
     return (
@@ -485,6 +498,12 @@ export function MasterCourseManager({
           <BookOpen className="h-5 w-5" />
           <CardTitle>Master Course Registry</CardTitle>
         </div>
+        {canManageRegistry && (
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setBulkImportOpen(true)}>
+              <Upload className="h-4 w-4 mr-2" />
+              Bulk Upload
+            </Button>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button>
@@ -655,6 +674,8 @@ export function MasterCourseManager({
             </DialogFooter>
           </DialogContent>
         </Dialog>
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         {coursesTable}
@@ -707,6 +728,46 @@ export function MasterCourseManager({
             </div>
           </DialogContent>
         </Dialog>
+
+        <BulkImportDialog<MasterCourseImportData>
+          open={bulkImportOpen}
+          onOpenChange={setBulkImportOpen}
+          title="Bulk Upload Registry Courses"
+          description="Upload centrally managed courses, including university-wide GST courses. Department and school ownership codes must already exist in the system."
+          templateFilename="registry-course-bulk-upload-template.csv"
+          templateColumns={MASTER_COURSE_TEMPLATE_COLUMNS}
+          templateRows={MASTER_COURSE_TEMPLATE_EXAMPLES}
+          previewColumns={[
+            { label: "Code", value: (row) => row.code },
+            { label: "Title", value: (row) => row.title },
+            { label: "Type", value: (row) => row.type },
+            { label: "Ownership", value: (row) => row.ownership },
+            { label: "Level", value: (row) => row.level },
+          ]}
+          validateRows={(rows) =>
+            validateMasterCourseImportRows(rows, {
+              existingCodes: courses.map(
+                (course) => courseDuplicateKeys(course).code,
+              ),
+              existingTitles: courses.map(
+                (course) => courseDuplicateKeys(course).title,
+              ),
+            })
+          }
+          onImport={async (rows) => {
+            const response = await fetch("/api/master-courses/bulk", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ rows }),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+              throw new Error(data.error || "Failed to import Registry courses.");
+            }
+            toast.success(`${data.imported} Registry course(s) imported successfully.`);
+            await fetchData();
+          }}
+        />
       </CardContent>
     </Card>
   );

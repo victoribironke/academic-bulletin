@@ -14,8 +14,16 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Save, Users, Camera, Trash2, Info } from "lucide-react";
+import { Loader2, Save, Users, Camera, Trash2, Info, RefreshCw, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { BulkImportDialog } from "@/components/imports/bulk-import-dialog";
+import {
+  STAFF_TEMPLATE_COLUMNS,
+  STAFF_TEMPLATE_EXAMPLES,
+  staffDuplicateKey,
+  validateStaffImportRows,
+  type StaffImportData,
+} from "@/lib/imports/staff";
 
 // Updated StaffMember interface with new structured fields
 interface StaffMember {
@@ -85,17 +93,6 @@ const rankOptions = [
   { value: "LECTURER_II", label: "Lecturer II" },
   { value: "ASSISTANT_LECTURER", label: "Assistant Lecturer" },
   { value: "GRADUATE_ASSISTANT", label: "Graduate Assistant" },
-];
-
-// Non-Academic Rank/Title options
-const nonAcademicRankOptions = [
-  { value: "LAB_TECHNOLOGIST", label: "Lab Technologist" },
-  { value: "OFFICE_MANAGER", label: "Office Manager" },
-  { value: "SECRETARY", label: "Secretary" },
-  { value: "ADMINISTRATIVE_OFFICER", label: "Administrative Officer" },
-  { value: "CLERICAL_OFFICER", label: "Clerical Officer" },
-  { value: "TECHNICIAN", label: "Technician" },
-  { value: "OTHER", label: "Other" },
 ];
 
 // Academic staff columns with structured name fields
@@ -202,15 +199,9 @@ const nonAcademicColumns: Column<StaffMember>[] = [
   {
     key: "academicRank", // Reusing this field for Job Title to match schema
     header: "Job Title",
-    type: "select",
-    options: nonAcademicRankOptions,
-    required: true,
-  },
-  {
-    key: "customJobTitle",
-    header: "Custom Title (if Other)",
     type: "text",
-    placeholder: "e.g., Office Assistant",
+    placeholder: "e.g., Laboratory Technologist",
+    required: true,
   },
   {
     key: "email",
@@ -233,6 +224,7 @@ export function StaffTable({
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("academic");
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
 
   const fetchStaff = useCallback(async () => {
     try {
@@ -252,10 +244,17 @@ export function StaffTable({
       setAcademicStaff(data.filter((s: StaffMember) => s.type === "ACADEMIC"));
       setAdjunctStaff(data.filter((s: StaffMember) => s.type === "ADJUNCT"));
       setNonAcademicStaff(
-        data.filter((s: StaffMember) => s.type === "NON_ACADEMIC"),
+        data
+          .filter((s: StaffMember) => s.type === "NON_ACADEMIC")
+          .map((s: StaffMember) => ({
+            ...s,
+            academicRank:
+              s.customJobTitle || (s.academicRank === "OTHER" ? "" : s.academicRank),
+          })),
       );
     } catch (error) {
       console.error("Failed to fetch staff:", error);
+      toast.error("Failed to refresh the staff directory.");
     } finally {
       setIsLoading(false);
     }
@@ -266,6 +265,12 @@ export function StaffTable({
       fetchStaff();
     }
   }, [departmentId, fetchStaff]);
+
+  useEffect(() => {
+    const refreshOnFocus = () => fetchStaff();
+    window.addEventListener("focus", refreshOnFocus);
+    return () => window.removeEventListener("focus", refreshOnFocus);
+  }, [fetchStaff]);
 
   const createEmptyStaff = (
     type: "ACADEMIC" | "ADJUNCT" | "NON_ACADEMIC",
@@ -291,7 +296,12 @@ export function StaffTable({
       const allStaff = [
         ...academicStaff.map((s) => ({ ...s, type: "ACADEMIC" })),
         ...adjunctStaff.map((s) => ({ ...s, type: "ADJUNCT" })),
-        ...nonAcademicStaff.map((s) => ({ ...s, type: "NON_ACADEMIC" })),
+        ...nonAcademicStaff.map((s) => ({
+          ...s,
+          type: "NON_ACADEMIC",
+          customJobTitle: s.academicRank,
+          academicRank: "OTHER",
+        })),
       ];
 
       const currentStaffIds = new Set<string>();
@@ -482,6 +492,14 @@ export function StaffTable({
         </div>
         {!disabled && (
           <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={fetchStaff} disabled={isLoading}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+            <Button variant="outline" onClick={() => setBulkImportOpen(true)}>
+              <Upload className="h-4 w-4 mr-2" />
+              Bulk Upload
+            </Button>
             <Button
               variant="outline"
               onClick={() => {
@@ -730,6 +748,40 @@ export function StaffTable({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <BulkImportDialog<StaffImportData>
+        open={bulkImportOpen}
+        onOpenChange={setBulkImportOpen}
+        title="Bulk Upload Staff"
+        description="Upload an Excel or CSV file for this department. All rows are validated before anything is saved. Staff photos remain individually managed."
+        templateFilename="staff-bulk-upload-template.csv"
+        templateColumns={STAFF_TEMPLATE_COLUMNS}
+        templateRows={STAFF_TEMPLATE_EXAMPLES}
+        previewColumns={[
+          { label: "Name", value: (row) => `${row.surname}, ${row.firstName}` },
+          { label: "Type", value: (row) => row.type },
+          { label: "Rank / Role", value: (row) => row.customJobTitle || row.academicRank },
+          { label: "Email", value: (row) => row.email || "-" },
+        ]}
+        validateRows={(rows) =>
+          validateStaffImportRows(rows, [
+            ...academicStaff,
+            ...adjunctStaff,
+            ...nonAcademicStaff,
+          ].map(staffDuplicateKey))
+        }
+        onImport={async (rows) => {
+          const response = await fetch("/api/staff/bulk", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ departmentId, rows }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Failed to import staff members.");
+          toast.success(`${data.imported} staff member(s) imported successfully.`);
+          await fetchStaff();
+        }}
+      />
     </Card>
   );
 }
