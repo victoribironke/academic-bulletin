@@ -1318,7 +1318,7 @@ export default function SubmissionDetailPage({
                 {activeSection === "deans_hods" && (
                   <div className="space-y-6">
                     <p className="text-xs text-muted-foreground">
-                      Upload passport-style photos. JPEG, PNG, or WebP, max 5 MB.
+                      Upload passport-style photos. JPEG, PNG, or WebP, max 4 MB.
                     </p>
                     {imageVerificationFeedback && (
                       <Alert

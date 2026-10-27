@@ -121,7 +121,7 @@ export function HelpButton() {
           <section className="space-y-2">
             <h3 className="font-semibold text-base">If You Are Blocked</h3>
             <ul className="list-disc pl-5 text-muted-foreground space-y-1">
-              <li>Image upload failed: use a clear JPG/PNG/WebP under 5 MB.</li>
+              <li>Image upload failed: use a clear JPG/PNG/WebP under 4 MB.</li>
               <li>Validation failed: open comments and fix highlighted fields.</li>
               <li>Cannot submit: complete required sections and resolve checks.</li>
               <li>

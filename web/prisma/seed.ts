@@ -1,98 +1,29 @@
-// Disable SSL certificate verification for Supabase connection
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
+/**
+ * Creates the first Super Admin and the photo storage bucket.
+ *
+ * Usage:
+ *   SEED_SUPER_ADMIN_EMAIL=you@school.edu SEED_SUPER_ADMIN_PASSWORD=... npm run db:seed
+ *
+ * Needs DATABASE_URL, NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
+ * Safe to re-run: existing users and buckets are reused.
+ */
 import "dotenv/config";
 import { UserRole } from "@prisma/client";
 import prisma from "../lib/prisma";
-import { createClient } from "@supabase/supabase-js";
+import { createAdminClient } from "../lib/supabase/admin";
+
+const BUCKET_NAME = "staff-photos";
 
 async function createOrGetAuthUser(
   email: string,
   firstName: string,
   lastName: string,
-  password = "Password123!",
+  password: string,
 ): Promise<string> {
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-  // 1. Direct GoTrue REST probe (works inside Docker network & localhost)
-  const directEndpoints = ["http://auth:9999", "http://127.0.0.1:9999"];
-
-  for (const base of directEndpoints) {
-    try {
-      const healthCheck = await fetch(`${base}/health`, {
-        signal: AbortSignal.timeout(2000),
-      });
-      if (healthCheck.ok) {
-        // Try creating user directly
-        const createRes = await fetch(`${base}/admin/users`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${serviceKey}`,
-            apikey: serviceKey,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email,
-            password,
-            email_confirm: true,
-            user_metadata: { first_name: firstName, last_name: lastName },
-          }),
-        });
-
-        if (createRes.ok) {
-          const data = (await createRes.json()) as { id: string };
-          console.log(`✅ GoTrue Auth: Created ${email} (ID: ${data.id})`);
-          return data.id;
-        }
-
-        // User may already exist — fetch user list to find ID
-        const listRes = await fetch(`${base}/admin/users`, {
-          headers: {
-            Authorization: `Bearer ${serviceKey}`,
-            apikey: serviceKey,
-          },
-        });
-
-        if (listRes.ok) {
-          const listData = (await listRes.json()) as {
-            users?: Array<{ id: string; email: string }>;
-          };
-          const existing = listData.users?.find((u) => u.email === email);
-          if (existing) {
-            // Update password
-            await fetch(`${base}/admin/users/${existing.id}`, {
-              method: "PUT",
-              headers: {
-                Authorization: `Bearer ${serviceKey}`,
-                apikey: serviceKey,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({ password }),
-            });
-            console.log(
-              `✅ GoTrue Auth: User ${email} already exists (password reset to ${password}).`,
-            );
-            return existing.id;
-          }
-        }
-      }
-    } catch {
-      // Continue to next probe or fallback
-    }
-  }
-
-  // 2. Fallback to Supabase SDK client (Supabase Cloud or external proxy)
-  const targetUrl =
-    process.env.INTERNAL_SUPABASE_URL ||
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    "http://127.0.0.1:3000";
-
-  const supabaseAdmin = createClient(targetUrl, serviceKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
+  const supabase = createAdminClient();
 
   const { data: createData, error: createError } =
-    await supabaseAdmin.auth.admin.createUser({
+    await supabase.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
@@ -100,12 +31,12 @@ async function createOrGetAuthUser(
     });
 
   if (!createError && createData.user) {
-    console.log(`✅ Supabase Auth SDK: Created ${email}`);
+    console.log(`✅ Auth: created ${email}`);
     return createData.user.id;
   }
 
   const { data: usersData, error: listError } =
-    await supabaseAdmin.auth.admin.listUsers();
+    await supabase.auth.admin.listUsers();
   if (listError) throw listError;
 
   const existingUser = usersData.users.find((u) => u.email === email);
@@ -115,99 +46,68 @@ async function createOrGetAuthUser(
     );
   }
 
-  await supabaseAdmin.auth.admin.updateUserById(existingUser.id, { password });
-  console.log(`✅ Supabase Auth SDK: User ${email} password reset.`);
+  await supabase.auth.admin.updateUserById(existingUser.id, { password });
+  console.log(`✅ Auth: ${email} already existed; password updated.`);
   return existingUser.id;
 }
 
 async function ensureStorageBucket() {
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  const endpoints = ["http://storage:5000", "http://127.0.0.1:5000"];
-
-  for (const base of endpoints) {
-    try {
-      const res = await fetch(`${base}/status`, {
-        signal: AbortSignal.timeout(2000),
-      });
-      if (res.ok) {
-        await fetch(`${base}/bucket`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${serviceKey}`,
-            apikey: serviceKey,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            id: "staff-photos",
-            name: "staff-photos",
-            public: true,
-            file_size_limit: 5242880,
-            allowed_mime_types: [
-              "image/jpeg",
-              "image/png",
-              "image/webp",
-            ],
-          }),
-        });
-        console.log("✅ Storage API: 'staff-photos' bucket verified/created.");
-        return;
-      }
-    } catch {
-      // Storage might not be reachable from this environment, ignore
-    }
+  const supabase = createAdminClient();
+  const { data: existing } = await supabase.storage.getBucket(BUCKET_NAME);
+  if (existing) {
+    console.log(`✅ Storage: '${BUCKET_NAME}' bucket already exists.`);
+    return;
   }
+
+  const { error } = await supabase.storage.createBucket(BUCKET_NAME, {
+    public: true,
+    fileSizeLimit: 4 * 1024 * 1024,
+    allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"],
+  });
+  if (error) throw error;
+  console.log(`✅ Storage: created '${BUCKET_NAME}' bucket.`);
 }
 
 async function main() {
+  const email = process.env.SEED_SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+  const password = process.env.SEED_SUPER_ADMIN_PASSWORD;
+  if (!email || !password) {
+    throw new Error(
+      "Set SEED_SUPER_ADMIN_EMAIL and SEED_SUPER_ADMIN_PASSWORD before seeding.",
+    );
+  }
+  if (password.length < 12) {
+    throw new Error("SEED_SUPER_ADMIN_PASSWORD must be at least 12 characters.");
+  }
+
   console.log("🌱 Starting database seed...\n");
 
   const authUserId = await createOrGetAuthUser(
-    "super@university.edu",
+    email,
     "Super",
     "Admin",
-    "Password123!",
+    password,
   );
 
-  // Sync with Prisma PostgreSQL database
+  const profile = {
+    id: authUserId,
+    firstName: "Super",
+    lastName: "Admin",
+    role: UserRole.SUPER_ADMIN,
+    isActive: true,
+    schoolId: null,
+    departmentId: null,
+  };
   const user = await prisma.user.upsert({
-    where: { email: "super@university.edu" },
-    update: {
-      id: authUserId,
-      firstName: "Super",
-      lastName: "Admin",
-      role: UserRole.SUPER_ADMIN,
-      isActive: true,
-      schoolId: null,
-      departmentId: null,
-    },
-    create: {
-      email: "super@university.edu",
-      id: authUserId,
-      firstName: "Super",
-      lastName: "Admin",
-      role: UserRole.SUPER_ADMIN,
-      isActive: true,
-      schoolId: null,
-      departmentId: null,
-    },
+    where: { email },
+    update: profile,
+    create: { email, ...profile },
   });
+  console.log(`✅ Database: synced ${user.email} (${user.role})`);
 
-  console.log(`✅ Prisma: Synced user ${user.email} (${user.role})`);
-
-  // Ensure storage bucket exists
   await ensureStorageBucket();
 
-  console.log("\n✅ Super Admin created successfully");
-  console.log("=================================================");
-  console.log("🔐 DEFAULT LOGIN CREDENTIALS");
-  console.log("=================================================");
-  console.log("Please use the following credentials to log in.");
-  console.log("It is recommended to change this password after logging in.\n");
-  console.log("  Role        | Email                   | Password");
-  console.log("  --------------------------------------------------");
-  console.log("  Super Admin | super@university.edu    | Password123!");
-  console.log("=================================================\n");
-  console.log("🌱 Database seeded successfully!");
+  console.log(`\n🌱 Done. Sign in as ${email} with the password you supplied.`);
 }
 
 main()

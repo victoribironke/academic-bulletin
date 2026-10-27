@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { GRACE_VISION_SPACE_URL, parseGraceAnalysis } from "@/lib/grace-vision";
+import { runGraceCheck } from "@/lib/grace";
 import {
   canViewSubmission,
   getApiUser,
@@ -8,7 +8,8 @@ import {
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
 
-const GRACE_API_URL = `${GRACE_VISION_SPACE_URL}/check-grace`;
+// Gemini calls can take a while; allow up to a minute.
+export const maxDuration = 60;
 
 // POST /api/grace-check - Start a GRACE compliance check
 export async function POST(request: NextRequest) {
@@ -44,52 +45,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: gate.message }, { status: gate.status });
     }
 
-    // Call external GRACE API
-    let graceResult;
-    try {
-      const res = await fetch(GRACE_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, content }),
-        signal: AbortSignal.timeout(60000),
-      });
-
-      if (!res.ok) {
-        graceResult = {
-          scores: {},
-          pillarSummaries: {},
-          explanation: "Compliance check failed. Please try again.",
-          recommendation: "",
-          passed: false,
-        };
-      } else {
-        const data = (await res.json()) as {
-          analysis?: unknown;
-          model_used?: string;
-        };
-        const analysisData = data.analysis ?? data;
-        const modelUsed =
-          typeof data.model_used === "string" ? data.model_used : undefined;
-        graceResult = analysisData
-          ? parseGraceAnalysis(analysisData, modelUsed)
-          : {
-              scores: {},
-              pillarSummaries: {},
-              explanation: "No analysis returned from server.",
-              recommendation: "",
-              passed: false,
-            };
-      }
-    } catch {
-      graceResult = {
-        scores: {},
-        pillarSummaries: {},
-        explanation:
-          "Could not reach the GRACE compliance server. Please try again later.",
-        recommendation: "",
-        passed: false,
-      };
-    }
+    const graceResult = await runGraceCheck(title, content);
 
     // Persist result based on type
     if (type === "philosophy" && submissionId) {

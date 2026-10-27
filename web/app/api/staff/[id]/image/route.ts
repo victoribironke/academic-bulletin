@@ -1,22 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { createClient } from "@supabase/supabase-js";
-import { checkProfessionalImageFile } from "@/lib/grace-vision";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { checkProfessionalImageFile } from "@/lib/grace";
 import { canAccessDepartment, requireApiUser } from "@/lib/api-auth";
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+// Vercel rejects request bodies over 4.5MB, so cap uploads at 4MB.
+const MAX_FILE_SIZE = 4 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const BUCKET_NAME = "staff-photos";
 
-function getSupabaseAdmin() {
-  const port = process.env.PORT || "3000";
-  const url = process.env.INTERNAL_SUPABASE_URL || `http://127.0.0.1:${port}`;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceKey) {
-    throw new Error("Supabase env vars not configured");
-  }
-  return createClient(url, serviceKey);
-}
+// The photo check calls Gemini, which can take a while.
+export const maxDuration = 60;
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -66,7 +60,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { error: "File too large. Maximum size is 5MB." },
+        { error: "File too large. Maximum size is 4MB." },
         { status: 400 },
       );
     }
@@ -79,7 +73,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const supabase = getSupabaseAdmin();
+    const supabase = createAdminClient();
 
     // Delete previous image if exists
     if (staff.imageDriveFileId) {
@@ -150,7 +144,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     if (staff.imageDriveFileId) {
-      const supabase = getSupabaseAdmin();
+      const supabase = createAdminClient();
       await supabase.storage.from(BUCKET_NAME).remove([staff.imageDriveFileId]);
     }
 

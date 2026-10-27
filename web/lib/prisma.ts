@@ -1,6 +1,3 @@
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
-import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { Pool } from "pg";
@@ -17,8 +14,7 @@ function createPrismaClient() {
   if (!process.env.DATABASE_URL) {
     throw new Error(
       "[Prisma] DATABASE_URL environment variable is not set. " +
-        "Make sure the .env file is present in the standalone directory or " +
-        "that PM2 / Apache passes the environment variables to the process."
+        "Set it in .env locally or in the Vercel project settings."
     );
   }
 
@@ -26,11 +22,13 @@ function createPrismaClient() {
   if (!globalForPrisma.pool) {
     globalForPrisma.pool = new Pool({
       connectionString: process.env.DATABASE_URL,
+      // Supabase requires SSL; its pooler certificate isn't in Node's default CA list.
       ssl: {
         rejectUnauthorized: false,
       },
-      // Keep pool small to stay within PgBouncer limits
-      max: 5, // Enough concurrency for Docker; stays well under PgBouncer's 15
+      // Each serverless instance gets its own small pool; Supabase's pooler
+      // (DATABASE_URL, port 6543) shares the real connections between them.
+      max: 3,
       idleTimeoutMillis: 10000, // Close idle connections after 10 seconds
       connectionTimeoutMillis: 10000, // Timeout after 10 seconds if can't connect
     });

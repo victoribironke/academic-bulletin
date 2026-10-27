@@ -8,6 +8,9 @@ import { generateBulletinDocx } from "@/lib/bulletin/export-docx";
 import { generateBulletinPdf } from "@/lib/bulletin/export-pdf";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
+
+// Large (school or institution-wide) exports can take a while to build.
+export const maxDuration = 60;
 import { canExportBulletin } from "@/lib/bulletin/access";
 
 // GET /api/bulletin/export?level=...&format=docx|pdf&submissionId=...&programmeId=...&departmentId=...&schoolId=...

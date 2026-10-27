@@ -1,16 +1,16 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  AUTH_COOKIE_NAME,
+  getSupabasePublishableKey,
+  getSupabaseUrl,
+} from "./config";
 
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
-  // Immediately bypass middleware for internal proxy endpoints & API routes
-  if (
-    pathname.startsWith("/auth/v1") ||
-    pathname.startsWith("/storage/v1") ||
-    pathname.startsWith("/verify") ||
-    pathname.startsWith("/api")
-  ) {
+  // API routes do their own auth checks.
+  if (pathname.startsWith("/api")) {
     return NextResponse.next();
   }
 
@@ -19,14 +19,11 @@ export async function updateSession(request: NextRequest) {
   });
 
   const supabase = createServerClient(
-    process.env.INTERNAL_SUPABASE_URL ||
-      process.env.NEXT_PUBLIC_SUPABASE_URL ||
-      "http://127.0.0.1:3000",
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY ||
-      "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJyb2xlIjogImFub24iLCAiaXNzIjogInN1cGFiYXNlLWxvY2FsIiwgImlhdCI6IDE3ODgzNDQyNDAsICJleHAiOiAzMjUwMzY4MDAwMH0.KVDpu5JE0WzTf5tLvcGl5laDpav_Y3kmRbBCVqF_a2M",
+    getSupabaseUrl(),
+    getSupabasePublishableKey(),
     {
       cookieOptions: {
-        name: "abrms-auth-token",
+        name: AUTH_COOKIE_NAME,
       },
       cookies: {
         getAll() {
@@ -55,21 +52,12 @@ export async function updateSession(request: NextRequest) {
   const isLoginRoute = pathname.startsWith("/login");
   const isInviteFlowRoute =
     pathname.startsWith("/confirm") ||
-    pathname.startsWith("/invite-accept") ||
-    pathname.startsWith("/verify");
+    pathname.startsWith("/invite-accept");
   const isPasswordRecoveryRoute = pathname.startsWith("/forgot-password");
   const isAuthRoute =
     isLoginRoute || isInviteFlowRoute || isPasswordRecoveryRoute;
 
-  // Resolve base URL safely from request headers to prevent redirecting to container-internal port (e.g. 3000)
-  const host =
-    request.headers.get("x-forwarded-host") || request.headers.get("host");
-  const proto =
-    request.headers.get("x-forwarded-proto") ||
-    request.nextUrl.protocol.replace(":", "");
-  const baseUrl = host
-    ? `${proto}://${host}`
-    : process.env.NEXT_PUBLIC_SITE_URL || request.nextUrl.origin;
+  const baseUrl = request.nextUrl.origin;
 
   if (user?.app_metadata?.account_active === false) {
     await supabase.auth.signOut({ scope: "local" });

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import {
   canViewSubmission,
@@ -6,6 +6,7 @@ import {
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
 import { resolveWorkflowTransition } from "@/lib/submissions/workflow";
+import { notifySubmissionTransition } from "@/lib/email/notifications";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -117,6 +118,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         },
       }),
     ]);
+
+    // Email the people involved once the response has been sent.
+    after(() =>
+      notifySubmissionTransition({
+        submissionId: id,
+        action,
+        toPhase: newPhase,
+        newStatus,
+        remarks,
+        actorId: user.id,
+      }),
+    );
 
     return NextResponse.json({
       transition,

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import prisma from "@/lib/prisma";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getSiteUrl } from "@/lib/supabase/config";
 
 const USER_ROLES = ["HOD", "DEAN", "ADMIN", "SUPER_ADMIN"] as const;
 
@@ -106,11 +107,7 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
 
     const adminAuthClient = createAdminClient();
     // Send login instructions through the configured Supabase email provider.
-    const siteUrl =
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      (process.env.NODE_ENV === "production" && !process.env.IS_DOCKER
-        ? "http://bulletin.babcock.edu.ng"
-        : "http://localhost:3300");
+    const siteUrl = getSiteUrl();
 
     let userId: string;
     let inviteLink: string | null = null;
