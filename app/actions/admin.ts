@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import prisma from "@/lib/prisma";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getSiteUrl } from "@/lib/supabase/config";
+import { sendAccessGrantedEmail } from "@/lib/email/notifications";
 
 const USER_ROLES = ["HOD", "DEAN", "ADMIN", "SUPER_ADMIN"] as const;
 
@@ -105,46 +105,24 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
       return { error: "A user with this email address already exists." };
     }
 
+    // Create the sign-in account up front. No password and no invite: when
+    // this person signs in with a Google account using the same email,
+    // Supabase links it to this account automatically.
     const adminAuthClient = createAdminClient();
-    // Send login instructions through the configured Supabase email provider.
-    const siteUrl = getSiteUrl();
-
-    let userId: string;
-    let inviteLink: string | null = null;
-
-    const { data: inviteData, error: inviteError } =
-      await adminAuthClient.auth.admin.inviteUserByEmail(email, {
-        data: { first_name: firstName.trim(), last_name: lastName.trim() },
-        redirectTo: `${siteUrl}/confirm`,
+    const { data: created, error: createError } =
+      await adminAuthClient.auth.admin.createUser({
+        email,
+        email_confirm: true,
+        user_metadata: { first_name: firstName.trim(), last_name: lastName.trim() },
       });
 
-    if (inviteError || !inviteData?.user) {
-      // Fallback: If SMTP is not configured or delivery fails, generate invite link directly
-      const { data: linkData, error: linkError } =
-        await adminAuthClient.auth.admin.generateLink({
-          type: "invite",
-          email,
-          options: {
-            data: { first_name: firstName.trim(), last_name: lastName.trim() },
-            redirectTo: `${siteUrl}/confirm`,
-          },
-        });
-
-      if (linkError || !linkData?.user) {
-        console.error("Supabase user invitation failed:", inviteError || linkError);
-        return {
-          error:
-            inviteError?.message ||
-            linkError?.message ||
-            "The invitation service did not create a user.",
-        };
-      }
-
-      userId = linkData.user.id;
-      inviteLink = linkData.properties?.action_link || null;
-    } else {
-      userId = inviteData.user.id;
+    if (createError || !created?.user) {
+      console.error("Supabase user creation failed:", createError);
+      return {
+        error: createError?.message || "The sign-in account could not be created.",
+      };
     }
+    const userId = created.user.id;
 
     try {
       await prisma.user.create({
@@ -163,15 +141,14 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
       throw profileError;
     }
 
+    const emailSent = await sendAccessGrantedEmail({
+      to: email,
+      firstName: firstName.trim(),
+      role,
+    });
+
     revalidatePath("/users");
-    const result: { success: true; email: string; inviteLink?: string } = {
-      success: true,
-      email,
-    };
-    if (inviteLink) {
-      result.inviteLink = inviteLink;
-    }
-    return result;
+    return { success: true as const, email, emailSent };
   } catch (error) {
     console.error("Admin user creation failed:", error);
     return { error: "An unexpected error occurred during user creation." };
