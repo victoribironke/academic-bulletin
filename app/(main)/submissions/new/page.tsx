@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { CalendarClock } from "lucide-react";
+import { PageHeader } from "@/components/shared/page-header";
+import { EmptyState } from "@/components/shared/states";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/contexts/user-context";
 import { Button } from "@/components/ui/button";
@@ -63,57 +66,49 @@ export default function NewSubmissionPage() {
 
   const [filterSchoolId, setFilterSchoolId] = useState<string>("all");
 
-  const fetchData = async () => {
-    try {
-      const [programmesRes, schoolsRes, cyclesRes] = await Promise.all([
-        fetch("/api/programmes"),
-        fetch("/api/schools"),
-        fetch("/api/cycles"),
-      ]);
-
-      if (programmesRes.ok) {
-        const data = await programmesRes.json();
-        setProgrammes(data);
-      }
-      if (schoolsRes.ok) {
-        const data = await schoolsRes.json();
-        setSchools(data);
-      }
-      if (cyclesRes.ok) {
-        const data = await cyclesRes.json();
-        const active = data.find(
-          (c: { id: string; name: string; isActive: boolean }) => c.isActive,
-        );
-        setActiveCycle(active || null);
-      }
-    } catch (err) {
-      console.error("Failed to fetch data:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchData();
+    let cancelled = false;
+    Promise.all([fetch("/api/programmes"), fetch("/api/schools"), fetch("/api/cycles")])
+      .then(([programmesRes, schoolsRes, cyclesRes]) =>
+        Promise.all([
+          programmesRes.ok ? programmesRes.json() : [],
+          schoolsRes.ok ? schoolsRes.json() : [],
+          cyclesRes.ok ? cyclesRes.json() : [],
+        ]),
+      )
+      .then(([programmeData, schoolData, cycleData]) => {
+        if (cancelled) return;
+        setProgrammes(programmeData);
+        setSchools(schoolData);
+        setActiveCycle(
+          (cycleData as { id: string; name: string; isActive: boolean }[]).find(
+            (c) => c.isActive,
+          ) ?? null,
+        );
+      })
+      .catch((err) => console.error("Failed to fetch data:", err))
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Auto-generate title when programme and year are selected
-  useEffect(() => {
-    if (formData.programmeId) {
-      const programme = programmes.find((p) => p.id === formData.programmeId);
-      if (programme) {
-        setFormData((prev) => ({
-          ...prev,
-          title: `${programme.name} - Academic Bulletin`,
-        }));
-      }
-    }
-  }, [formData.programmeId, programmes]);
+  // Picking a programme fills in a suggested title.
+  const selectProgramme = (programmeId: string) => {
+    const programme = programmes.find((p) => p.id === programmeId);
+    setFormData({
+      programmeId,
+      title: programme ? `${programme.name} - Academic Bulletin` : formData.title,
+    });
+  };
 
-  // Reset programme selection when school filter changes
-  useEffect(() => {
+  // Changing the school filter clears a programme from another school.
+  const selectSchool = (schoolId: string) => {
+    setFilterSchoolId(schoolId);
     setFormData((prev) => ({ ...prev, programmeId: "" }));
-  }, [filterSchoolId]);
+  };
 
   const filteredProgrammes =
     filterSchoolId === "all"
@@ -169,85 +164,60 @@ export default function NewSubmissionPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Loading...</div>
+      <div className="mx-auto max-w-2xl space-y-4">
+        <div className="h-7 w-48 animate-pulse rounded bg-muted" />
+        <div className="h-72 animate-pulse rounded-lg border bg-card" />
       </div>
     );
   }
 
   if (!activeCycle) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Card className="w-96">
-          <CardHeader>
-            <CardTitle className="text-destructive">
-              No Active Review Cycle
-            </CardTitle>
-            <CardDescription>
-              An administrator must create and start a new Review Cycle before
-              any submissions can be created.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/submissions">
-              <Button variant="outline" className="w-full">
-                Back to Submissions
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
+      <EmptyState
+        icon={CalendarClock}
+        title="No review cycle is active"
+        description="An administrator needs to start a review cycle before submissions can be created."
+        action={
+          <Button asChild variant="outline">
+            <Link href="/submissions">Back to submissions</Link>
+          </Button>
+        }
+        className="mx-auto mt-8 max-w-2xl"
+      />
     );
   }
 
-  if (!currentUser) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Card className="w-96">
-          <CardHeader>
-            <CardTitle>Not Logged In</CardTitle>
-            <CardDescription>
-              Please select a user from the header to create a submission.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      </div>
-    );
-  }
+  if (!currentUser) return null;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Link href="/submissions">
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-5 w-5" />
+    <div className="mx-auto max-w-2xl">
+      <PageHeader
+        title="New submission"
+        description={`Start a bulletin submission for a programme in ${activeCycle.name}.`}
+        actions={
+          <Button asChild variant="outline">
+            <Link href="/submissions">
+              <ArrowLeft />
+              Back
+            </Link>
           </Button>
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">New Submission</h1>
-          <p className="text-muted-foreground">
-            Create a new academic bulletin submission
-          </p>
-        </div>
-      </div>
+        }
+      />
 
-      {/* Form */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Submission Details
+          <CardTitle className="flex items-center gap-2 text-base">
+            <FileText className="size-4 text-primary" />
+            Submission details
           </CardTitle>
           <CardDescription>
-            Select the programme for this submission. You can edit the content
-            after creating.
+            Choose the programme. You can fill in the content after it&apos;s created.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="text-sm text-destructive bg-destructive/10 p-3 rounded">
+              <div role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
                 {error}
               </div>
             )}
@@ -255,8 +225,8 @@ export default function NewSubmissionPage() {
             {/* School Filter */}
             <div className="grid gap-2">
               <Label htmlFor="school">Filter by School (optional)</Label>
-              <Select value={filterSchoolId} onValueChange={setFilterSchoolId}>
-                <SelectTrigger>
+              <Select value={filterSchoolId} onValueChange={selectSchool}>
+                <SelectTrigger id="school" className="w-full">
                   <SelectValue placeholder="All Schools" />
                 </SelectTrigger>
                 <SelectContent>
@@ -277,11 +247,9 @@ export default function NewSubmissionPage() {
               </Label>
               <Select
                 value={formData.programmeId}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, programmeId: value })
-                }
+                onValueChange={selectProgramme}
               >
-                <SelectTrigger>
+                <SelectTrigger id="programme" className="w-full">
                   <SelectValue placeholder="Select a programme" />
                 </SelectTrigger>
                 <SelectContent>
@@ -317,40 +285,26 @@ export default function NewSubmissionPage() {
 
             {/* Submit Button */}
             <div className="flex justify-end gap-3">
-              <Link href="/submissions">
-                <Button type="button" variant="outline">
-                  Cancel
-                </Button>
-              </Link>
+              <Button asChild type="button" variant="outline">
+                <Link href="/submissions">Cancel</Link>
+              </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Create Submission
+                {isSubmitting && <Loader2 className="animate-spin" />}
+                Create submission
               </Button>
             </div>
           </form>
         </CardContent>
       </Card>
 
-      {/* Info Card */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="text-sm text-muted-foreground space-y-2">
-            <p>
-              <strong>What happens next?</strong>
-            </p>
-            <ul className="list-disc list-inside space-y-1">
-              <li>A new draft submission will be created for this programme</li>
-              <li>
-                You&apos;ll be redirected to the editor to fill in sections A-H
-              </li>
-              <li>Save your progress at any time as a draft</li>
-              <li>Submit for review when all required sections are complete</li>
-            </ul>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="mt-4 rounded-lg border border-dashed bg-card p-4 text-sm text-muted-foreground">
+        <p className="mb-2 font-medium text-foreground">What happens next</p>
+        <ol className="list-inside list-decimal space-y-1">
+          <li>A draft submission is created for the programme.</li>
+          <li>You&apos;re taken to it to fill in each section.</li>
+          <li>Your work is saved as a draft until you submit it for review.</li>
+        </ol>
+      </div>
     </div>
   );
 }
