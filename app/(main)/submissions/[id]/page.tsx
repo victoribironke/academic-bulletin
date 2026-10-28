@@ -13,14 +13,15 @@ import { CourseDescriptionForm } from "@/components/forms/course-description-for
 import { BulletinPreview } from "@/components/preview/bulletin-preview";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -67,6 +68,12 @@ import {
   Camera,
   Trash2,
 } from "lucide-react";
+import { PHASE_NAMES as phaseNames } from "@/lib/submissions/phases";
+import { PageHeader } from "@/components/shared/page-header";
+import { StatusBadge } from "@/components/shared/status-badge";
+import { PhaseTracker } from "@/components/shared/phase-tracker";
+import { EmptyState } from "@/components/shared/states";
+import { cn } from "@/lib/utils";
 
 interface Submission {
   id: string;
@@ -221,19 +228,6 @@ const sections = [
   },
 ];
 
-const phaseNames: Record<number, string> = {
-  1: "Preparation",
-  2: "Departmental Review",
-  3: "School Approval",
-  4: "Academic Planning Review",
-  5: "Corrections",
-  6: "Final Consolidation",
-  7: "Senate Approval",
-  8: "Editing",
-  9: "Typesetting",
-  10: "Distribution",
-  11: "Post-Release",
-};
 
 const commentTypeColors: Record<string, string> = {
   SUGGESTION: "bg-blue-100 text-blue-800",
@@ -406,6 +400,14 @@ export default function SubmissionDetailPage({
     passed: boolean;
   } | null>(null);
 
+  // Review decision dialog (approve / send back) and submit blockers dialog
+  const [reviewAction, setReviewAction] = useState<
+    "APPROVE" | "REJECT" | "RETURN" | null
+  >(null);
+  const [reviewRemarks, setReviewRemarks] = useState("");
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [submitBlockers, setSubmitBlockers] = useState<string[] | null>(null);
+
   // Comments state
   const [newComment, setNewComment] = useState("");
   const [commentType, setCommentType] = useState<string>("SUGGESTION");
@@ -450,70 +452,83 @@ export default function SubmissionDetailPage({
     ["DRAFT", "CORRECTIONS_REQUIRED"].includes(submission?.status || "") &&
     isOwnDepartment;
 
-  const fetchSubmission = useCallback(async () => {
+  // Puts freshly loaded submission data (or a local unsaved draft) into the form.
+  const applySubmissionData = useCallback((data: Submission) => {
+    setSubmission(data);
+
+    // Try restoring from localStorage draft first (crash recovery)
+    let draft: Record<string, any> | null = null;
     try {
-      const response = await fetch(`/api/submissions/${id}`);
-      if (response.ok) {
-        const data = await response.json();
+      const raw = localStorage.getItem(`submission-draft-${id}`);
+      if (raw) draft = JSON.parse(raw);
+    } catch { /* corrupt data – ignore */ }
 
-        setSubmission(data);
+    const src = draft || data.content || {};
 
-        // Try restoring from localStorage draft first (crash recovery)
-        let draft: Record<string, any> | null = null;
-        try {
-          const raw = localStorage.getItem(`submission-draft-${id}`);
-          if (raw) draft = JSON.parse(raw);
-        } catch { /* corrupt data – ignore */ }
+    setDeanImageUrl(src.programmeInfo?.deanImageUrl || data.content?.programmeInfo?.deanImageUrl || "");
+    setHodImageUrl(src.programmeInfo?.hodImageUrl || data.content?.programmeInfo?.hodImageUrl || "");
+    setPhilosophy(src.philosophy ?? data.content?.philosophy ?? "");
+    setMission(src.mission ?? data.content?.mission ?? "");
+    setVision(src.vision ?? data.content?.vision ?? "");
+    setObjectives(
+      (src.objectives?.length ? src.objectives : null) ??
+      (data.content?.objectives?.length ? data.content.objectives : [""])
+    );
+    setUniqueFeatures(
+      (src.uniqueFeatures?.length ? src.uniqueFeatures : null) ??
+      (data.content?.uniqueFeatures?.length ? data.content.uniqueFeatures : [""])
+    );
+    setEmployability(
+      Array.isArray(src.employability) ? src.employability :
+        Array.isArray(data.content?.employability) ? data.content.employability :
+          data.content?.employability ? [data.content.employability] : [""]
+    );
+    setUtmeRequirements(src.utmeRequirements ?? data.content?.utmeRequirements ?? "");
+    setDirectEntryRequirements(src.directEntryRequirements ?? data.content?.directEntryRequirements ?? "");
+    setTransferRequirements(src.transferRequirements ?? data.content?.transferRequirements ?? "");
+    setMinimumDuration(src.minimumDuration ?? data.content?.minimumDuration ?? "");
+    setGraduationRequirements(src.graduationRequirements ?? data.content?.graduationRequirements ?? "");
+    setMinimumCGPA(src.minimumCGPA ?? data.content?.minimumCGPA ?? 2.5);
+    setTotalUnits(src.totalUnits ?? data.content?.totalUnits ?? 154);
+    setRegulations(src.sectionF?.content ?? data.content?.sectionF?.content ?? "");
+    setSummaryOfChanges(src.sectionG?.content ?? data.content?.sectionG?.content ?? "");
 
-        const src = draft || data.content || {};
+    if (src.philosophyGrace || data.content?.philosophyGrace) {
+      setGracePhilosophyResult(src.philosophyGrace ?? data.content?.philosophyGrace);
+    }
 
-        setDeanImageUrl(src.programmeInfo?.deanImageUrl || data.content?.programmeInfo?.deanImageUrl || "");
-        setHodImageUrl(src.programmeInfo?.hodImageUrl || data.content?.programmeInfo?.hodImageUrl || "");
-        setPhilosophy(src.philosophy ?? data.content?.philosophy ?? "");
-        setMission(src.mission ?? data.content?.mission ?? "");
-        setVision(src.vision ?? data.content?.vision ?? "");
-        setObjectives(
-          (src.objectives?.length ? src.objectives : null) ??
-          (data.content?.objectives?.length ? data.content.objectives : [""])
-        );
-        setUniqueFeatures(
-          (src.uniqueFeatures?.length ? src.uniqueFeatures : null) ??
-          (data.content?.uniqueFeatures?.length ? data.content.uniqueFeatures : [""])
-        );
-        setEmployability(
-          Array.isArray(src.employability) ? src.employability :
-            Array.isArray(data.content?.employability) ? data.content.employability :
-              data.content?.employability ? [data.content.employability] : [""]
-        );
-        setUtmeRequirements(src.utmeRequirements ?? data.content?.utmeRequirements ?? "");
-        setDirectEntryRequirements(src.directEntryRequirements ?? data.content?.directEntryRequirements ?? "");
-        setTransferRequirements(src.transferRequirements ?? data.content?.transferRequirements ?? "");
-        setMinimumDuration(src.minimumDuration ?? data.content?.minimumDuration ?? "");
-        setGraduationRequirements(src.graduationRequirements ?? data.content?.graduationRequirements ?? "");
-        setMinimumCGPA(src.minimumCGPA ?? data.content?.minimumCGPA ?? 2.5);
-        setTotalUnits(src.totalUnits ?? data.content?.totalUnits ?? 154);
-        setRegulations(src.sectionF?.content ?? data.content?.sectionF?.content ?? "");
-        setSummaryOfChanges(src.sectionG?.content ?? data.content?.sectionG?.content ?? "");
-
-        if (src.philosophyGrace || data.content?.philosophyGrace) {
-          setGracePhilosophyResult(src.philosophyGrace ?? data.content?.philosophyGrace);
-        }
-
-        if (draft) {
-          setHasChanges(true);
-          toast.info("Restored unsaved changes from your last session");
-        }
-      }
-    } catch (err) {
-      console.error("Failed to fetch submission:", err);
-    } finally {
-      setIsLoading(false);
+    if (draft) {
+      setHasChanges(true);
+      toast.info("Restored unsaved changes from your last session");
     }
   }, [id]);
 
+  // Reload after an action (save, review decision).
+  const fetchSubmission = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/submissions/${id}`);
+      if (response.ok) applySubmissionData(await response.json());
+    } catch (err) {
+      console.error("Failed to fetch submission:", err);
+    }
+  }, [id, applySubmissionData]);
+
+  // First load.
   useEffect(() => {
-    fetchSubmission();
-  }, [fetchSubmission]);
+    let cancelled = false;
+    fetch(`/api/submissions/${id}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: Submission | null) => {
+        if (!cancelled && data) applySubmissionData(data);
+      })
+      .catch((err) => console.error("Failed to fetch submission:", err))
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, applySubmissionData]);
 
   // Word count helper
   const getWordCount = (text: string) => {
@@ -698,7 +713,7 @@ export default function SubmissionDetailPage({
     }
   };
 
-  const handleTransition = async (action: string) => {
+  const handleTransition = async (action: string, remarks: string | null = null) => {
     if (!submission || !currentUser) return;
 
     // Flush pending saves before transition
@@ -763,20 +778,14 @@ export default function SubmissionDetailPage({
         errors.push(...validationErrors);
       }
       if (errors.length > 0) {
-        alert("Cannot submit:\n" + errors.join("\n"));
+        setSubmitBlockers(errors);
         return;
       }
     }
 
-    const remarks =
-      action === "REJECT"
-        ? prompt("Please provide a reason for rejection:")
-        : action === "RETURN"
-          ? prompt("Please provide feedback for the changes needed:")
-          : null;
+    if ((action === "REJECT" || action === "RETURN") && !remarks?.trim()) return;
 
-    if ((action === "REJECT" || action === "RETURN") && !remarks) return;
-
+    setIsTransitioning(true);
     try {
       const response = await fetch(`/api/submissions/${id}/transition`, {
         method: "POST",
@@ -791,18 +800,28 @@ export default function SubmissionDetailPage({
         const messages: Record<string, string> = {
           SUBMIT: "Submission sent for review",
           APPROVE: "Submission approved",
-          REJECT: "Submission rejected",
-          RETURN: "Changes requested",
+          REJECT: "Sent back to the department for corrections",
+          RETURN: "Returned to the previous phase for changes",
         };
         toast.success(messages[action] || "Action completed");
+        setReviewAction(null);
+        setReviewRemarks("");
         fetchSubmission();
       } else {
-        toast.error("Failed to complete action");
+        const data = await response.json().catch(() => ({}));
+        toast.error(data.error || "Failed to complete action");
       }
     } catch (err) {
       console.error("Failed to transition:", err);
       toast.error("Failed to complete action");
+    } finally {
+      setIsTransitioning(false);
     }
+  };
+
+  const openReview = (action: "APPROVE" | "REJECT" | "RETURN") => {
+    setReviewRemarks("");
+    setReviewAction(action);
   };
 
   const graceCheckAbortRef = useRef<AbortController | null>(null);
@@ -955,24 +974,27 @@ export default function SubmissionDetailPage({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="space-y-4">
+        <div className="h-8 w-72 animate-pulse rounded bg-muted" />
+        <div className="h-24 animate-pulse rounded-lg border bg-card" />
+        <div className="h-96 animate-pulse rounded-lg border bg-card" />
       </div>
     );
   }
 
   if (!submission) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Card className="w-96">
-          <CardHeader>
-            <CardTitle>Submission Not Found</CardTitle>
-            <CardDescription>
-              The requested submission could not be found.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      </div>
+      <EmptyState
+        icon={FileText}
+        title="Submission not found"
+        description="It may have been removed, or you may not have access to it."
+        action={
+          <Button asChild variant="outline">
+            <Link href={submissionsBackHref}>Back to submissions</Link>
+          </Button>
+        }
+        className="mt-8"
+      />
     );
   }
 
@@ -983,53 +1005,71 @@ export default function SubmissionDetailPage({
   const currentSection = sections.find((s) => s.key === activeSection);
   const SectionIcon = currentSection?.icon || FileText;
 
+  const latestSendBack = [...(submission.phaseTransitions ?? [])]
+    .filter((t) => t.action === "REJECT" || t.action === "RETURN")
+    .sort(
+      (a, b) =>
+        new Date(b.transitionedAt).getTime() - new Date(a.transitionedAt).getTime(),
+    )[0];
+  const openCommentCount = submission.comments.filter((c) => c.status === "OPEN").length;
+  const commentCountFor = (key: string) =>
+    submission.comments.filter((c) => c.section === key && c.status === "OPEN").length;
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-start gap-4">
-          <Link href={submissionsBackHref}>
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-5 w-5" />
+    <div className="space-y-4">
+      <PageHeader
+        className="mb-2"
+        title={submission.programme.name}
+        description={
+          <>
+            {submission.programme.department.name} ·{" "}
+            {submission.programme.department.school.name}
+            {currentUser?.role === "HOD" && isOwnDepartment && (
+              <>
+                {" · "}
+                <Link href="/submissions/browse" className="text-primary hover:underline">
+                  Browse other programmes
+                </Link>
+              </>
+            )}
+          </>
+        }
+        actions={
+          <>
+            <StatusBadge status={submission.status} />
+            <Button asChild variant="ghost" size="sm">
+              <Link href={submissionsBackHref}>
+                <ArrowLeft />
+                Back
+              </Link>
             </Button>
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              {submission.title}
-            </h1>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-muted-foreground">
-              <span>{submission.programme.name}</span>
-              <span>•</span>
-              <span>{submission.programme.department.school.code}</span>
-              {currentUser?.role === "HOD" && isOwnDepartment && (
-                <>
-                  <span className="hidden sm:inline">•</span>
-                  <Link
-                    href="/submissions/browse"
-                    className="text-primary text-sm hover:underline"
-                  >
-                    Browse all programme submissions
-                  </Link>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge
-            variant={submission.status === "APPROVED" ? "default" : "secondary"}
-            className={submission.status === "APPROVED" ? "bg-green-500" : ""}
-          >
-            {submission.status === "CORRECTIONS_REQUIRED"
-              ? "Corrections Required"
-              : submission.status.replaceAll("_", " ")}
-          </Badge>
-          <Badge variant="outline">
-            Phase {submission.currentPhase}:{" "}
-            {phaseNames[submission.currentPhase]}
-          </Badge>
-        </div>
-      </div>
+          </>
+        }
+      />
+
+      <PhaseTracker currentPhase={submission.currentPhase} status={submission.status} />
+
+      {/* Corrections requested: show the reviewer's remarks up front */}
+      {submission.status === "CORRECTIONS_REQUIRED" && latestSendBack && (
+        <Alert className="border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+          <AlertTriangle className="size-4" />
+          <AlertDescription className="text-inherit">
+            <p className="font-medium">
+              Corrections requested by {latestSendBack.performedBy.firstName}{" "}
+              {latestSendBack.performedBy.lastName} on{" "}
+              {new Date(latestSendBack.transitionedAt).toLocaleDateString()}
+            </p>
+            {latestSendBack.remarks && (
+              <p className="mt-1 whitespace-pre-wrap">{latestSendBack.remarks}</p>
+            )}
+            {canSubmit && (
+              <p className="mt-2 text-sm">
+                Make the changes, then use <strong>Submit for review</strong> to send it back.
+              </p>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Read-only banner for HODs viewing other departments' submissions */}
       {currentUser?.role === "HOD" && !isOwnDepartment && (
@@ -1042,10 +1082,9 @@ export default function SubmissionDetailPage({
       )}
 
       {/* Action Bar */}
-      <Card>
-        <CardContent className="pt-4 pb-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+      <div className="sticky top-14 z-10 -mx-1 rounded-lg border bg-card/95 px-3 py-2.5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/85">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
               {canEdit && (
                 <Button onClick={handleSave} disabled={!hasChanges || isSaving}>
                   {isSaving ? (
@@ -1053,7 +1092,7 @@ export default function SubmissionDetailPage({
                   ) : (
                     <Save className="mr-2 h-4 w-4" />
                   )}
-                  Save Draft
+                  Save draft
                 </Button>
               )}
               {/* Auto-save status indicator */}
@@ -1095,7 +1134,7 @@ export default function SubmissionDetailPage({
                   onClick={() => handleTransition("SUBMIT")}
                 >
                   <Send className="mr-2 h-4 w-4" />
-                  Submit for Review
+                  Submit for review
                 </Button>
               )}
               {/* Preview button - available to all viewers */}
@@ -1108,31 +1147,29 @@ export default function SubmissionDetailPage({
                 departmentId={submission.programme.department.id}
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {canReview && submission.status === "IN_REVIEW" && (
                 <>
-                  <Button
-                    variant="outline"
-                    onClick={() => handleTransition("RETURN")}
-                  >
+                  <Button variant="outline" onClick={() => openReview("RETURN")}>
                     <RotateCcw className="mr-2 h-4 w-4" />
-                    Request Changes
+                    Return to previous phase
                   </Button>
                   {canApprove && (
                     <>
                       <Button
-                        variant="destructive"
-                        onClick={() => handleTransition("REJECT")}
+                        variant="outline"
+                        className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => openReview("REJECT")}
                       >
                         <XCircle className="mr-2 h-4 w-4" />
-                        Reject
+                        Request corrections
                       </Button>
                       <Button
-                        className="bg-green-600 hover:bg-green-700"
-                        onClick={() => handleTransition("APPROVE")}
+                        className="bg-emerald-600 text-white hover:bg-emerald-700"
+                        onClick={() => openReview("APPROVE")}
                       >
                         <CheckCircle className="mr-2 h-4 w-4" />
-                        Approve
+                        Approve phase
                       </Button>
                     </>
                   )}
@@ -1141,21 +1178,26 @@ export default function SubmissionDetailPage({
 
               <Sheet>
                 <SheetTrigger asChild>
-                  <Button variant="outline" className="ml-2 bg-muted/50">
+                  <Button variant="outline">
                     <MessageSquare className="mr-2 h-4 w-4" />
-                    Comments ({submission.comments.length})
+                    Comments
+                    {openCommentCount > 0 && (
+                      <span className="ml-1 rounded-full bg-muted px-1.5 text-xs font-semibold text-foreground">
+                        {openCommentCount}
+                      </span>
+                    )}
                   </Button>
                 </SheetTrigger>
                 <SheetContent
                   side="right"
-                  className="w-[400px] sm:w-[540px] overflow-y-auto p-6 sm:p-8"
+                  className="w-full overflow-y-auto p-6 sm:max-w-lg sm:p-8"
                 >
                   <SheetHeader className="mb-4">
                     <SheetTitle className="flex items-center gap-2">
                       <MessageSquare className="h-5 w-5" />
                       Comments
                       <Badge variant="secondary" className="ml-2">
-                        {currentSection?.title.split(" ")[0]}
+                        {currentSection?.title}
                       </Badge>
                     </SheetTitle>
                   </SheetHeader>
@@ -1272,35 +1314,75 @@ export default function SubmissionDetailPage({
               </Sheet>
             </div>
           </div>
-        </CardContent>
-      </Card>
+      </div>
 
       {/* Main Content */}
-      <div className="w-full">
-        {/* Editor Panel */}
-        <div className="w-full">
-          <Card>
-            <CardHeader className="pb-3">
-              <Tabs value={activeSection} onValueChange={setActiveSection}>
-                <TabsList className="flex flex-wrap h-auto w-full justify-start gap-1">
-                  {sections.map((section) => {
-                    const Icon = section.icon;
-                    return (
-                      <TabsTrigger
-                        key={section.key}
-                        value={section.key}
-                        className="flex items-center gap-1"
+      <div className="grid gap-4 lg:grid-cols-[15rem_1fr]">
+        {/* Section navigation */}
+        <nav aria-label="Bulletin sections" className="lg:sticky lg:top-32 lg:self-start">
+          <div className="lg:hidden">
+            <Label htmlFor="section-select" className="sr-only">
+              Section
+            </Label>
+            <Select value={activeSection} onValueChange={setActiveSection}>
+              <SelectTrigger id="section-select" className="w-full bg-card">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {sections.map((section, index) => (
+                  <SelectItem key={section.key} value={section.key}>
+                    {index + 1}. {section.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <ol className="hidden space-y-0.5 rounded-lg border bg-card p-2 lg:block">
+            {sections.map((section, index) => {
+              const Icon = section.icon;
+              const active = section.key === activeSection;
+              const open = commentCountFor(section.key);
+              return (
+                <li key={section.key}>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSection(section.key)}
+                    aria-current={active ? "step" : undefined}
+                    className={cn(
+                      "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      active
+                        ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "flex size-6 shrink-0 items-center justify-center rounded-md text-xs",
+                        active ? "bg-primary text-primary-foreground" : "bg-muted",
+                      )}
+                    >
+                      {index + 1}
+                    </span>
+                    <Icon className="size-4 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">{section.title}</span>
+                    {open > 0 && (
+                      <span
+                        className="rounded-full bg-muted px-1.5 text-[11px] font-semibold text-foreground"
+                        title={`${open} open comment${open === 1 ? "" : "s"}`}
                       >
-                        <Icon className="h-4 w-4" />
-                        <span className="hidden xl:inline text-xs">
-                          {section.title}
-                        </span>
-                      </TabsTrigger>
-                    );
-                  })}
-                </TabsList>
-              </Tabs>
-            </CardHeader>
+                        {open}
+                      </span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
+
+        {/* Editor Panel */}
+        <div className="min-w-0">
+          <Card>
             <CardContent>
               <div className="space-y-4">
                 <div>
@@ -1879,7 +1961,7 @@ export default function SubmissionDetailPage({
                       )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-2">
                         <Label>Minimum CGPA *</Label>
                         {canEdit ? (
@@ -1995,6 +2077,110 @@ export default function SubmissionDetailPage({
           </Card>
         </div>
       </div>
+      {/* Approve / send back dialog */}
+      <Dialog
+        open={reviewAction !== null}
+        onOpenChange={(open) => {
+          if (!open && !isTransitioning) setReviewAction(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {reviewAction === "APPROVE"
+                ? `Approve phase ${submission.currentPhase}`
+                : reviewAction === "REJECT"
+                  ? "Request corrections"
+                  : "Return to the previous phase"}
+            </DialogTitle>
+            <DialogDescription>
+              {reviewAction === "APPROVE"
+                ? submission.currentPhase >= 10
+                  ? "This gives the bulletin its final approval. The department will be emailed."
+                  : `The bulletin moves on to phase ${submission.currentPhase + 1}: ${phaseNames[submission.currentPhase + 1]}.`
+                : reviewAction === "REJECT"
+                  ? "The bulletin goes back to the department as Corrections Required. They'll be emailed your remarks."
+                  : "The bulletin goes back one phase with your remarks, and the department is emailed."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="review-remarks">
+              {reviewAction === "APPROVE" ? "Remarks (optional)" : "What needs to change?"}
+            </Label>
+            <Textarea
+              id="review-remarks"
+              rows={5}
+              value={reviewRemarks}
+              onChange={(e) => setReviewRemarks(e.target.value)}
+              placeholder={
+                reviewAction === "APPROVE"
+                  ? "Anything the department should know"
+                  : "Be specific so the department can make the changes in one go"
+              }
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setReviewAction(null)}
+              disabled={isTransitioning}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() =>
+                reviewAction &&
+                handleTransition(reviewAction, reviewRemarks.trim() || null)
+              }
+              disabled={
+                isTransitioning ||
+                (reviewAction !== "APPROVE" && !reviewRemarks.trim())
+              }
+              className={
+                reviewAction === "APPROVE"
+                  ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                  : undefined
+              }
+              variant={reviewAction === "REJECT" ? "destructive" : "default"}
+            >
+              {isTransitioning && <Loader2 className="animate-spin" />}
+              {reviewAction === "APPROVE"
+                ? "Approve"
+                : reviewAction === "REJECT"
+                  ? "Send back for corrections"
+                  : "Return"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Things to fix before submitting */}
+      <Dialog
+        open={submitBlockers !== null}
+        onOpenChange={(open) => {
+          if (!open) setSubmitBlockers(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>A few things to finish first</DialogTitle>
+            <DialogDescription>
+              Fix these, then submit for review again.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="space-y-2 text-sm">
+            {submitBlockers?.map((blocker) => (
+              <li key={blocker} className="flex gap-2">
+                <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
+                <span>{blocker}</span>
+              </li>
+            ))}
+          </ul>
+          <DialogFooter>
+            <Button onClick={() => setSubmitBlockers(null)}>Got it</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
