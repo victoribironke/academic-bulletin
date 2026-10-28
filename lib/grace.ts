@@ -8,9 +8,10 @@
  *
  * Server-only: never import this from a client component (it reads the API key).
  */
+import { GEMINI_MODEL } from "@/lib/site-config";
 import { GoogleGenAI, ThinkingLevel, Type } from "@google/genai";
 
-export const GRACE_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+export const GRACE_MODEL = GEMINI_MODEL;
 
 let client: GoogleGenAI | null = null;
 
