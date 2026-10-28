@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState, useEffect } from "react";
+import { useActionState, useState } from "react";
 import { adminCreateUser } from "@/app/actions/admin";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, CircleCheck, Copy, Check } from "lucide-react";
+import { Plus, CircleCheck } from "lucide-react";
 
 export function CreateUserDialog({
   schools,
@@ -40,45 +40,31 @@ export function CreateUserDialog({
   const [selectedDepartment, setSelectedDepartment] =
     useState<string>("none");
   const [selectedRole, setSelectedRole] = useState<string>("HOD");
-  const [invitedEmail, setInvitedEmail] = useState<string | null>(null);
-  const [inviteLink, setInviteLink] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [state, formAction, isPending] = useActionState(adminCreateUser, null);
-
-  useEffect(() => {
-    if (state && "success" in state && state.success) {
-      setInvitedEmail(state.email);
-      if (state.inviteLink) {
-        setInviteLink(state.inviteLink);
-        toast.success("User created", {
-          description: "Copy the invite link below to share with the user.",
+  const [addedEmail, setAddedEmail] = useState<string | null>(null);
+  const [emailSent, setEmailSent] = useState(false);
+  const [state, formAction, isPending] = useActionState(
+    async (prev: unknown, formData: FormData) => {
+      const result = await adminCreateUser(prev, formData);
+      if ("success" in result && result.success) {
+        setAddedEmail(result.email);
+        setEmailSent(result.emailSent);
+        toast.success("User added", {
+          description: `${result.email} can now sign in with Google.`,
         });
-      } else {
-        toast.success("Invitation sent", {
-          description: `Login instructions were sent to ${state.email}.`,
-        });
+        onSuccess?.();
+      } else if ("error" in result && result.error) {
+        toast.error("Failed to create user", { description: result.error });
       }
-      onSuccess?.();
-    } else if (state && "error" in state && state.error) {
-      toast.error("Failed to create user", { description: state.error });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state]);
-
-  const handleCopy = async () => {
-    if (!inviteLink) return;
-    await navigator.clipboard.writeText(inviteLink);
-    setCopied(true);
-    toast.success("Invite link copied to clipboard");
-    setTimeout(() => setCopied(false), 2000);
-  };
+      return result;
+    },
+    null,
+  );
 
   const handleOpenChange = (isOpen: boolean) => {
     setOpen(isOpen);
     if (!isOpen) {
-      setInvitedEmail(null);
-      setInviteLink(null);
-      setCopied(false);
+      setAddedEmail(null);
+      setEmailSent(false);
       setSelectedSchool("none");
       setSelectedDepartment("none");
       setSelectedRole("HOD");
@@ -100,49 +86,19 @@ export function CreateUserDialog({
       </DialogTrigger>
 
       <DialogContent className="sm:max-w-[425px]">
-        {invitedEmail ? (
+        {addedEmail ? (
           <div className="space-y-4">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <CircleCheck className="h-5 w-5 text-green-500" />
-                {inviteLink ? "User Created" : "Invitation Sent"}
+                User Added
               </DialogTitle>
               <DialogDescription>
-                {inviteLink
-                  ? `User account was created for ${invitedEmail}. Direct email delivery is not configured, so please copy the invite link below and share it with the user.`
-                  : `Login instructions were sent directly to ${invitedEmail}. The recipient can use the email link to set their password.`}
+                {emailSent
+                  ? `${addedEmail} has been emailed a link to the sign-in page. They sign in with the Google account that uses this address.`
+                  : `${addedEmail} can now sign in with the Google account that uses this address. The notification email could not be sent, so let them know directly.`}
               </DialogDescription>
             </DialogHeader>
-
-            {inviteLink && (
-              <div className="space-y-3">
-                <Label>Invite Link</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    readOnly
-                    value={inviteLink}
-                    className="flex-1 font-mono text-xs"
-                    onClick={(e) => (e.target as HTMLInputElement).select()}
-                  />
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="outline"
-                    onClick={handleCopy}
-                    title="Copy invite link"
-                  >
-                    {copied ? (
-                      <Check className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  This single-use link allows the user to set their password.
-                </p>
-              </div>
-            )}
 
             <DialogFooter>
               <Button onClick={() => handleOpenChange(false)}>Done</Button>
@@ -153,8 +109,8 @@ export function CreateUserDialog({
             <DialogHeader>
               <DialogTitle>Create New User</DialogTitle>
               <DialogDescription>
-                Add a new user and send password setup instructions directly to
-                their email address.
+                Add the email address this person will sign in with. It can be
+                a school or personal Google account.
               </DialogDescription>
             </DialogHeader>
 
