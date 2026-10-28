@@ -61,12 +61,31 @@ function getRoleTier(role: string): number {
   return ROLE_TIERS[role] ?? 0;
 }
 
-// PATCH /api/users/[id] - Update a user (role, active status, etc.)
+// PATCH /api/users/[id] - Update a user (name, role, unit, active status)
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
     const body = await request.json();
     const { role, isActive, schoolId, departmentId } = body;
+
+    // Names: trimmed only, so spellings like "McDonald" or "O'Neil" are kept.
+    const names: { firstName?: string; lastName?: string } = {};
+    for (const field of ["firstName", "lastName"] as const) {
+      if (body[field] === undefined) continue;
+      const value = typeof body[field] === "string" ? body[field].trim() : "";
+      if (!value || value.length > 80) {
+        return NextResponse.json(
+          { error: `${field === "firstName" ? "First" : "Last"} name is required (up to 80 characters).` },
+          { status: 400 },
+        );
+      }
+      names[field] = value;
+    }
+    const onlyNames =
+      role === undefined &&
+      isActive === undefined &&
+      schoolId === undefined &&
+      departmentId === undefined;
 
     if (role !== undefined && !(role in ROLE_TIERS)) {
       return NextResponse.json(
@@ -99,10 +118,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       where: { id: authUser.id },
     });
 
+    // Anyone may correct their own name; everything else needs an admin.
+    const isOwnNameChange = requestingUser?.id === id && onlyNames;
+
     if (
       !requestingUser ||
       !requestingUser.isActive ||
-      getRoleTier(requestingUser.role) < getRoleTier("ADMIN")
+      (!isOwnNameChange && getRoleTier(requestingUser.role) < getRoleTier("ADMIN"))
     ) {
       return NextResponse.json(
         { error: "Unauthorized: Only Admins can modify users." },
@@ -123,7 +145,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const targetTier = getRoleTier(targetUser.role);
 
     // 3. Cannot modify users of equal or higher tier (unless you're SUPER_ADMIN)
-    if (requestorTier <= targetTier && requestingUser.role !== "SUPER_ADMIN") {
+    if (
+      !isOwnNameChange &&
+      requestorTier <= targetTier &&
+      requestingUser.role !== "SUPER_ADMIN"
+    ) {
       return NextResponse.json(
         { error: "You cannot modify a user with an equal or higher role." },
         { status: 403 }
@@ -233,6 +259,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         ...(isActive !== undefined && { isActive }),
         ...(schoolId !== undefined && { schoolId }),
         ...(departmentId !== undefined && { departmentId }),
+        ...names,
       },
       select: {
         id: true,
@@ -251,6 +278,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         },
       },
     });
+
+    // Keep the sign-in account's display name in step (not critical).
+    if (names.firstName || names.lastName) {
+      try {
+        await createAdminClient().auth.admin.updateUserById(id, {
+          user_metadata: { first_name: user.firstName, last_name: user.lastName },
+        });
+      } catch (metadataError) {
+        console.error("Failed to update auth display name:", metadataError);
+      }
+    }
 
     return NextResponse.json(user);
   } catch (error: unknown) {
@@ -272,3 +310,65 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   }
 }
 
+
+// DELETE /api/users/[id] - Permanently remove a user (Super Admins only).
+// Users with review history can't be deleted; deactivate them instead so the
+// audit trail of who submitted, reviewed and commented stays intact.
+export async function DELETE(_request: NextRequest, { params }: RouteParams) {
+  try {
+    const auth = await requireApiUser(["SUPER_ADMIN"]);
+    if (!auth.ok) return auth.response;
+
+    const { id } = await params;
+    if (auth.user.id === id) {
+      return NextResponse.json(
+        { error: "You cannot delete your own account." },
+        { status: 403 },
+      );
+    }
+
+    const target = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        _count: {
+          select: {
+            submissions: true,
+            phaseTransitions: true,
+            comments: true,
+            reviewCycles: true,
+          },
+        },
+      },
+    });
+    if (!target) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const history = Object.values(target._count).reduce((a, b) => a + b, 0);
+    if (history > 0) {
+      return NextResponse.json(
+        {
+          error:
+            "This person has review history (submissions, decisions or comments), so they can't be deleted. Deactivate them instead.",
+        },
+        { status: 409 },
+      );
+    }
+
+    await prisma.user.delete({ where: { id } });
+
+    // Remove the sign-in account too. If this fails the person still can't
+    // get in, because sign-in requires a matching user record.
+    const { error: authDeleteError } =
+      await createAdminClient().auth.admin.deleteUser(id);
+    if (authDeleteError) {
+      console.error("Deleted user record but not the auth account:", authDeleteError);
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Failed to delete user:", error);
+    return NextResponse.json({ error: "Failed to delete user" }, { status: 500 });
+  }
+}
