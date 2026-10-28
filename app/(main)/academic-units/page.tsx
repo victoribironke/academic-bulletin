@@ -1,9 +1,12 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { PageHeader } from "@/components/shared/page-header";
+import { TableToolbar } from "@/components/shared/table-toolbar";
+import { EmptyState, TableSkeleton } from "@/components/shared/states";
 import { usePermission } from "@/contexts/user-context";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -61,6 +64,8 @@ type School = {
 export default function AcademicUnitsPage() {
   const [schools, setSchools] = useState<School[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [search, setSearch] = useState("");
   const { hasPermission } = usePermission();
 
   // Collapsible state
@@ -96,23 +101,23 @@ export default function AcademicUnitsPage() {
 
   const canManage = hasPermission("manage:schools");
 
-  const fetchData = async () => {
-    try {
-      const response = await fetch("/api/academic-units");
-      if (response.ok) {
-        const data = await response.json();
-        setSchools(data);
-      }
-    } catch (err) {
-      console.error("Failed to fetch academic units:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const fetchData = () => setReloadKey((k) => k + 1);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    let cancelled = false;
+    fetch("/api/academic-units")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: School[] | null) => {
+        if (!cancelled && data) setSchools(data);
+      })
+      .catch((err) => console.error("Failed to fetch academic units:", err))
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
 
   const toggleSchool = (id: string) => {
     const newSet = new Set(expandedSchools);
@@ -276,281 +281,303 @@ export default function AcademicUnitsPage() {
     }
   };
 
-  const unitTree = useMemo(() => (
-      <div className="space-y-4">
-        {schools.length === 0 ? (
-          <Card>
-            <CardContent className="pt-6 text-center text-muted-foreground">
-              No academic units found. Create a school to get started.
-            </CardContent>
-          </Card>
-        ) : (
-          schools.map((school) => (
-            <Card key={school.id} className="overflow-hidden">
-              <div
-                className="flex items-center justify-between p-4 bg-muted/30 hover:bg-muted/50 cursor-pointer"
-                onClick={() => toggleSchool(school.id)}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 border rounded-md bg-background">
-                    <SchoolIcon className="h-5 w-5 text-blue-500" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">
-                      {school.name} ({school.code})
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      {school.departments.length} Departments
-                    </p>
-                  </div>
-                </div>
-                <div
-                  className="flex items-center gap-2"
-                  onClick={(e) => e.stopPropagation()}
+  // Search narrows the tree and opens every branch that has a match.
+  const query = search.trim().toLowerCase();
+  const matches = (...values: (string | null | undefined)[]) =>
+    values.some((v) => v?.toLowerCase().includes(query));
+  const visibleSchools = useMemo(() => {
+    if (!query) return schools;
+    return schools
+      .map((school) => {
+        if (matches(school.name, school.code)) return school;
+        const departments = school.departments
+          .map((dept) => {
+            if (matches(dept.name, dept.code)) return dept;
+            const programmes = dept.programmes.filter((p) => matches(p.name, p.code));
+            return programmes.length ? { ...dept, programmes } : null;
+          })
+          .filter((d): d is Department => d !== null);
+        return departments.length ? { ...school, departments } : null;
+      })
+      .filter((s): s is School => s !== null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schools, query]);
+  const schoolOpen = (id: string) => !!query || expandedSchools.has(id);
+  const deptOpen = (id: string) => !!query || expandedDepartments.has(id);
+
+  const allExpanded =
+    schools.length > 0 && schools.every((sc) => expandedSchools.has(sc.id));
+  const toggleAll = () => {
+    if (allExpanded) {
+      setExpandedSchools(new Set());
+      setExpandedDepartments(new Set());
+    } else {
+      setExpandedSchools(new Set(schools.map((sc) => sc.id)));
+      setExpandedDepartments(
+        new Set(schools.flatMap((sc) => sc.departments.map((d) => d.id))),
+      );
+    }
+  };
+
+  const unitTree =
+    visibleSchools.length === 0 ? (
+      <EmptyState
+        icon={SchoolIcon}
+        title={query ? "Nothing matches your search" : "No academic units yet"}
+        description={
+          query
+            ? "Try a different name or code."
+            : canManage
+              ? "Start by adding a school, then its departments and programmes."
+              : undefined
+        }
+        action={
+          !query && canManage ? (
+            <Button onClick={() => openSchoolForm()}>
+              <Plus />
+              New school
+            </Button>
+          ) : undefined
+        }
+      />
+    ) : (
+      <div className="space-y-3">
+        {visibleSchools.map((school) => {
+          const open = schoolOpen(school.id);
+          return (
+            <Card key={school.id} className="gap-0 overflow-hidden py-0">
+              <div className="flex items-center justify-between gap-2 p-3 sm:p-4">
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => toggleSchool(school.id)}
+                  aria-expanded={open}
                 >
-                  {canManage && (
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openSchoolForm(school)}
-                        disabled={deletingId === school.id}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive"
-                        disabled={deletingId === school.id}
-                        onClick={() =>
-                          handleDelete("school", school.id, school.name)
-                        }
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </>
+                  {open ? (
+                    <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                   )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => toggleSchool(school.id)}
-                  >
-                    {expandedSchools.has(school.id) ? (
-                      <ChevronDown className="h-4 w-4" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <SchoolIcon className="size-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold">{school.name}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {school.code} · {school.departments.length} department
+                      {school.departments.length === 1 ? "" : "s"}
+                    </span>
+                  </span>
+                </button>
+                {canManage && (
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => openSchoolForm(school)}
+                      disabled={deletingId === school.id}
+                      aria-label={`Edit ${school.name}`}
+                    >
+                      <Pencil />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive hover:text-destructive"
+                      disabled={deletingId === school.id}
+                      onClick={() => handleDelete("school", school.id, school.name)}
+                      aria-label={`Delete ${school.name}`}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                )}
               </div>
 
-              {expandedSchools.has(school.id) && (
-                <div className="p-4 pt-2 border-t space-y-3">
-                  <div className="flex justify-between items-center mb-2">
-                    <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground ml-2">
+              {open && (
+                <div className="space-y-2 border-t bg-muted/30 p-3 sm:p-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       Departments
                     </h4>
                     {canManage && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openDeptForm(school.id)}
-                      >
-                        <Plus className="h-3 w-3 mr-1" /> Add Department
+                      <Button variant="outline" size="sm" className="bg-card" onClick={() => openDeptForm(school.id)}>
+                        <Plus />
+                        Add department
                       </Button>
                     )}
                   </div>
 
                   {school.departments.length === 0 ? (
-                    <p className="text-sm text-muted-foreground ml-2">
-                      No departments under this school.
-                    </p>
+                    <p className="text-sm text-muted-foreground">No departments in this school yet.</p>
                   ) : (
-                    school.departments.map((dept) => (
-                      <div
-                        key={dept.id}
-                        className="border rounded-md ml-4 bg-background"
-                      >
-                        <div
-                          className="flex items-center justify-between p-3 hover:bg-muted/30 cursor-pointer"
-                          onClick={() => toggleDept(dept.id)}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="p-1.5 border rounded-md">
-                              <Building2 className="h-4 w-4 text-green-500" />
-                            </div>
-                            <div>
-                              <p className="font-medium">
-                                {dept.name} ({dept.code})
-                              </p>
-                            </div>
-                          </div>
-                          <div
-                            className="flex items-center gap-1"
-                            onClick={(e) => e.stopPropagation()}
-                          >
+                    school.departments.map((dept) => {
+                      const deptIsOpen = deptOpen(dept.id);
+                      return (
+                        <div key={dept.id} className="rounded-lg border bg-card">
+                          <div className="flex items-center justify-between gap-2 p-2.5">
+                            <button
+                              type="button"
+                              className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              onClick={() => toggleDept(dept.id)}
+                              aria-expanded={deptIsOpen}
+                            >
+                              {deptIsOpen ? (
+                                <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                              ) : (
+                                <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                              )}
+                              <Building2 className="size-4 shrink-0 text-primary" />
+                              <span className="min-w-0 truncate text-sm font-medium">
+                                {dept.name}{" "}
+                                <span className="font-normal text-muted-foreground">
+                                  ({dept.code}) · {dept.programmes.length} programme
+                                  {dept.programmes.length === 1 ? "" : "s"}
+                                </span>
+                              </span>
+                            </button>
                             {canManage && (
-                              <>
+                              <div className="flex shrink-0 items-center gap-1">
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-8 w-8"
+                                  className="size-8"
                                   disabled={deletingId === dept.id}
                                   onClick={() => openDeptForm(school.id, dept)}
+                                  aria-label={`Edit ${dept.name}`}
                                 >
-                                  <Pencil className="h-3.5 w-3.5" />
+                                  <Pencil />
                                 </Button>
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-8 w-8 text-destructive"
+                                  className="size-8 text-destructive hover:text-destructive"
                                   disabled={deletingId === dept.id}
-                                  onClick={() =>
-                                    handleDelete(
-                                      "department",
-                                      dept.id,
-                                      dept.name,
-                                    )
-                                  }
+                                  onClick={() => handleDelete("department", dept.id, dept.name)}
+                                  aria-label={`Delete ${dept.name}`}
                                 >
-                                  <Trash2 className="h-3.5 w-3.5" />
+                                  <Trash2 />
                                 </Button>
-                              </>
+                              </div>
                             )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => toggleDept(dept.id)}
-                            >
-                              {expandedDepartments.has(dept.id) ? (
-                                <ChevronDown className="h-4 w-4" />
-                              ) : (
-                                <ChevronRight className="h-4 w-4" />
-                              )}
-                            </Button>
                           </div>
-                        </div>
 
-                        {expandedDepartments.has(dept.id) && (
-                          <div className="p-3 pt-0 border-t bg-muted/10">
-                            <div className="flex justify-between items-center my-3 ml-2">
-                              <h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                Programmes
-                              </h5>
-                              {canManage && (
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  className="h-7 text-xs"
-                                  onClick={() => openProgForm(dept.id)}
-                                >
-                                  <Plus className="h-3 w-3 mr-1" /> Add
-                                  Programme
-                                </Button>
-                              )}
-                            </div>
-
-                            <div className="space-y-2 ml-4">
+                          {deptIsOpen && (
+                            <div className="border-t px-3 pb-3">
+                              <div className="my-2 flex items-center justify-between">
+                                <h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                  Programmes
+                                </h5>
+                                {canManage && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    onClick={() => openProgForm(dept.id)}
+                                  >
+                                    <Plus />
+                                    Add programme
+                                  </Button>
+                                )}
+                              </div>
                               {dept.programmes.length === 0 ? (
                                 <p className="text-xs text-muted-foreground">
-                                  No programmes under this department.
+                                  No programmes in this department yet.
                                 </p>
                               ) : (
-                                dept.programmes.map((prog) => (
-                                  <div
-                                    key={prog.id}
-                                    className="flex items-center justify-between p-2 pb-1 border-b last:border-0 hover:bg-muted/30"
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      <GraduationCap className="h-4 w-4 text-purple-500" />
-                                      <span className="text-sm">
-                                        {prog.name} ({prog.code})
+                                <ul className="divide-y rounded-md border">
+                                  {dept.programmes.map((prog) => (
+                                    <li
+                                      key={prog.id}
+                                      className="flex items-center justify-between gap-2 px-3 py-2"
+                                    >
+                                      <span className="flex min-w-0 items-center gap-2">
+                                        <GraduationCap className="size-4 shrink-0 text-brand-gold" />
+                                        <span className="truncate text-sm">
+                                          {prog.name}{" "}
+                                          <span className="text-muted-foreground">({prog.code})</span>
+                                        </span>
+                                        {prog.duration && (
+                                          <span className="shrink-0 rounded border px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                                            {prog.duration} yrs
+                                          </span>
+                                        )}
                                       </span>
-                                      {prog.duration && (
-                                        <span className="text-xs text-muted-foreground ml-2 border px-1.5 py-0.5 rounded">
-                                          {prog.duration} Yrs
+                                      {canManage && (
+                                        <span className="flex shrink-0 gap-1">
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="size-7"
+                                            disabled={deletingId === prog.id}
+                                            onClick={() => openProgForm(dept.id, prog)}
+                                            aria-label={`Edit ${prog.name}`}
+                                          >
+                                            <Pencil className="size-3.5" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="size-7 text-destructive hover:text-destructive"
+                                            disabled={deletingId === prog.id}
+                                            onClick={() => handleDelete("programme", prog.id, prog.name)}
+                                            aria-label={`Delete ${prog.name}`}
+                                          >
+                                            <Trash2 className="size-3.5" />
+                                          </Button>
                                         </span>
                                       )}
-                                    </div>
-                                    <div
-                                      className="flex gap-1"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      {canManage && (
-                                        <>
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7"
-                                            disabled={deletingId === prog.id}
-                                            onClick={() =>
-                                              openProgForm(dept.id, prog)
-                                            }
-                                          >
-                                            <Pencil className="h-3 w-3" />
-                                          </Button>
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7 text-destructive"
-                                            disabled={deletingId === prog.id}
-                                            onClick={() =>
-                                              handleDelete(
-                                                "programme",
-                                                prog.id,
-                                                prog.name,
-                                              )
-                                            }
-                                          >
-                                            <Trash2 className="h-3 w-3" />
-                                          </Button>
-                                        </>
-                                      )}
-                                    </div>
-                                  </div>
-                                ))
+                                    </li>
+                                  ))}
+                                </ul>
                               )}
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    ))
+                          )}
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               )}
             </Card>
-          ))
-        )}
-      </div>
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  ), [schools, expandedSchools, expandedDepartments, canManage, deletingId]);
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
-        Loading academic units...
+          );
+        })}
       </div>
     );
+
+  if (isLoading) {
+    return <TableSkeleton columns={3} rows={4} />;
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Academic Units</h1>
-          <p className="text-muted-foreground">
-            Manage schools, departments, and programmes
-          </p>
-        </div>
-        {canManage && (
-          <Button onClick={() => openSchoolForm()}>
-            <Plus className="mr-2 h-4 w-4" />
-            New School
-          </Button>
-        )}
-      </div>
+    <div className="space-y-4">
+      <PageHeader
+        title="Academic Units"
+        description="Schools, their departments, and each department's programmes."
+        actions={
+          canManage && (
+            <Button onClick={() => openSchoolForm()}>
+              <Plus />
+              New school
+            </Button>
+          )
+        }
+      />
+
+      <TableToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search schools, departments, programmes"
+        actions={
+          schools.length > 0 &&
+          !query && (
+            <Button variant="outline" size="sm" className="bg-card" onClick={toggleAll}>
+              {allExpanded ? "Collapse all" : "Expand all"}
+            </Button>
+          )
+        }
+      />
+
       {unitTree}
 
       {/* Shared Form Handlers below */}
