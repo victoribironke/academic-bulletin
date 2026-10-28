@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { usePermission, useUser } from "@/contexts/user-context";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -23,7 +22,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { CalendarClock, Pencil, Plus, Power, Trash2 } from "lucide-react";
+import { PageHeader } from "@/components/shared/page-header";
+import { TableCard } from "@/components/shared/table-toolbar";
+import { EmptyState, ErrorState, TableSkeleton } from "@/components/shared/states";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
@@ -49,8 +51,10 @@ export default function ReviewCyclesPage() {
   const router = useRouter();
   const { hasPermission } = usePermission();
   const { currentUser, isLoading: userLoading } = useUser();
-  const [cycles, setCycles] = useState<ReviewCycle[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [cycles, setCycles] = useState<ReviewCycle[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   // Form State
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -65,27 +69,57 @@ export default function ReviewCyclesPage() {
 
   const canManage = hasPermission("manage:cycles");
 
-  const fetchData = async () => {
-    try {
-      const response = await fetch("/api/cycles");
-      if (response.ok) {
-        const data = await response.json();
-        setCycles(data);
-      }
-    } catch (err) {
-      console.error("Failed to fetch review cycles:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const fetchData = () => setReloadKey((k) => k + 1);
 
   useEffect(() => {
-    if (!userLoading && !canManage) {
-      router.push("/dashboard");
-    } else if (!userLoading) {
-      fetchData();
-    }
+    if (!userLoading && !canManage) router.push("/dashboard");
   }, [userLoading, canManage, router]);
+
+  useEffect(() => {
+    if (userLoading || !canManage) return;
+    let cancelled = false;
+    fetch("/api/cycles")
+      .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
+      .then((data: ReviewCycle[]) => {
+        if (cancelled) return;
+        setCycles(data);
+        setFailed(false);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userLoading, canManage, reloadKey]);
+
+  const handleToggleActive = async (cycle: ReviewCycle) => {
+    if (
+      cycle.isActive &&
+      !confirm(`Close "${cycle.name}"? Departments won't be able to work in it until it's reopened.`)
+    ) {
+      return;
+    }
+    setTogglingId(cycle.id);
+    try {
+      const res = await fetch(`/api/cycles/${cycle.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !cycle.isActive }),
+      });
+      if (res.ok) {
+        toast.success(cycle.isActive ? "Cycle closed" : "Cycle reopened");
+        fetchData();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || "Failed to update the cycle");
+      }
+    } catch {
+      toast.error("Failed to update the cycle");
+    } finally {
+      setTogglingId(null);
+    }
+  };
 
   const openForm = (cycle?: ReviewCycle) => {
     setError("");
@@ -170,113 +204,119 @@ export default function ReviewCyclesPage() {
     }
   };
 
-  if (userLoading || isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
-        Loading review cycles...
-      </div>
-    );
-  }
-
-  if (!canManage) return null; // Prevent flicker while redirecting
+  if (!userLoading && !canManage) return null; // Prevent flicker while redirecting
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Review Cycles</h1>
-          <p className="text-muted-foreground">
-            Manage academic bulletin review periods
-          </p>
-        </div>
-        <Button onClick={() => openForm()}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Cycle
-        </Button>
-      </div>
+    <div className="space-y-4">
+      <PageHeader
+        title="Review Cycles"
+        description="Each cycle is one round of bulletin reviews. Only one cycle can be active at a time."
+        actions={
+          <Button onClick={() => openForm()}>
+            <Plus />
+            New cycle
+          </Button>
+        }
+      />
 
-      <Card>
-        <CardContent className="p-0">
+      {failed ? (
+        <ErrorState onRetry={fetchData} />
+      ) : !cycles ? (
+        <TableSkeleton columns={5} rows={3} />
+      ) : cycles.length === 0 ? (
+        <EmptyState
+          icon={CalendarClock}
+          title="No review cycles yet"
+          description="Start a cycle so departments can begin their bulletin submissions."
+          action={
+            <Button onClick={() => openForm()}>
+              <Plus />
+              New cycle
+            </Button>
+          }
+        />
+      ) : (
+        <TableCard>
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Cycle Name</TableHead>
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
+                <TableHead>Cycle</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Started At</TableHead>
-                <TableHead>Submissions</TableHead>
-                <TableHead>Created By</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="hidden sm:table-cell">Started</TableHead>
+                <TableHead className="hidden md:table-cell">Submissions</TableHead>
+                <TableHead className="hidden lg:table-cell">Created by</TableHead>
+                <TableHead className="text-right">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {cycles.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={6}
-                    className="text-center h-24 text-muted-foreground"
-                  >
-                    No review cycles found.
+              {cycles.map((cycle) => (
+                <TableRow key={cycle.id}>
+                  <TableCell>
+                    <p className="font-medium">{cycle.name}</p>
+                    {cycle.description && (
+                      <p className="line-clamp-1 text-xs text-muted-foreground">
+                        {cycle.description}
+                      </p>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {cycle.isActive ? (
+                      <Badge className="border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-50">
+                        Active
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">Closed</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="hidden text-muted-foreground sm:table-cell">
+                    {format(new Date(cycle.startedAt), "d MMM yyyy")}
+                  </TableCell>
+                  <TableCell className="hidden tabular-nums md:table-cell">
+                    {cycle._count?.submissions ?? 0}
+                  </TableCell>
+                  <TableCell className="hidden text-muted-foreground lg:table-cell">
+                    {cycle.createdBy.firstName} {cycle.createdBy.lastName}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleToggleActive(cycle)}
+                        disabled={togglingId === cycle.id}
+                      >
+                        <Power />
+                        <span className="hidden sm:inline">
+                          {cycle.isActive ? "Close" : "Reopen"}
+                        </span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => openForm(cycle)}
+                        aria-label={`Edit ${cycle.name}`}
+                      >
+                        <Pencil />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(cycle.id, cycle.name)}
+                        aria-label={`Delete ${cycle.name}`}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
-              ) : (
-                cycles.map((cycle) => (
-                  <TableRow key={cycle.id}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{cycle.name}</div>
-                        {cycle.description && (
-                          <div className="text-sm text-muted-foreground line-clamp-1">
-                            {cycle.description}
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {cycle.isActive ? (
-                        <Badge className="bg-green-100 text-green-800 hover:bg-green-100/80">
-                          Active
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary">Closed</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {format(new Date(cycle.startedAt), "MMM d, yyyy")}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {cycle._count?.submissions || 0}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {cycle.createdBy.firstName} {cycle.createdBy.lastName}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => openForm(cycle)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive"
-                          onClick={() => handleDelete(cycle.id, cycle.name)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
+              ))}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+        </TableCard>
+      )}
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
