@@ -2,7 +2,9 @@
  * Creates the first Super Admin and the photo storage bucket.
  *
  * Usage:
- *   SEED_SUPER_ADMIN_EMAIL=you@school.edu SEED_SUPER_ADMIN_PASSWORD=... npm run db:seed
+ *   SEED_SUPER_ADMIN_EMAIL=you@example.com bun run db:seed
+ *
+ * The Super Admin then signs in with the Google account that uses this email.
  *
  * Needs DATABASE_URL, NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
  * Safe to re-run: existing users and buckets are reused.
@@ -18,14 +20,12 @@ async function createOrGetAuthUser(
   email: string,
   firstName: string,
   lastName: string,
-  password: string,
 ): Promise<string> {
   const supabase = createAdminClient();
 
   const { data: createData, error: createError } =
     await supabase.auth.admin.createUser({
       email,
-      password,
       email_confirm: true,
       user_metadata: { first_name: firstName, last_name: lastName },
     });
@@ -46,8 +46,7 @@ async function createOrGetAuthUser(
     );
   }
 
-  await supabase.auth.admin.updateUserById(existingUser.id, { password });
-  console.log(`✅ Auth: ${email} already existed; password updated.`);
+  console.log(`✅ Auth: ${email} already exists.`);
   return existingUser.id;
 }
 
@@ -70,24 +69,13 @@ async function ensureStorageBucket() {
 
 async function main() {
   const email = process.env.SEED_SUPER_ADMIN_EMAIL?.trim().toLowerCase();
-  const password = process.env.SEED_SUPER_ADMIN_PASSWORD;
-  if (!email || !password) {
-    throw new Error(
-      "Set SEED_SUPER_ADMIN_EMAIL and SEED_SUPER_ADMIN_PASSWORD before seeding.",
-    );
-  }
-  if (password.length < 12) {
-    throw new Error("SEED_SUPER_ADMIN_PASSWORD must be at least 12 characters.");
+  if (!email) {
+    throw new Error("Set SEED_SUPER_ADMIN_EMAIL before seeding.");
   }
 
   console.log("🌱 Starting database seed...\n");
 
-  const authUserId = await createOrGetAuthUser(
-    email,
-    "Super",
-    "Admin",
-    password,
-  );
+  const authUserId = await createOrGetAuthUser(email, "Super", "Admin");
 
   const profile = {
     id: authUserId,
@@ -107,7 +95,7 @@ async function main() {
 
   await ensureStorageBucket();
 
-  console.log(`\n🌱 Done. Sign in as ${email} with the password you supplied.`);
+  console.log(`\n🌱 Done. Sign in with the Google account for ${email}.`);
 }
 
 main()
