@@ -1,5 +1,5 @@
 /**
- * Workflow notification emails.
+ * Notification emails: workflow updates and new-user access.
  *
  * Who gets emailed:
  *  - SUBMIT  → every active Admin / Super Admin (they review submissions).
@@ -186,4 +186,41 @@ export async function notifySubmissionTransition(
   } catch (error) {
     console.error("[email] Workflow notification failed:", error);
   }
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  HOD: "Head of Department",
+  DEAN: "Dean",
+  ADMIN: "Administrator",
+  SUPER_ADMIN: "Super Administrator",
+};
+
+/**
+ * Tells someone an administrator gave them access. Returns whether the email
+ * was sent. Never throws.
+ */
+export async function sendAccessGrantedEmail(opts: {
+  to: string;
+  firstName: string;
+  role: string;
+}): Promise<boolean> {
+  if (!isEmailConfigured()) return false;
+
+  const link = `${getSiteUrl()}/login`;
+  const content = renderEmail({
+    heading: "You've been given access to the Academic Bulletin",
+    intro: `Hello ${opts.firstName}, an administrator has added you to the Academic Bulletin system. Sign in with the Google account that uses this email address. There is no password to set up.`,
+    details: [
+      ["Email", opts.to],
+      ["Role", ROLE_LABELS[opts.role] ?? opts.role],
+    ],
+    link,
+    linkLabel: "Sign in with Google",
+  });
+
+  return sendEmail({
+    to: [opts.to],
+    subject: "Your Academic Bulletin access",
+    ...content,
+  });
 }
