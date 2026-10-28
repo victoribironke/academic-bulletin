@@ -367,7 +367,17 @@ export default function SubmissionDetailPage({
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [activeSection, setActiveSection] = useState("deans_hods");
+  const [activeSection, setActiveSectionState] = useState("deans_hods");
+  // Sections opened so far; their editors stay mounted once visited.
+  const [visitedSections, setVisitedSections] = useState<Set<string>>(
+    () => new Set(["deans_hods"]),
+  );
+  const setActiveSection = (key: string) => {
+    setActiveSectionState(key);
+    setVisitedSections((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+  };
+  // These sections have their own Save button inside the section.
+  const sectionSavesSeparately = ["staff", "courses", "descriptions"].includes(activeSection);
   const [hasChanges, setHasChanges] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
@@ -1085,7 +1095,13 @@ export default function SubmissionDetailPage({
       <div className="sticky top-14 z-10 -mx-1 rounded-lg border bg-card/95 px-3 py-2.5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/85">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-2">
-              {canEdit && (
+              {canEdit && sectionSavesSeparately && (
+                <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Save className="size-4" />
+                  This section has its own Save button below.
+                </span>
+              )}
+              {canEdit && !sectionSavesSeparately && (
                 <Button onClick={handleSave} disabled={!hasChanges || isSaving}>
                   {isSaving ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1561,12 +1577,17 @@ export default function SubmissionDetailPage({
                   </div>
                 )}
 
+                {/* Staff, Course Structure and Course Details save on their own.
+                    Once opened they stay mounted (just hidden) so switching
+                    sections doesn't throw away rows that haven't been saved. */}
                 {/* Staff Directory Section */}
-                {activeSection === "staff" && (
-                  <StaffTable
-                    departmentId={submission.programme.department.id}
-                    disabled={!canEdit}
-                  />
+                {visitedSections.has("staff") && (
+                  <div hidden={activeSection !== "staff"}>
+                    <StaffTable
+                      departmentId={submission.programme.department.id}
+                      disabled={!canEdit}
+                    />
+                  </div>
                 )}
 
                 {/* Programme Overview Section */}
@@ -2007,7 +2028,8 @@ export default function SubmissionDetailPage({
                 )}
 
                 {/* Course Structure Section */}
-                {activeSection === "courses" && (
+                {visitedSections.has("courses") && (
+                  <div hidden={activeSection !== "courses"}>
                   <CourseTable
                     submissionId={submission.id}
                     departmentId={submission.programme.department.id}
@@ -2021,14 +2043,17 @@ export default function SubmissionDetailPage({
                       }
                     }}
                   />
+                  </div>
                 )}
 
                 {/* Course Descriptions Section */}
-                {activeSection === "descriptions" && (
-                  <CourseDescriptionForm
-                    submissionId={submission.id}
-                    disabled={!canEdit}
-                  />
+                {visitedSections.has("descriptions") && (
+                  <div hidden={activeSection !== "descriptions"}>
+                    <CourseDescriptionForm
+                      submissionId={submission.id}
+                      disabled={!canEdit}
+                    />
+                  </div>
                 )}
 
                 {/* Regulations & Changes Section */}
