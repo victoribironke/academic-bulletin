@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useUser } from "@/contexts/user-context";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -32,6 +31,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Plus, BookOpen, Link, Trash, Upload } from "lucide-react";
+import { TableCard, TableToolbar } from "@/components/shared/table-toolbar";
+import { EmptyState, TableSkeleton } from "@/components/shared/states";
 import { toast } from "sonner";
 import { BulkImportDialog } from "@/components/imports/bulk-import-dialog";
 import {
@@ -115,6 +116,9 @@ export function MasterCourseManager({
   const [isTogglingCourseId, setIsTogglingCourseId] = useState<string | null>(null);
   const [isDeletingCourseId, setIsDeletingCourseId] = useState<string | null>(null);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filterType, setFilterType] = useState("all");
+  const [filterLevel, setFilterLevel] = useState("all");
 
   const canManageRegistry =
     currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
@@ -132,32 +136,41 @@ export function MasterCourseManager({
     ownerDeptId: departmentId || "",
   });
 
-  const fetchData = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const [coursesRes, deptsRes, progsRes] = await Promise.all([
-        fetch(
-          departmentId
-            ? `/api/master-courses?departmentId=${departmentId}`
-            : "/api/master-courses",
-        ),
-        fetch("/api/departments"),
-        fetch("/api/programmes"),
-      ]);
-
-      if (coursesRes.ok) setCourses(await coursesRes.json());
-      if (deptsRes.ok) setDepartments(await deptsRes.json());
-      if (progsRes.ok) setProgrammes(await progsRes.json());
-    } catch (error) {
-      console.error("Failed to fetch data:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [departmentId]);
+  const [reloadKey, setReloadKey] = useState(0);
+  const fetchData = useCallback(() => setReloadKey((k) => k + 1), []);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    let cancelled = false;
+    Promise.all([
+      fetch(
+        departmentId
+          ? `/api/master-courses?departmentId=${departmentId}`
+          : "/api/master-courses",
+      ),
+      fetch("/api/departments"),
+      fetch("/api/programmes"),
+    ])
+      .then(([coursesRes, deptsRes, progsRes]) =>
+        Promise.all([
+          coursesRes.ok ? coursesRes.json() : null,
+          deptsRes.ok ? deptsRes.json() : null,
+          progsRes.ok ? progsRes.json() : null,
+        ]),
+      )
+      .then(([coursesData, deptsData, progsData]) => {
+        if (cancelled) return;
+        if (coursesData) setCourses(coursesData);
+        if (deptsData) setDepartments(deptsData);
+        if (progsData) setProgrammes(progsData);
+      })
+      .catch((error) => console.error("Failed to fetch data:", error))
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [departmentId, reloadKey]);
 
   const handleCreateCourse = async () => {
     setIsCreating(true);
@@ -397,10 +410,20 @@ export function MasterCourseManager({
     );
   };
 
+  const visibleCourses = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return courses.filter((course) => {
+      if (filterType !== "all" && course.type !== filterType) return false;
+      if (filterLevel !== "all" && String(course.level) !== filterLevel) return false;
+      if (!q) return true;
+      return `${course.code} ${course.title}`.toLowerCase().includes(q);
+    });
+  }, [courses, search, filterType, filterLevel]);
+
   const coursesTable = useMemo(() => (
     <Table>
       <TableHeader>
-        <TableRow>
+        <TableRow className="bg-muted/50 hover:bg-muted/50">
           <TableHead>Code</TableHead>
           <TableHead>Title</TableHead>
           <TableHead>Units</TableHead>
@@ -414,20 +437,11 @@ export function MasterCourseManager({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {courses.length === 0 ? (
-          <TableRow>
-            <TableCell
-              colSpan={canManageRegistry ? 10 : 9}
-              className="text-center text-muted-foreground"
-            >
-              No master courses found. Create one to get started.
-            </TableCell>
-          </TableRow>
-        ) : (
-          courses.map((course) => (
+        {(
+          visibleCourses.map((course) => (
             <TableRow key={course.id}>
-              <TableCell className="font-mono">{course.code}</TableCell>
-              <TableCell>{course.title}</TableCell>
+              <TableCell className="whitespace-nowrap font-mono text-sm font-medium">{course.code}</TableCell>
+              <TableCell className="min-w-56">{course.title}</TableCell>
               <TableCell>{course.units}</TableCell>
               <TableCell>{getCourseTypeBadge(course.type)}</TableCell>
               <TableCell>{getOwnershipBadge(course)}</TableCell>
@@ -440,6 +454,7 @@ export function MasterCourseManager({
               </TableCell>
               <TableCell className="text-center">
                 <Checkbox
+                  aria-label={`${course.code} discoverable`}
                   checked={course.discoverable}
                   onCheckedChange={() => handleToggleDiscoverable(course)}
                   disabled={!canManageRegistry || isTogglingCourseId === course.id}
@@ -455,6 +470,7 @@ export function MasterCourseManager({
                       setLinkDialogOpen(true);
                     }}
                     title="Link Programmes"
+                    aria-label={`Link ${course.code} to programmes`}
                   >
                     <Link className="h-4 w-4" />
                   </Button>
@@ -464,6 +480,7 @@ export function MasterCourseManager({
                     onClick={() => handleDeleteCourse(course.id)}
                     disabled={isDeletingCourseId === course.id}
                     title="Delete Course"
+                    aria-label={`Delete ${course.code}`}
                   >
                     {isDeletingCourseId === course.id ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -479,43 +496,68 @@ export function MasterCourseManager({
       </TableBody>
     </Table>
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ), [courses, isTogglingCourseId, isDeletingCourseId, canManageRegistry]);
+  ), [visibleCourses, isTogglingCourseId, isDeletingCourseId, canManageRegistry]);
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-center h-48">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </CardContent>
-      </Card>
-    );
-  }
+  if (isLoading) return <TableSkeleton columns={6} />;
+
+  const filtersActive =
+    search.trim() !== "" || filterType !== "all" || filterLevel !== "all";
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div className="flex items-center gap-2">
-          <BookOpen className="h-5 w-5" />
-          <CardTitle>Master Course Registry</CardTitle>
-        </div>
-        {canManageRegistry && (
-          <div className="flex flex-wrap gap-2">
+    <div className="space-y-4">
+      <TableToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search code or title"
+        filters={
+          <>
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger className="w-full bg-card sm:w-40" aria-label="Course type">
+                <SelectValue placeholder="All types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All types</SelectItem>
+                {COURSE_TYPES.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>
+                    {t.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterLevel} onValueChange={setFilterLevel}>
+              <SelectTrigger className="w-full bg-card sm:w-36" aria-label="Level">
+                <SelectValue placeholder="All levels" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All levels</SelectItem>
+                {LEVELS.map((l) => (
+                  <SelectItem key={l} value={l.toString()}>
+                    {l} level
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        }
+        actions={
+        canManageRegistry && (
+          <>
             <Button variant="outline" onClick={() => setBulkImportOpen(true)}>
-              <Upload className="h-4 w-4 mr-2" />
-              Bulk Upload
+              <Upload />
+              Bulk upload
             </Button>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Course
+              <Plus />
+              Add course
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Create Master Course</DialogTitle>
             </DialogHeader>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label>Course Code</Label>
                 <Input
@@ -541,7 +583,7 @@ export function MasterCourseManager({
                   }
                 />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <Label>Course Title</Label>
                 <Input
                   placeholder="e.g., Introduction to computing sciences"
@@ -570,6 +612,7 @@ export function MasterCourseManager({
                 </Select>
               </div>
               <div>
+                <Label>Ownership</Label>
                 <Select
                   value={newCourse.ownership}
                   onValueChange={(v) =>
@@ -639,7 +682,7 @@ export function MasterCourseManager({
                 </Select>
               </div>
               {newCourse.ownership === "DEPARTMENT" && (
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <Label>Owner Department</Label>
                   <Select
                     value={newCourse.ownerDeptId}
@@ -674,11 +717,26 @@ export function MasterCourseManager({
             </DialogFooter>
           </DialogContent>
         </Dialog>
-          </div>
-        )}
-      </CardHeader>
-      <CardContent>
-        {coursesTable}
+          </>
+        )
+        }
+      />
+
+      {visibleCourses.length === 0 ? (
+        <EmptyState
+          icon={BookOpen}
+          title={filtersActive ? "No courses match these filters" : "No courses in the registry yet"}
+          description={
+            filtersActive
+              ? "Try a different search or clear the filters."
+              : canManageRegistry
+                ? "Add courses one at a time or upload a spreadsheet."
+                : undefined
+          }
+        />
+      ) : (
+        <TableCard>{coursesTable}</TableCard>
+      )}
 
         {/* Link Programmes Dialog */}
         <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
@@ -768,8 +826,7 @@ export function MasterCourseManager({
             await fetchData();
           }}
         />
-      </CardContent>
-    </Card>
+    </div>
   );
 }
 
