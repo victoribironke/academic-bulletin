@@ -2,6 +2,7 @@
  * Minimal Resend client (https://resend.com/docs/api-reference/emails/send-email).
  * Uses fetch directly so no extra dependency is needed.
  */
+import { EMAIL_FROM } from "@/lib/site-config";
 
 export type EmailMessage = {
   to: string[];
@@ -11,7 +12,7 @@ export type EmailMessage = {
 };
 
 export function isEmailConfigured(): boolean {
-  return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
+  return Boolean(process.env.RESEND_API_KEY);
 }
 
 /**
@@ -20,9 +21,9 @@ export function isEmailConfigured(): boolean {
  */
 export async function sendEmail(message: EmailMessage): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM;
-  if (!apiKey || !from) {
-    console.warn("[email] RESEND_API_KEY or EMAIL_FROM not set; skipping send.");
+  const from = EMAIL_FROM;
+  if (!apiKey) {
+    console.warn("[email] RESEND_API_KEY not set; skipping send.");
     return false;
   }
   if (message.to.length === 0) return true;
