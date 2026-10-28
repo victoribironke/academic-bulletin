@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useUser } from "@/contexts/user-context";
-import { Loader2 } from "lucide-react";
+import { FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/shared/states";
 
 export default function SubmissionsMePage() {
   const router = useRouter();
@@ -86,12 +87,17 @@ export default function SubmissionsMePage() {
 
   if (message) {
     return (
-      <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
-        <p className="text-muted-foreground max-w-md">{message}</p>
-        <Button asChild variant="outline">
-          <Link href="/submissions/browse">Browse all programme submissions</Link>
-        </Button>
-      </div>
+      <EmptyState
+        icon={FileText}
+        title="Your submission isn't available"
+        description={message}
+        action={
+          <Button asChild variant="outline">
+            <Link href="/submissions/browse">Browse all programme submissions</Link>
+          </Button>
+        }
+        className="mt-8"
+      />
     );
   }
 
