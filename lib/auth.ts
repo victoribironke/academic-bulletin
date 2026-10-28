@@ -10,6 +10,9 @@ export interface User {
   isActive: boolean;
   schoolId: string | null;
   departmentId: string | null;
+  /** Included by /api/users/me. */
+  school?: { id: string; name: string; code: string } | null;
+  department?: { id: string; name: string; code: string } | null;
 }
 
 export type Permission =
