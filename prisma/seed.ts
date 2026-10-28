@@ -9,7 +9,7 @@
  * Needs DATABASE_URL, NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
  * Safe to re-run: existing users and buckets are reused.
  */
-import "dotenv/config";
+import "../lib/load-env";
 import { UserRole } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { createAdminClient } from "../lib/supabase/admin";
