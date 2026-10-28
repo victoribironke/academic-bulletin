@@ -52,7 +52,7 @@ import {
   requireApiUser,
 } from "@/lib/api-auth";
 import { POST as createSchool } from "@/app/api/schools/route";
-import { PATCH as updateUser } from "@/app/api/users/[id]/route";
+import { DELETE as deleteUser, PATCH as updateUser } from "@/app/api/users/[id]/route";
 import { adminCreateUser } from "@/app/actions/admin";
 import { GET as listCourses } from "@/app/api/courses/route";
 import { POST as transitionSubmission } from "@/app/api/submissions/[id]/transition/route";
@@ -346,6 +346,74 @@ describe("route authorization", () => {
       }),
       { params: Promise.resolve({ id: ids.hod }) },
     );
+  });
+
+  it("lets admins rename users and users rename themselves, but nothing more", async () => {
+    const patch = (id: string, body: object) =>
+      updateUser(
+        new NextRequest(`http://localhost/api/users/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+        { params: Promise.resolve({ id }) },
+      );
+
+    // An admin renames an HOD; spelling is kept as typed.
+    authState.userId = ids.admin;
+    const renamed = await patch(ids.hod, { firstName: "  Seun ", lastName: "McDonald-O'Neil" });
+    expect(renamed.status).toBe(200);
+    expect(
+      await prisma.user.findUnique({
+        where: { id: ids.hod },
+        select: { firstName: true, lastName: true },
+      }),
+    ).toEqual({ firstName: "Seun", lastName: "McDonald-O'Neil" });
+
+    // Empty names are rejected.
+    expect((await patch(ids.hod, { firstName: "   " })).status).toBe(400);
+
+    // An HOD can fix their own name, but can't change anyone else's
+    // or anything else about themselves.
+    authState.userId = ids.hod;
+    expect((await patch(ids.hod, { firstName: "Test" , lastName: "Hod" })).status).toBe(200);
+    expect((await patch(ids.dean, { firstName: "Changed" })).status).toBe(403);
+    expect((await patch(ids.hod, { firstName: "Test", role: "ADMIN" })).status).toBe(403);
+  });
+
+  it("deletes users without history and refuses those with history", async () => {
+    const del = (id: string) =>
+      deleteUser(new NextRequest(`http://localhost/api/users/${id}`, { method: "DELETE" }), {
+        params: Promise.resolve({ id }),
+      });
+
+    await prisma.user.create({
+      data: {
+        id: "test-to-delete",
+        email: "test-to-delete@example.edu",
+        firstName: "Temporary",
+        lastName: "Person",
+        role: "HOD",
+        departmentId: ids.departmentA,
+        schoolId: ids.schoolA,
+      },
+    });
+
+    // Only Super Admins may delete.
+    authState.userId = ids.admin;
+    expect((await del("test-to-delete")).status).toBe(403);
+
+    authState.userId = ids.super;
+    // Not yourself.
+    expect((await del(ids.super)).status).toBe(403);
+    // Not someone who created a submission: deactivate them instead.
+    expect((await del(ids.hod)).status).toBe(409);
+    expect(await prisma.user.findUnique({ where: { id: ids.hod } })).not.toBeNull();
+
+    // Someone with no history is removed, along with their sign-in account.
+    expect((await del("test-to-delete")).status).toBe(200);
+    expect(await prisma.user.findUnique({ where: { id: "test-to-delete" } })).toBeNull();
+    expect(authAdmin.deleteUser).toHaveBeenCalledWith("test-to-delete");
   });
 
   it("creates one role and sends login instructions by email", async () => {
