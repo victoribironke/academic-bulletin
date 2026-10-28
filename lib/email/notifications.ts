@@ -12,21 +12,8 @@
  */
 import prisma from "@/lib/prisma";
 import { getSiteUrl } from "@/lib/supabase/config";
+import { PHASE_NAMES } from "@/lib/submissions/phases";
 import { isEmailConfigured, sendEmail } from "./resend";
-
-const PHASE_NAMES: Record<number, string> = {
-  1: "Preparation",
-  2: "Dept Review",
-  3: "School",
-  4: "Academic Planning",
-  5: "Corrections",
-  6: "Consolidation",
-  7: "Senate",
-  8: "Editing",
-  9: "Typesetting",
-  10: "Distribution",
-  11: "Post-Release",
-};
 
 type TransitionEvent = {
   submissionId: string;
