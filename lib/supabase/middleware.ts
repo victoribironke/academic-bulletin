@@ -14,6 +14,19 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // If Supabase can't use our /auth/callback address (it isn't in Supabase's
+  // allowed redirect URLs), it falls back to the Site URL with the sign-in
+  // code or error attached. Pass that on to the callback instead of dropping it.
+  const { searchParams } = request.nextUrl;
+  if (
+    !pathname.startsWith("/auth/callback") &&
+    (searchParams.has("code") || searchParams.has("error_description"))
+  ) {
+    const callback = new URL("/auth/callback", request.nextUrl.origin);
+    callback.search = searchParams.toString();
+    return NextResponse.redirect(callback);
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   });
