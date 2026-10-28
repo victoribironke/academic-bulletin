@@ -9,8 +9,8 @@ const authAdmin = vi.hoisted(() => ({
     error: null,
   })),
   updateUserById: vi.fn(async () => ({ data: { user: {} }, error: null })),
-  inviteUserByEmail: vi.fn(async (email: string) => ({
-    data: { user: { id: `invited-${email}` } },
+  createUser: vi.fn(async ({ email }: { email: string }) => ({
+    data: { user: { id: `created-${email}` } },
     error: null,
   })),
   deleteUser: vi.fn(async () => ({ data: {}, error: null })),
@@ -206,7 +206,7 @@ beforeEach(() => {
   authState.userId = null;
   authAdmin.getUserById.mockClear();
   authAdmin.updateUserById.mockClear();
-  authAdmin.inviteUserByEmail.mockClear();
+  authAdmin.createUser.mockClear();
   authAdmin.deleteUser.mockClear();
   authSignOut.mockClear();
 });
@@ -362,13 +362,18 @@ describe("route authorization", () => {
     expect(result).toEqual({
       success: true,
       email: "invited.user@example.edu",
+      // Resend isn't configured in tests, so no access email goes out.
+      emailSent: false,
     });
-    expect(authAdmin.inviteUserByEmail).toHaveBeenCalledWith(
-      "invited.user@example.edu",
+    // The account is created directly (no invite, no password) so a Google
+    // sign-in with the same email links to it.
+    expect(authAdmin.createUser).toHaveBeenCalledWith(
       expect.objectContaining({
-        redirectTo: expect.stringContaining("/invite-accept"),
+        email: "invited.user@example.edu",
+        email_confirm: true,
       }),
     );
+    expect(authAdmin.createUser.mock.calls[0][0]).not.toHaveProperty("password");
     expect(
       await prisma.user.findUnique({
         where: { email: "invited.user@example.edu" },
