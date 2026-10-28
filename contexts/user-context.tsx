@@ -59,11 +59,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    fetchUser();
-
     const supabase = createClient();
     if (!supabase) return;
 
+    // Supabase fires INITIAL_SESSION straight after subscribing, which
+    // triggers the first load of the user's profile.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event: AuthChangeEvent) => {
@@ -71,6 +71,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         setCurrentUser(null);
         setIsLoading(false);
       } else if (
+        event === "INITIAL_SESSION" ||
         event === "SIGNED_IN" ||
         event === "USER_UPDATED" ||
         event === "TOKEN_REFRESHED"
