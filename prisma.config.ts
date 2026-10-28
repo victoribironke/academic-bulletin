@@ -1,17 +1,14 @@
 import { defineConfig } from "prisma/config";
-import "dotenv/config";
+import { loadEnvConfig } from "@next/env";
 
-// ---- ADD THESE DEBUG LOGS ----
-// console.log("--- DEBUG PRISMA ENVIRONMENT ---");
-// console.log("process.env.DIRECT_URL:", process.env.DIRECT_URL);
-// console.log("process.env.DATABASE_URL:", process.env.DATABASE_URL);
-// console.log("--------------------------------");
-
+// Load .env.local / .env the same way Next.js does, so the Prisma CLI sees the
+// same settings as the app.
+loadEnvConfig(process.cwd());
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
   datasource: {
-    // Use process.env instead of the strict env() helper
+    // DIRECT_URL (session connection) for schema changes; falls back to DATABASE_URL.
     url: process.env.DIRECT_URL || process.env.DATABASE_URL,
   },
   migrations: {
