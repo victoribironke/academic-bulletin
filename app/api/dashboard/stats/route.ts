@@ -1,3 +1,4 @@
+import { PHASE_SHORT_NAMES } from "@/lib/submissions/phases";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
@@ -105,20 +106,41 @@ export async function GET(request: Request) {
         prisma.user.count({ where: { isActive: true } }),
       ]);
 
-    // Format phase distribution for charts
-    const phaseNames: Record<number, string> = {
-      1: "Preparation",
-      2: "Dept Review",
-      3: "School",
-      4: "Academic Planning",
-      5: "Corrections",
-      6: "Consolidation",
-      7: "Senate",
-      8: "Editing",
-      9: "Typesetting",
-      10: "Distribution",
-      11: "Post-Release",
+    // What this person needs to act on next.
+    const actionStatuses =
+      auth.user.role === "HOD"
+        ? (["CORRECTIONS_REQUIRED", "DRAFT"] as const)
+        : (["IN_REVIEW"] as const);
+    const actionWhere = {
+      ...whereClause,
+      status: { in: [...actionStatuses] },
     };
+    const [actionItems, actionTotal] = await Promise.all([
+      prisma.submission.findMany({
+        where: actionWhere,
+        take: 8,
+        orderBy: { updatedAt: "asc" },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          currentPhase: true,
+          updatedAt: true,
+          programme: {
+            select: { name: true, department: { select: { name: true } } },
+          },
+        },
+      }),
+      prisma.submission.count({ where: actionWhere }),
+    ]);
+
+    const activeCycle = await prisma.reviewCycle.findFirst({
+      where: { isActive: true },
+      select: { id: true, name: true },
+    });
+
+    // Format phase distribution for charts
+    const phaseNames = PHASE_SHORT_NAMES;
 
     const phaseData = Array.from({ length: 11 }, (_, i) => {
       const phase = i + 1;
@@ -151,6 +173,19 @@ export async function GET(request: Request) {
         performedBy: t.performedBy,
       })),
       openComments,
+      actionRequired: {
+        total: actionTotal,
+        items: actionItems.map((item) => ({
+          id: item.id,
+          title: item.title,
+          status: item.status,
+          currentPhase: item.currentPhase,
+          updatedAt: item.updatedAt,
+          programme: item.programme.name,
+          department: item.programme.department.name,
+        })),
+      },
+      activeCycle,
       organization: {
         schools: schoolCount,
         departments: departmentCount,
