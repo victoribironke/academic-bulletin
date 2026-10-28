@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 type BrandedShellProps = {
   children: React.ReactNode;
   className?: string;
-  /** When set, the brand block is a link (e.g. `/login`). Omit during invite / password flows. */
+  /** When set, the brand block is a link (e.g. `/login`). */
   brandHref?: string;
 };
 
