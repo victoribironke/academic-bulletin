@@ -222,13 +222,23 @@ export function StaffTable({
     new Set(),
   );
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  // True when the table has edits that haven't been saved yet.
+  const [isDirty, setIsDirty] = useState(false);
+  const isDirtyRef = useRef(false);
+  const markDirty = (dirty: boolean) => {
+    isDirtyRef.current = dirty;
+    setIsDirty(dirty);
+  };
   const [activeTab, setActiveTab] = useState("academic");
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
 
   const fetchStaff = useCallback(async () => {
     try {
-      setIsLoading(true);
+      // Keep the table on screen while refreshing; the full loader is only
+      // for the very first load.
+      setIsRefreshing(true);
       const res = await fetch(`/api/staff?departmentId=${departmentId}`);
       if (!res.ok) throw new Error("Failed to fetch staff");
 
@@ -256,7 +266,10 @@ export function StaffTable({
       console.error("Failed to fetch staff:", error);
       toast.error("Failed to refresh the staff directory.");
     } finally {
+      isDirtyRef.current = false;
+      setIsDirty(false);
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, [departmentId]);
 
@@ -266,11 +279,36 @@ export function StaffTable({
     }
   }, [departmentId, fetchStaff]);
 
+  // Pick up staff added elsewhere (e.g. the Staff Directory in another tab)
+  // when the window regains focus - but never throw away unsaved edits.
   useEffect(() => {
-    const refreshOnFocus = () => fetchStaff();
+    const refreshOnFocus = () => {
+      if (!isDirtyRef.current) fetchStaff();
+    };
     window.addEventListener("focus", refreshOnFocus);
     return () => window.removeEventListener("focus", refreshOnFocus);
   }, [fetchStaff]);
+
+  // Warn before closing or reloading the page with unsaved staff edits.
+  useEffect(() => {
+    if (!isDirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [isDirty]);
+
+  const handleManualRefresh = () => {
+    if (
+      isDirtyRef.current &&
+      !window.confirm("Refreshing will discard your unsaved staff changes. Continue?")
+    ) {
+      return;
+    }
+    fetchStaff();
+  };
 
   const createEmptyStaff = (
     type: "ACADEMIC" | "ADJUNCT" | "NON_ACADEMIC",
@@ -354,6 +392,7 @@ export function StaffTable({
         toast.error(`Some staff failed to save: ${errors.join("; ")}`);
       } else {
         toast.success("All staff saved successfully");
+        markDirty(false);
 
         // Patch local state: assign server IDs to created entries, clear isNew
         const patchList = (list: StaffMember[], offset: number): StaffMember[] =>
@@ -492,8 +531,13 @@ export function StaffTable({
         </div>
         {!disabled && (
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={fetchStaff} disabled={isLoading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+            {isDirty && (
+              <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                Unsaved changes
+              </span>
+            )}
+            <Button variant="outline" onClick={handleManualRefresh} disabled={isRefreshing}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
               Refresh
             </Button>
             <Button variant="outline" onClick={() => setBulkImportOpen(true)}>
@@ -554,7 +598,10 @@ export function StaffTable({
             <DynamicTable
               columns={academicColumns}
               data={academicStaff}
-              onChange={setAcademicStaff}
+              onChange={(rows) => {
+                setAcademicStaff(rows);
+                markDirty(true);
+              }}
               createEmptyRow={() => createEmptyStaff("ACADEMIC")}
               disabled={disabled}
             />
@@ -564,7 +611,10 @@ export function StaffTable({
             <DynamicTable
               columns={academicColumns}
               data={adjunctStaff}
-              onChange={setAdjunctStaff}
+              onChange={(rows) => {
+                setAdjunctStaff(rows);
+                markDirty(true);
+              }}
               createEmptyRow={() => createEmptyStaff("ADJUNCT")}
               disabled={disabled}
             />
@@ -574,7 +624,10 @@ export function StaffTable({
             <DynamicTable
               columns={nonAcademicColumns}
               data={nonAcademicStaff}
-              onChange={setNonAcademicStaff}
+              onChange={(rows) => {
+                setNonAcademicStaff(rows);
+                markDirty(true);
+              }}
               createEmptyRow={() => createEmptyStaff("NON_ACADEMIC")}
               disabled={disabled}
             />
