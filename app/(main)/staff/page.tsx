@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
+import { PageHeader } from "@/components/shared/page-header";
+import { TableCard, TableToolbar } from "@/components/shared/table-toolbar";
+import { EmptyState, TableSkeleton } from "@/components/shared/states";
 import { usePermission, useUser } from "@/contexts/user-context";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -31,7 +33,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Plus, Pencil, Trash2, Search, RefreshCw, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, RefreshCw, Upload, UserCog } from "lucide-react";
 import { toast } from "sonner";
 import { BulkImportDialog } from "@/components/imports/bulk-import-dialog";
 import {
@@ -71,6 +73,12 @@ type Staff = {
   department: Department;
 };
 
+const STAFF_TYPE_LABELS: Record<string, string> = {
+  ACADEMIC: "Academic",
+  ADJUNCT: "Adjunct",
+  NON_ACADEMIC: "Non-academic",
+};
+
 export default function StaffPage() {
   const router = useRouter();
   const { hasPermission } = usePermission();
@@ -79,6 +87,7 @@ export default function StaffPage() {
   const [staff, setStaff] = useState<Staff[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [deptFilter, setDeptFilter] = useState("ALL");
@@ -108,40 +117,32 @@ export default function StaffPage() {
   const canManage = hasPermission("manage:staff");
   const canView = hasPermission("view:staff");
 
-  const fetchData = async () => {
-    try {
-      setIsLoading(true);
-
-      // Fetch departments for filter
-      const deptRes = await fetch("/api/departments");
-      if (deptRes.ok) {
-        const deptData = await deptRes.json();
-        setDepartments(deptData);
-      }
-
-      // Fetch staff
-      const response = await fetch("/api/staff");
-      if (response.ok) {
-        const data = await response.json();
-        setStaff(data);
-      } else {
-        const data = await response.json().catch(() => ({}));
-        toast.error(data.error || "Failed to refresh the staff directory");
-      }
-    } catch (err) {
-      console.error("Failed to fetch data:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const fetchData = () => setReloadKey((k) => k + 1);
 
   useEffect(() => {
-    if (!userLoading && !canView && !canManage) {
-      router.push("/dashboard");
-    } else if (!userLoading) {
-      fetchData();
-    }
+    if (!userLoading && !canView && !canManage) router.push("/dashboard");
   }, [userLoading, canView, canManage, router]);
+
+  useEffect(() => {
+    if (userLoading || (!canView && !canManage)) return;
+    let cancelled = false;
+    Promise.all([fetch("/api/departments"), fetch("/api/staff")])
+      .then(async ([deptRes, staffRes]) => {
+        const deptData = deptRes.ok ? await deptRes.json() : null;
+        const staffData = await staffRes.json().catch(() => ({}));
+        if (cancelled) return;
+        if (deptData) setDepartments(deptData);
+        if (staffRes.ok) setStaff(staffData);
+        else toast.error(staffData.error || "Failed to load the staff directory");
+      })
+      .catch((err) => console.error("Failed to fetch data:", err))
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userLoading, canView, canManage, reloadKey]);
 
   const filteredStaff = staff.filter((s) => {
     // Role scoping
@@ -274,122 +275,115 @@ export default function StaffPage() {
     }
   };
 
-  const tableContent = useMemo(
-    () => (
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Staff Member</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead>Rank / Role</TableHead>
-                <TableHead>Type</TableHead>
+  const filtersActive =
+    searchTerm.trim() !== "" || typeFilter !== "ALL" || deptFilter !== "ALL";
+
+  const tableContent =
+    filteredStaff.length === 0 ? (
+      <EmptyState
+        icon={UserCog}
+        title={filtersActive ? "No staff match these filters" : "No staff yet"}
+        description={
+          filtersActive
+            ? "Try a different search or clear the filters."
+            : canManage
+              ? "Add staff one at a time or upload a spreadsheet."
+              : undefined
+        }
+      />
+    ) : (
+      <TableCard>
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50 hover:bg-muted/50">
+              <TableHead>Staff member</TableHead>
+              <TableHead className="hidden md:table-cell">Department</TableHead>
+              <TableHead>Rank / role</TableHead>
+              <TableHead className="hidden sm:table-cell">Type</TableHead>
+              {canManage && (
+                <TableHead className="text-right">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              )}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredStaff.map((s) => (
+              <TableRow key={s.id}>
+                <TableCell>
+                  <div className="flex items-center gap-3">
+                    <Avatar className="size-9">
+                      <AvatarImage src={s.imageUrl || ""} alt="" />
+                      <AvatarFallback className="bg-primary/10 text-xs font-medium text-primary">
+                        {s.firstName[0]}
+                        {s.surname[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{formatStaffName(s as any)}</p>
+                      {s.email && (
+                        <p className="truncate text-xs text-muted-foreground">{s.email}</p>
+                      )}
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell className="hidden md:table-cell">
+                  {s.department?.name || "Unknown"}
+                </TableCell>
+                <TableCell>
+                  <p className="text-sm font-medium">
+                    {getAcademicRankDisplay(s.academicRank as any)}
+                    {s.academicRank === "OTHER" && s.customJobTitle
+                      ? ` (${s.customJobTitle})`
+                      : ""}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{s.highestQualification}</p>
+                </TableCell>
+                <TableCell className="hidden sm:table-cell">
+                  <Badge
+                    variant={
+                      s.type === "ACADEMIC"
+                        ? "default"
+                        : s.type === "ADJUNCT"
+                          ? "secondary"
+                          : "outline"
+                    }
+                  >
+                    {STAFF_TYPE_LABELS[s.type] ?? s.type}
+                  </Badge>
+                </TableCell>
                 {canManage && (
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => openForm(s)}
+                        aria-label={`Edit ${formatStaffName(s as any)}`}
+                      >
+                        <Pencil />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(s.id, formatStaffName(s as any))}
+                        aria-label={`Delete ${formatStaffName(s as any)}`}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
+                  </TableCell>
                 )}
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredStaff.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={canManage ? 5 : 4}
-                    className="text-center h-24 text-muted-foreground"
-                  >
-                    No staff members found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredStaff.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-9 w-9">
-                          <AvatarImage src={s.imageUrl || ""} alt={s.surname} />
-                          <AvatarFallback>
-                            {s.firstName[0]}
-                            {s.surname[0]}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="font-medium">
-                            {formatStaffName(s as any)}
-                          </div>
-                          {s.email && (
-                            <div className="text-xs text-muted-foreground">
-                              {s.email}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>{s.department?.name || "Unknown"}</TableCell>
-                    <TableCell>
-                      <div className="font-medium text-sm">
-                        {getAcademicRankDisplay(s.academicRank as any)}
-                        {s.academicRank === "OTHER" && s.customJobTitle
-                          ? ` (${s.customJobTitle})`
-                          : ""}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {s.highestQualification}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          s.type === "ACADEMIC"
-                            ? "default"
-                            : s.type === "ADJUNCT"
-                              ? "secondary"
-                              : "outline"
-                        }
-                      >
-                        {s.type.replace("_", " ")}
-                      </Badge>
-                    </TableCell>
-                    {canManage && (
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openForm(s)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive"
-                            onClick={() =>
-                              handleDelete(s.id, formatStaffName(s as any))
-                            }
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [filteredStaff, canManage],
-  );
+            ))}
+          </TableBody>
+        </Table>
+      </TableCard>
+    );
 
   if (userLoading || (isLoading && staff.length === 0)) {
-    return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
-        Loading staff directory...
-      </div>
-    );
+    return <TableSkeleton columns={4} />;
   }
 
   if (!canView && !canManage) return null;
@@ -410,74 +404,81 @@ export default function StaffPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Staff Directory</h1>
-          <p className="text-muted-foreground">
-            Manage academic and non-academic staff across departments
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={fetchData} disabled={isLoading}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-          {canManage && (
+    <div className="space-y-4">
+      <PageHeader
+        title="Staff Directory"
+        description={
+          currentUser?.role === "HOD"
+            ? "Staff in your department. Everyone added here can be selected in your bulletin."
+            : "Academic and non-academic staff across departments."
+        }
+        actions={
+          canManage && (
             <>
               <Button variant="outline" onClick={openBulkImport}>
-                <Upload className="mr-2 h-4 w-4" />
-                Bulk Upload
+                <Upload />
+                Bulk upload
               </Button>
               <Button onClick={() => openForm()}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Staff
+                <Plus />
+                Add staff
               </Button>
             </>
-          )}
-        </div>
-      </div>
+          )
+        }
+      />
 
-      <div className="flex flex-col sm:flex-row gap-4 mb-6">
-        <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search staff by name, email, or specialization..."
-            className="pl-9"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        <div className="flex gap-2">
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="All Types" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">All Types</SelectItem>
-              <SelectItem value="ACADEMIC">Academic</SelectItem>
-              <SelectItem value="ADJUNCT">Adjunct</SelectItem>
-              <SelectItem value="NON_ACADEMIC">Non-Academic</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {currentUser?.role !== "HOD" && (
-            <Select value={deptFilter} onValueChange={setDeptFilter}>
-              <SelectTrigger className="w-50 truncate">
-                <SelectValue placeholder="All Departments" />
+      <TableToolbar
+        search={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="Search name, email or specialisation"
+        filters={
+          <>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-full bg-card sm:w-40" aria-label="Staff type">
+                <SelectValue placeholder="All types" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ALL">All Departments</SelectItem>
-                {departments.map((d) => (
-                  <SelectItem key={d.id} value={d.id}>
-                    {d.name}
-                  </SelectItem>
-                ))}
+                <SelectItem value="ALL">All types</SelectItem>
+                <SelectItem value="ACADEMIC">Academic</SelectItem>
+                <SelectItem value="ADJUNCT">Adjunct</SelectItem>
+                <SelectItem value="NON_ACADEMIC">Non-academic</SelectItem>
               </SelectContent>
             </Select>
-          )}
-        </div>
-      </div>
+            {currentUser?.role !== "HOD" && (
+              <Select value={deptFilter} onValueChange={setDeptFilter}>
+                <SelectTrigger className="w-full bg-card sm:w-56 [&>span]:truncate" aria-label="Department">
+                  <SelectValue placeholder="All departments" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All departments</SelectItem>
+                  {departments.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </>
+        }
+        actions={
+          <>
+            <span className="text-sm text-muted-foreground">
+              {filteredStaff.length} staff
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={fetchData}
+              disabled={isLoading}
+              aria-label="Refresh"
+            >
+              <RefreshCw className={isLoading ? "animate-spin" : ""} />
+            </Button>
+          </>
+        }
+      />
 
       {tableContent}
 
@@ -489,7 +490,7 @@ export default function StaffPage() {
             </DialogTitle>
           </DialogHeader>
           <form className="space-y-6" onSubmit={handleSave}>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Title *</Label>
                 <Select
@@ -570,7 +571,7 @@ export default function StaffPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 border-t pt-4">
+            <div className="grid gap-4 border-t pt-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Department *</Label>
                 <Select
@@ -665,7 +666,7 @@ export default function StaffPage() {
               </div>
 
               {formData.academicRank === "OTHER" && (
-                <div className="space-y-2 col-span-2">
+                <div className="space-y-2 sm:col-span-2">
                   <Label>Custom Job Title *</Label>
                   <Input
                     required
@@ -681,7 +682,7 @@ export default function StaffPage() {
                 </div>
               )}
 
-              <div className="space-y-2 col-span-2">
+              <div className="space-y-2 sm:col-span-2">
                 <Label>Specialization</Label>
                 <Input
                   value={formData.specialization}
