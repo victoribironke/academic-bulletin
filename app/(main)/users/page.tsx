@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, UserCheck, Users, UserX } from "lucide-react";
+import { Loader2, Trash2, UserCheck, Users, UserX } from "lucide-react";
 import { usePermission, useUser } from "@/contexts/user-context";
 import { getRoleDisplayName } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -154,6 +154,35 @@ export default function UsersPage() {
         .includes(q);
     });
   }, [users, search, filterRole, filterStatus]);
+
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+
+  const handleDelete = async (user: User) => {
+    if (!isSuperAdmin) return;
+    const ok = window.confirm(
+      `Permanently delete ${user.firstName} ${user.lastName} (${user.email})? ` +
+        "They will no longer be able to sign in. This can't be undone.",
+    );
+    if (!ok) return;
+
+    setDeletingUserId(user.id);
+    try {
+      const res = await fetch(`/api/users/${user.id}`, { method: "DELETE" });
+      if (res.ok) {
+        toast.success("User deleted");
+        reload();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error("Couldn't delete this user", {
+          description: data.error || "Please try again.",
+        });
+      }
+    } catch {
+      toast.error("Couldn't delete this user. Please try again.");
+    } finally {
+      setDeletingUserId(null);
+    }
+  };
 
   const handleToggleActive = async (user: User) => {
     if (!isSuperAdmin) return;
@@ -406,6 +435,23 @@ export default function UsersPage() {
                             <span className="hidden sm:inline">
                               {user.isActive ? "Deactivate" : "Activate"}
                             </span>
+                          </Button>
+                        )}
+                        {isSuperAdmin && user.id !== currentUser?.id && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => handleDelete(user)}
+                            disabled={deletingUserId === user.id}
+                            aria-label={`Delete ${user.firstName} ${user.lastName}`}
+                            title="Delete user"
+                          >
+                            {deletingUserId === user.id ? (
+                              <Loader2 className="animate-spin" />
+                            ) : (
+                              <Trash2 />
+                            )}
                           </Button>
                         )}
                       </div>
