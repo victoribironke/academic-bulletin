@@ -50,31 +50,30 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const isLoginRoute = pathname.startsWith("/login");
-  const isInviteFlowRoute =
-    pathname.startsWith("/confirm") ||
-    pathname.startsWith("/invite-accept");
-  const isPasswordRecoveryRoute = pathname.startsWith("/forgot-password");
-  const isAuthRoute =
-    isLoginRoute || isInviteFlowRoute || isPasswordRecoveryRoute;
+  // Google sends users back here before they have a session.
+  const isAuthRoute = isLoginRoute || pathname.startsWith("/auth/callback");
 
-  const baseUrl = request.nextUrl.origin;
+  // Redirects must carry any cookies Supabase just set (e.g. a sign-out).
+  const redirectTo = (path: string) => {
+    const response = NextResponse.redirect(new URL(path, request.nextUrl.origin));
+    supabaseResponse.cookies
+      .getAll()
+      .forEach((cookie) => response.cookies.set(cookie));
+    return response;
+  };
 
   if (user?.app_metadata?.account_active === false) {
     await supabase.auth.signOut({ scope: "local" });
-    const url = new URL("/login?error=account_deactivated", baseUrl);
-    return NextResponse.redirect(url);
+    return redirectTo("/login?error=account_deactivated");
   }
 
   if (!user && !isAuthRoute) {
-    const url = new URL("/login", baseUrl);
-    return NextResponse.redirect(url);
+    return redirectTo("/login");
   }
 
-  // Keep login guest-only, but allow authenticated users to complete
-  // invite/recovery flows on /invite-accept and /confirm.
+  // Signed-in users have no reason to see the login page.
   if (user && isLoginRoute) {
-    const url = new URL("/dashboard", baseUrl);
-    return NextResponse.redirect(url);
+    return redirectTo("/dashboard");
   }
 
   return supabaseResponse;
