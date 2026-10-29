@@ -6,6 +6,7 @@ import {
 } from "@/lib/bulletin/generation";
 import { generateBulletinDocx } from "@/lib/bulletin/export-docx";
 import { generateBulletinPdf } from "@/lib/bulletin/export-pdf";
+import { blockingBulletinIssues } from "@/lib/bulletin/validation";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
 
@@ -48,12 +49,13 @@ export async function GET(request: Request) {
 
     let bulletinData;
     let filename: string;
+    let finalExport = !submissionId;
 
     // If a specific submissionId is provided, do a programme-level export from that submission
     if (submissionId) {
       const submission = await prisma.submission.findUnique({
         where: { id: submissionId },
-        select: { programmeId: true, title: true },
+        select: { programmeId: true, title: true, status: true },
       });
 
       if (!submission) {
@@ -70,6 +72,7 @@ export async function GET(request: Request) {
       filename = submission.title
         .replace(/[^a-zA-Z0-9\s]/g, "")
         .replace(/\s+/g, "_");
+      finalExport = submission.status === "APPROVED";
     } else if (level === "programme" || level === "department") {
       // programme and department level require a programmeId or departmentId
       if (programmeId) {
@@ -123,6 +126,18 @@ export async function GET(request: Request) {
             "Invalid level. Must be 'programme', 'department', 'school', or 'institution'",
         },
         { status: 400 },
+      );
+    }
+
+    const validationIssues = blockingBulletinIssues(bulletinData);
+    if (finalExport && validationIssues.length > 0) {
+      return NextResponse.json(
+        {
+          error:
+            "This bulletin is incomplete and cannot be exported as a final document.",
+          issues: validationIssues,
+        },
+        { status: 422 },
       );
     }
 
