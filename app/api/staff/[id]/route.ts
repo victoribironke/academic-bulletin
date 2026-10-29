@@ -3,6 +3,22 @@ import prisma from "@/lib/prisma";
 import { toTitleCase, isValidName } from "@/lib/validation/name-format";
 import { canAccessDepartment, requireApiUser } from "@/lib/api-auth";
 
+const VALID_TITLES = ["MR", "MRS", "MS", "DR", "PROF", "ENGR", "BARR", "REV", "PASTOR"];
+const VALID_GENDERS = ["MALE", "FEMALE"];
+const VALID_QUALIFICATIONS = ["PHD", "MASTERS", "BACHELOR", "HND", "OND"];
+const VALID_RANKS = [
+  "PROFESSOR",
+  "ASSOCIATE_PROFESSOR",
+  "SENIOR_LECTURER",
+  "LECTURER_I",
+  "LECTURER_II",
+  "ASSISTANT_LECTURER",
+  "GRADUATE_ASSISTANT",
+  "OTHER",
+];
+const VALID_TYPES = ["ACADEMIC", "ADJUNCT", "NON_ACADEMIC"];
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 // GET /api/staff/[id] - Get single staff member
 export async function GET(
   request: Request,
@@ -86,6 +102,43 @@ export async function PATCH(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    if (title !== undefined && !VALID_TITLES.includes(title)) {
+      return NextResponse.json({ error: "Invalid staff title" }, { status: 400 });
+    }
+    if (gender !== undefined && !VALID_GENDERS.includes(gender)) {
+      return NextResponse.json({ error: "Invalid gender" }, { status: 400 });
+    }
+    if (
+      highestQualification !== undefined &&
+      !VALID_QUALIFICATIONS.includes(highestQualification)
+    ) {
+      return NextResponse.json(
+        { error: "Invalid highest qualification" },
+        { status: 400 },
+      );
+    }
+    if (academicRank !== undefined && !VALID_RANKS.includes(academicRank)) {
+      return NextResponse.json({ error: "Invalid academic rank" }, { status: 400 });
+    }
+    if (type !== undefined && !VALID_TYPES.includes(type)) {
+      return NextResponse.json({ error: "Invalid staff type" }, { status: 400 });
+    }
+    if (email?.trim() && !EMAIL_PATTERN.test(email.trim())) {
+      return NextResponse.json(
+        { error: "Enter a valid staff email address." },
+        { status: 400 },
+      );
+    }
+    const effectiveRank = academicRank ?? existing.academicRank;
+    const effectiveJobTitle =
+      customJobTitle !== undefined ? customJobTitle : existing.customJobTitle;
+    if (effectiveRank === "OTHER" && !effectiveJobTitle?.trim()) {
+      return NextResponse.json(
+        { error: "A job title is required for non-academic staff." },
+        { status: 400 },
+      );
+    }
+
     // Validate names if provided
     if (surname !== undefined && !isValidName(surname)) {
       return NextResponse.json(
@@ -128,24 +181,25 @@ export async function PATCH(
     if (academicRank !== undefined) updateData.academicRank = academicRank;
     if (specialization !== undefined)
       updateData.specialization = specialization || null;
-    if (customJobTitle !== undefined) {
+    if (customJobTitle !== undefined || academicRank !== undefined) {
       updateData.customJobTitle =
-        academicRank === "OTHER" && customJobTitle
-          ? toTitleCase(customJobTitle)
+        effectiveRank === "OTHER" && effectiveJobTitle
+          ? toTitleCase(effectiveJobTitle)
           : null;
     }
-    if (email !== undefined) updateData.email = email || null;
+    if (email !== undefined) updateData.email = email.trim() || null;
     if (type !== undefined) {
-      const validTypes = ["ACADEMIC", "ADJUNCT", "NON_ACADEMIC"];
-      if (!validTypes.includes(type)) {
+      updateData.type = type;
+    }
+    if (isActive !== undefined) {
+      if (typeof isActive !== "boolean") {
         return NextResponse.json(
-          { error: "Invalid staff type" },
+          { error: "isActive must be true or false" },
           { status: 400 },
         );
       }
-      updateData.type = type;
+      updateData.isActive = isActive;
     }
-    if (isActive !== undefined) updateData.isActive = isActive;
 
     const staff = await prisma.staff.update({
       where: { id },
