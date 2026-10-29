@@ -47,6 +47,8 @@ prisma/migrations
 prisma/migrations/*
 !prisma/migrations/20261012170000_add_corrections_required_status/
 !prisma/migrations/20261012170000_add_corrections_required_status/migration.sql
+!prisma/migrations/20261029130000_add_master_course_learning_details/
+!prisma/migrations/20261029130000_add_master_course_learning_details/migration.sql
 
 # local
 *.log
