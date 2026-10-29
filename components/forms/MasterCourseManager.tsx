@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useUser } from "@/contexts/user-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -30,7 +31,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Plus, BookOpen, Link, Trash, Upload } from "lucide-react";
+import { Loader2, Plus, BookOpen, Link, Trash, Upload, Pencil } from "lucide-react";
 import { TableCard, TableToolbar } from "@/components/shared/table-toolbar";
 import { EmptyState, TableSkeleton } from "@/components/shared/states";
 import { toast } from "sonner";
@@ -54,6 +55,10 @@ interface MasterCourse {
   level: number;
   semester: number;
   description?: string;
+  learningOutcomes?: string[];
+  courseContent?: string;
+  labWork?: string;
+  entrepreneurialAspect?: string;
   discoverable: boolean;
   ownerDepartment?: { id: string; name: string; code: string };
   ownerSchool?: { id: string; name: string; code: string };
@@ -116,6 +121,20 @@ export function MasterCourseManager({
   const [isTogglingCourseId, setIsTogglingCourseId] = useState<string | null>(null);
   const [isDeletingCourseId, setIsDeletingCourseId] = useState<string | null>(null);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [isEditingCourse, setIsEditingCourse] = useState(false);
+  const [editDraft, setEditDraft] = useState({
+    title: "",
+    units: 2,
+    level: 100,
+    semester: 1,
+    description: "",
+    learningOutcomes: "",
+    courseContent: "",
+    labWork: "",
+    entrepreneurialAspect: "",
+    ownerDeptId: "",
+  });
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [filterLevel, setFilterLevel] = useState("all");
@@ -133,6 +152,10 @@ export function MasterCourseManager({
     level: 100,
     semester: 1,
     description: "",
+    learningOutcomes: [] as string[],
+    courseContent: "",
+    labWork: "",
+    entrepreneurialAspect: "",
     ownerDeptId: departmentId || "",
   });
 
@@ -194,6 +217,10 @@ export function MasterCourseManager({
           level: 100,
           semester: 1,
           description: "",
+          learningOutcomes: [],
+          courseContent: "",
+          labWork: "",
+          entrepreneurialAspect: "",
           ownerDeptId: departmentId || "",
         });
       }
@@ -201,6 +228,76 @@ export function MasterCourseManager({
       console.error("Failed to create course:", error);
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const canEditCourse = useCallback(
+    (course: MasterCourse) =>
+      canManageRegistry ||
+      (currentUser?.role === "HOD" &&
+        Boolean(currentUser.departmentId) &&
+        course.ownership === "INSTITUTIONAL" &&
+        ["GST_NUC", "GST_BU"].includes(course.type) &&
+        course.ownerDepartment?.id === currentUser.departmentId),
+    [canManageRegistry, currentUser],
+  );
+
+  const openEditCourse = (course: MasterCourse) => {
+    setSelectedCourse(course);
+    setEditDraft({
+      title: course.title,
+      units: course.units,
+      level: course.level,
+      semester: course.semester,
+      description: course.description || "",
+      learningOutcomes: (course.learningOutcomes || []).join("\n"),
+      courseContent: course.courseContent || course.description || "",
+      labWork: course.labWork || "",
+      entrepreneurialAspect: course.entrepreneurialAspect || "",
+      ownerDeptId: course.ownerDepartment?.id || "",
+    });
+    setEditDialogOpen(true);
+  };
+
+  const handleEditCourse = async () => {
+    if (!selectedCourse) return;
+    setIsEditingCourse(true);
+    try {
+      const payload = {
+        title: editDraft.title,
+        units: editDraft.units,
+        level: editDraft.level,
+        semester: editDraft.semester,
+        description: editDraft.description,
+        learningOutcomes: editDraft.learningOutcomes
+          .split(/\r?\n|\s*\|\s*/)
+          .map((item) => item.trim())
+          .filter(Boolean),
+        courseContent: editDraft.courseContent,
+        labWork: editDraft.labWork,
+        entrepreneurialAspect: editDraft.entrepreneurialAspect,
+        ...(canManageRegistry ? { ownerDeptId: editDraft.ownerDeptId || null } : {}),
+      };
+      const response = await fetch(`/api/master-courses/${selectedCourse.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to update the Registry course.");
+      }
+      toast.success(
+        `Updated ${selectedCourse.code} and synchronized editable programme submissions.`,
+      );
+      setEditDialogOpen(false);
+      await fetchData();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update the course.",
+      );
+    } finally {
+      setIsEditingCourse(false);
     }
   };
 
@@ -394,6 +491,8 @@ export function MasterCourseManager({
         ? course.ownerDepartment.code
         : course.ownership === "SCHOOL" && course.ownerSchool
           ? course.ownerSchool.code
+          : course.ownership === "INSTITUTIONAL" && course.ownerDepartment
+            ? course.ownerDepartment.code
           : null;
 
     return (
@@ -401,9 +500,10 @@ export function MasterCourseManager({
         <Badge className={`${ownershipColors[course.ownership] || ""} border`}>
           {ownershipLabels[course.ownership] || course.ownership}
         </Badge>
-        {ownerName && !isOwnedByCurrentDept && (
+        {ownerName && (
           <span className="text-xs text-muted-foreground">
-            from {ownerName}
+            {course.ownership === "INSTITUTIONAL" ? "hosted by" : "from"}{" "}
+            {ownerName}
           </span>
         )}
       </div>
@@ -420,6 +520,8 @@ export function MasterCourseManager({
     });
   }, [courses, search, filterType, filterLevel]);
 
+  const hasCourseActions = canManageRegistry || currentUser?.role === "HOD";
+
   const coursesTable = useMemo(() => (
     <Table>
       <TableHeader>
@@ -433,7 +535,7 @@ export function MasterCourseManager({
           <TableHead>Sem</TableHead>
           <TableHead>Programmes</TableHead>
           <TableHead className="text-center">Discoverable</TableHead>
-          {canManageRegistry && <TableHead>Actions</TableHead>}
+          {hasCourseActions && <TableHead>Actions</TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -460,34 +562,49 @@ export function MasterCourseManager({
                   disabled={!canManageRegistry || isTogglingCourseId === course.id}
                 />
               </TableCell>
-              {canManageRegistry && <TableCell>
+              {hasCourseActions && <TableCell>
                 <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setSelectedCourse(course);
-                      setLinkDialogOpen(true);
-                    }}
-                    title="Link Programmes"
-                    aria-label={`Link ${course.code} to programmes`}
-                  >
-                    <Link className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => handleDeleteCourse(course.id)}
-                    disabled={isDeletingCourseId === course.id}
-                    title="Delete Course"
-                    aria-label={`Delete ${course.code}`}
-                  >
-                    {isDeletingCourseId === course.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Trash className="h-4 w-4" />
-                    )}
-                  </Button>
+                  {canEditCourse(course) && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openEditCourse(course)}
+                      title="Edit course details"
+                      aria-label={`Edit ${course.code}`}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {canManageRegistry && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setSelectedCourse(course);
+                          setLinkDialogOpen(true);
+                        }}
+                        title="Link Programmes"
+                        aria-label={`Link ${course.code} to programmes`}
+                      >
+                        <Link className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => handleDeleteCourse(course.id)}
+                        disabled={isDeletingCourseId === course.id}
+                        title="Delete Course"
+                        aria-label={`Delete ${course.code}`}
+                      >
+                        {isDeletingCourseId === course.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </>
+                  )}
                 </div>
               </TableCell>}
             </TableRow>
@@ -496,7 +613,14 @@ export function MasterCourseManager({
       </TableBody>
     </Table>
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ), [visibleCourses, isTogglingCourseId, isDeletingCourseId, canManageRegistry]);
+  ), [
+    visibleCourses,
+    isTogglingCourseId,
+    isDeletingCourseId,
+    canManageRegistry,
+    hasCourseActions,
+    canEditCourse,
+  ]);
 
   if (isLoading) return <TableSkeleton columns={6} />;
 
@@ -681,9 +805,15 @@ export function MasterCourseManager({
                   </SelectContent>
                 </Select>
               </div>
-              {newCourse.ownership === "DEPARTMENT" && (
+              {["DEPARTMENT", "INSTITUTIONAL"].includes(
+                newCourse.ownership,
+              ) && (
                 <div className="sm:col-span-2">
-                  <Label>Owner Department</Label>
+                  <Label>
+                    {newCourse.ownership === "INSTITUTIONAL"
+                      ? "Hosting Department (optional)"
+                      : "Owner Department"}
+                  </Label>
                   <Select
                     value={newCourse.ownerDeptId}
                     onValueChange={(v) =>
@@ -703,6 +833,35 @@ export function MasterCourseManager({
                   </Select>
                 </div>
               )}
+              <div className="sm:col-span-2">
+                <Label>Learning Outcomes</Label>
+                <Textarea
+                  value={newCourse.learningOutcomes.join("\n")}
+                  onChange={(event) =>
+                    setNewCourse({
+                      ...newCourse,
+                      learningOutcomes: event.target.value.split(/\r?\n/),
+                    })
+                  }
+                  placeholder="Enter one learning outcome per line"
+                  rows={4}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Course Content / Description</Label>
+                <Textarea
+                  value={newCourse.courseContent}
+                  onChange={(event) =>
+                    setNewCourse({
+                      ...newCourse,
+                      courseContent: event.target.value,
+                      description: event.target.value,
+                    })
+                  }
+                  placeholder="Provide the centrally maintained course content"
+                  rows={5}
+                />
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
@@ -737,6 +896,173 @@ export function MasterCourseManager({
       ) : (
         <TableCard>{coursesTable}</TableCard>
       )}
+
+        {/* Shared GST details editor. Hosting HoDs can maintain the learning
+            details; Academic Planning can also assign the hosting department. */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                Edit {selectedCourse?.code || "Registry Course"}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <Label>Course Title</Label>
+                <Input
+                  value={editDraft.title}
+                  onChange={(event) =>
+                    setEditDraft({ ...editDraft, title: event.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Units</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={6}
+                  value={editDraft.units}
+                  onChange={(event) =>
+                    setEditDraft({
+                      ...editDraft,
+                      units: Number(event.target.value),
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Level</Label>
+                <Select
+                  value={String(editDraft.level)}
+                  onValueChange={(value) =>
+                    setEditDraft({ ...editDraft, level: Number(value) })
+                  }
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {LEVELS.map((level) => (
+                      <SelectItem key={level} value={String(level)}>
+                        {level} Level
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Semester</Label>
+                <Select
+                  value={String(editDraft.semester)}
+                  onValueChange={(value) =>
+                    setEditDraft({ ...editDraft, semester: Number(value) })
+                  }
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {SEMESTERS.map((semester) => (
+                      <SelectItem key={semester} value={String(semester)}>
+                        {semester === 1 ? "First" : "Second"} Semester
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {canManageRegistry && selectedCourse?.ownership === "INSTITUTIONAL" && (
+                <div>
+                  <Label>Hosting Department</Label>
+                  <Select
+                    value={editDraft.ownerDeptId || "unassigned"}
+                    onValueChange={(value) =>
+                      setEditDraft({
+                        ...editDraft,
+                        ownerDeptId: value === "unassigned" ? "" : value,
+                      })
+                    }
+                  >
+                    <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unassigned">Unassigned</SelectItem>
+                      {departments.map((department) => (
+                        <SelectItem key={department.id} value={department.id}>
+                          {department.name} ({department.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="sm:col-span-2">
+                <Label>Short Registry Summary</Label>
+                <Textarea
+                  value={editDraft.description}
+                  onChange={(event) =>
+                    setEditDraft({ ...editDraft, description: event.target.value })
+                  }
+                  rows={2}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Learning Outcomes</Label>
+                <Textarea
+                  value={editDraft.learningOutcomes}
+                  onChange={(event) =>
+                    setEditDraft({
+                      ...editDraft,
+                      learningOutcomes: event.target.value,
+                    })
+                  }
+                  placeholder="Enter one outcome per line"
+                  rows={5}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Course Content / Description</Label>
+                <Textarea
+                  value={editDraft.courseContent}
+                  onChange={(event) =>
+                    setEditDraft({
+                      ...editDraft,
+                      courseContent: event.target.value,
+                    })
+                  }
+                  rows={7}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Laboratory or Practical Work</Label>
+                <Textarea
+                  value={editDraft.labWork}
+                  onChange={(event) =>
+                    setEditDraft({ ...editDraft, labWork: event.target.value })
+                  }
+                  rows={3}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Entrepreneurial or Practical Aspect</Label>
+                <Textarea
+                  value={editDraft.entrepreneurialAspect}
+                  onChange={(event) =>
+                    setEditDraft({
+                      ...editDraft,
+                      entrepreneurialAspect: event.target.value,
+                    })
+                  }
+                  rows={3}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleEditCourse} disabled={isEditingCourse}>
+                {isEditingCourse && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Save and synchronize
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Link Programmes Dialog */}
         <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
