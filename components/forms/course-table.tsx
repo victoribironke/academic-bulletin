@@ -74,6 +74,10 @@ interface MasterCourse {
   ownerDepartment?: { code: string; name: string };
   ownerSchool?: { code: string; name: string };
   description?: string;
+  learningOutcomes?: string[];
+  courseContent?: string;
+  labWork?: string;
+  entrepreneurialAspect?: string;
 }
 
 interface PreviousSubmission {
@@ -213,9 +217,9 @@ export function CourseTable({
   }, [submissionId, departmentId, LEVELS]);
 
   useEffect(() => {
-    if (submissionId && departmentId) {
-      fetchData();
-    }
+    if (!submissionId || !departmentId) return;
+    const timeoutId = window.setTimeout(() => void fetchData(), 0);
+    return () => window.clearTimeout(timeoutId);
   }, [submissionId, departmentId, fetchData]);
 
   // Validate courses - basic and uniqueness validation
@@ -838,8 +842,9 @@ export function CourseTable({
           <Alert className="mx-1">
             <AlertDescription>
               Select centrally maintained courses that apply to this department,
-              including school-wide and university-wide GST courses. This does not
-              upload a spreadsheet.
+              including school-wide courses. University-wide GST courses are
+              preloaded automatically and remain editable in this submission. This
+              does not upload a spreadsheet.
             </AlertDescription>
           </Alert>
 
