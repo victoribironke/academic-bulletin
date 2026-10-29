@@ -12,7 +12,7 @@ const databaseName = process.env.TEST_DATABASE_NAME || "academic_bulletin_test";
 const suppliedUrl = process.env.TEST_DATABASE_URL;
 
 if (!databaseName.endsWith("_test")) {
-  throw new Error("Refusing to reset a database whose name does not end in '_test'.");
+  throw new Error("Refusing to use a database whose name does not end in '_test'.");
 }
 
 function commandWorks(command, args = ["--version"]) {
@@ -173,7 +173,7 @@ try {
 
   run(
     process.execPath,
-    [prismaCli, "db", "push", "--force-reset", "--accept-data-loss"],
+    [prismaCli, "db", "push"],
     { env: testEnvironment },
   );
   run(
