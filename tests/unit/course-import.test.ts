@@ -48,4 +48,27 @@ describe("course imports", () => {
       "University-wide communication course.",
     );
   });
+
+  it("preserves central GST outcomes and learning details", () => {
+    const imported = courseFromRegistry({
+      id: "central-gst",
+      code: "GST 102",
+      title: "Nigerian Peoples and Culture",
+      units: 2,
+      semester: 2,
+      level: 100,
+      type: "GST_NUC",
+      learningOutcomes: ["Explain Nigeria's cultural diversity"],
+      courseContent: "Peoples, institutions, values, and national integration.",
+      labWork: "Community observation exercise",
+      entrepreneurialAspect: "Cultural enterprise case study",
+    });
+
+    expect(imported.importedDescription).toEqual({
+      learningOutcomes: ["Explain Nigeria's cultural diversity"],
+      courseContent: "Peoples, institutions, values, and national integration.",
+      labWork: "Community observation exercise",
+      entrepreneurialAspect: "Cultural enterprise case study",
+    });
+  });
 });
