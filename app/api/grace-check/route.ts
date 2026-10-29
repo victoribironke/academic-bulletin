@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { runGraceCheck } from "@/lib/grace";
+import { GraceServiceError, runGraceCheck } from "@/lib/grace";
 import {
   canViewSubmission,
   getApiUser,
@@ -75,6 +75,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(graceResult);
   } catch (error) {
     console.error("GRACE check failed:", error);
+    if (error instanceof GraceServiceError) {
+      return NextResponse.json(
+        { error: error.message, code: "GRACE_SERVICE_UNAVAILABLE" },
+        { status: error.status },
+      );
+    }
     return NextResponse.json({ error: "GRACE check failed" }, { status: 500 });
   }
 }
