@@ -11,6 +11,7 @@ import {
   requireApiUser,
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
+import { preloadGstCoursesForSubmission } from "@/lib/courses/gst-pool";
 
 // GET /api/courses - Get courses for a submission
 export async function GET(request: Request) {
@@ -31,6 +32,10 @@ export async function GET(request: Request) {
     if (!(await canViewSubmission(auth.user, submissionId))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+
+    // University-wide GST courses are centrally managed and automatically
+    // appear in every editable programme submission.
+    await preloadGstCoursesForSubmission(submissionId);
 
     const where: Record<string, unknown> = { submissionId };
     if (level) where.level = parseInt(level);
