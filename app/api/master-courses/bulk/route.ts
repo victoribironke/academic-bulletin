@@ -56,7 +56,10 @@ export async function POST(request: Request) {
     const schoolByCode = new Map(schools.map((school) => [school.code.toUpperCase(), school.id]));
     const ownerIssues = validated.flatMap((row) => {
       const data = row.data!;
-      if (data.ownership === "DEPARTMENT" && !departmentByCode.has(data.ownerDepartmentCode)) {
+      if (
+        data.ownerDepartmentCode &&
+        !departmentByCode.has(data.ownerDepartmentCode)
+      ) {
         return [{ row: row.rowNumber, errors: [`Unknown department code ${data.ownerDepartmentCode}.`] }];
       }
       if (data.ownership === "SCHOOL" && !schoolByCode.has(data.ownerSchoolCode)) {
@@ -81,9 +84,13 @@ export async function POST(request: Request) {
         level: data!.level,
         semester: data!.semester,
         description: data!.description || null,
+        learningOutcomes: data!.learningOutcomes,
+        courseContent: data!.courseContent || null,
+        labWork: data!.labWork || null,
+        entrepreneurialAspect: data!.entrepreneurialAspect || null,
         discoverable: data!.discoverable,
         ownerDeptId:
-          data!.ownership === "DEPARTMENT"
+          data!.ownerDepartmentCode
             ? departmentByCode.get(data!.ownerDepartmentCode)
             : null,
         ownerSchoolId:
