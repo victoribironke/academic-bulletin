@@ -38,7 +38,7 @@ export default function MasterCoursesPage() {
     <div>
       <PageHeader
         title="Master Courses"
-        description="The central registry of courses, including GST university-wide courses that departments import."
+        description="The central course registry. University-wide GST courses are automatically preloaded into programme submissions, and their hosting departments can maintain the shared learning details."
       />
       <MasterCourseManager departmentId={currentUser?.departmentId || undefined} />
     </div>
