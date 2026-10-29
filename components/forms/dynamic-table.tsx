@@ -66,7 +66,6 @@ export function DynamicTable<T extends Record<string, unknown>>({
   };
 
   const removeRow = (index: number) => {
-    if (data.length <= 1) return;
     const newData = [...data];
     newData.splice(index, 1);
     onChange(newData);
@@ -276,7 +275,6 @@ export function DynamicTable<T extends Record<string, unknown>>({
                           variant="ghost"
                           size="sm"
                           onClick={() => removeRow(rowIndex)}
-                          disabled={data.length <= 1}
                           className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
                         >
                           <Trash2 className="h-4 w-4" />
