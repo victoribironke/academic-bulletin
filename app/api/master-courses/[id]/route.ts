@@ -77,7 +77,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const auth = await requireApiUser(["ADMIN", "SUPER_ADMIN"]);
+    const auth = await requireApiUser(["HOD", "ADMIN", "SUPER_ADMIN"]);
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
@@ -91,6 +91,11 @@ export async function PATCH(
       level,
       semester,
       description,
+      learningOutcomes,
+      courseContent,
+      labWork,
+      entrepreneurialAspect,
+      ownerDeptId,
       discoverable,
       prerequisiteIds,
     } = body;
@@ -99,6 +104,31 @@ export async function PATCH(
     const existing = await prisma.masterCourse.findUnique({ where: { id } });
     if (!existing) {
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
+    }
+
+    const isAdministrator = ["ADMIN", "SUPER_ADMIN"].includes(auth.user.role);
+    const isHostingHod =
+      auth.user.role === "HOD" &&
+      Boolean(auth.user.departmentId) &&
+      existing.ownerDeptId === auth.user.departmentId &&
+      existing.ownership === "INSTITUTIONAL" &&
+      ["GST_NUC", "GST_BU"].includes(existing.type);
+    if (!isAdministrator && !isHostingHod) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    if (
+      isHostingHod &&
+      [code, type, ownership, ownerDeptId, discoverable, prerequisiteIds].some(
+        (value) => value !== undefined,
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Hosting HoDs may edit GST teaching details, but Registry ownership and availability are managed by Academic Planning.",
+        },
+        { status: 403 },
+      );
     }
 
     // Build update data
@@ -157,6 +187,39 @@ export async function PATCH(
       updateData.semester = semester;
     }
     if (description !== undefined) updateData.description = description || null;
+    if (learningOutcomes !== undefined) {
+      if (!Array.isArray(learningOutcomes)) {
+        return NextResponse.json(
+          { error: "Learning outcomes must be a list." },
+          { status: 400 },
+        );
+      }
+      updateData.learningOutcomes = learningOutcomes
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+    if (courseContent !== undefined)
+      updateData.courseContent = courseContent || null;
+    if (labWork !== undefined) updateData.labWork = labWork || null;
+    if (entrepreneurialAspect !== undefined) {
+      updateData.entrepreneurialAspect = entrepreneurialAspect || null;
+    }
+    if (ownerDeptId !== undefined) {
+      if (ownerDeptId) {
+        const department = await prisma.department.findUnique({
+          where: { id: ownerDeptId },
+          select: { id: true },
+        });
+        if (!department) {
+          return NextResponse.json(
+            { error: "Hosting department not found." },
+            { status: 400 },
+          );
+        }
+      }
+      updateData.ownerDeptId = ownerDeptId || null;
+    }
     if (discoverable !== undefined)
       updateData.discoverable = Boolean(discoverable);
 
@@ -189,6 +252,20 @@ export async function PATCH(
       units,
       level,
       semester,
+      learningOutcomes:
+        learningOutcomes !== undefined
+          ? learningOutcomes
+              .filter((item: unknown): item is string => typeof item === "string")
+              .map((item: string) => item.trim())
+              .filter(Boolean)
+          : undefined,
+      courseContent:
+        courseContent !== undefined ? courseContent || null : undefined,
+      labWork: labWork !== undefined ? labWork || null : undefined,
+      entrepreneurialAspect:
+        entrepreneurialAspect !== undefined
+          ? entrepreneurialAspect || null
+          : undefined,
     });
 
     return NextResponse.json({
