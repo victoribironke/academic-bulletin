@@ -32,6 +32,7 @@ const VALID_RANKS = [
   "OTHER", // For non-academic staff with custom job titles
 ];
 const VALID_TYPES = ["ACADEMIC", "ADJUNCT", "NON_ACADEMIC"];
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // GET /api/staff - Get all staff (optionally filtered by department)
 export async function GET(request: Request) {
@@ -188,6 +189,18 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+    if (academicRank === "OTHER" && !customJobTitle?.trim()) {
+      return NextResponse.json(
+        { error: "A job title is required for non-academic staff." },
+        { status: 400 },
+      );
+    }
+    if (email?.trim() && !EMAIL_PATTERN.test(email.trim())) {
+      return NextResponse.json(
+        { error: "Enter a valid staff email address." },
+        { status: 400 },
+      );
+    }
 
     // Name validation
     if (!isValidName(surname)) {
@@ -232,7 +245,7 @@ export async function POST(request: Request) {
           academicRank === "OTHER" && customJobTitle
             ? toTitleCase(customJobTitle)
             : null,
-        email: email || null,
+        email: email?.trim() || null,
         type: type || "ACADEMIC",
         departmentId,
       },
