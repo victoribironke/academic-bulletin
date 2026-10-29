@@ -26,6 +26,7 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { GRACE_SUBMISSION_REQUIRED } from "@/lib/grace-config";
 
 const GRACE_PILLAR_LABELS: Record<string, string> = {
   G: "Global Relevance",
@@ -202,6 +203,7 @@ export function CourseDescriptionForm({
   const [graceResults, setGraceResults] = useState<Record<string, GraceResult>>(
     {},
   );
+  const [graceErrors, setGraceErrors] = useState<Record<string, string>>({});
 
   // Autosave state
   const [dirtyDescriptions, setDirtyDescriptions] = useState<Set<string>>(
@@ -266,9 +268,9 @@ export function CourseDescriptionForm({
   }, [submissionId]);
 
   useEffect(() => {
-    if (submissionId) {
-      fetchCourses();
-    }
+    if (!submissionId) return;
+    const timeoutId = window.setTimeout(() => void fetchCourses(), 0);
+    return () => window.clearTimeout(timeoutId);
   }, [submissionId, fetchCourses]);
 
   const updateDescription = (
@@ -417,6 +419,11 @@ export function CourseDescriptionForm({
     if (!desc?.courseContent?.trim()) return;
 
     setGraceChecking(courseId);
+    setGraceErrors((prev) => {
+      const next = { ...prev };
+      delete next[courseId];
+      return next;
+    });
     setGraceResults((prev) => {
       const next = { ...prev };
       delete next[courseId];
@@ -439,23 +446,21 @@ export function CourseDescriptionForm({
         const result: GraceResult = await res.json();
         setGraceForCourse(courseId, result);
       } else {
-        setGraceForCourse(courseId, {
-          scores: {},
-          pillarSummaries: {},
-          explanation: "Compliance check failed. Please try again.",
-          recommendation: "",
-          passed: false,
-        });
+        const error = (await res.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        setGraceErrors((prev) => ({
+          ...prev,
+          [courseId]:
+            error?.error || "The GRACE service could not complete the check.",
+        }));
       }
     } catch {
-      setGraceForCourse(courseId, {
-        scores: {},
-        pillarSummaries: {},
-        explanation:
-          "Could not reach the GRACE compliance server. Please try again later.",
-        recommendation: "",
-        passed: false,
-      });
+      setGraceErrors((prev) => ({
+        ...prev,
+        [courseId]:
+          "Could not reach the GRACE compliance service. Please try again later.",
+      }));
     } finally {
       setGraceChecking(null);
     }
@@ -500,8 +505,17 @@ export function CourseDescriptionForm({
           <CardTitle>Course Details</CardTitle>
         </div>
         <p className="text-xs text-muted-foreground mt-2">
-          All course descriptions should be <strong>GRACE compliant</strong> as
-          proposed by the Vice Chancellor.
+          {GRACE_SUBMISSION_REQUIRED ? (
+            <>
+              All course descriptions should be <strong>GRACE compliant</strong>{" "}
+              as proposed by the Vice Chancellor.
+            </>
+          ) : (
+            <>
+              GRACE guidance is temporarily optional. Descriptions can be saved
+              and the bulletin can be submitted without a completed GRACE check.
+            </>
+          )}
         </p>
       </CardHeader>
       <CardContent>
@@ -732,6 +746,13 @@ export function CourseDescriptionForm({
                                         },
                                       }));
                                     }
+                                    if (graceErrors[course.id]) {
+                                      setGraceErrors((prev) => {
+                                        const next = { ...prev };
+                                        delete next[course.id];
+                                        return next;
+                                      });
+                                    }
                                   }}
                                   placeholder="Describe the course content, topics covered, and key learning areas. Keep the description GRACE compliant: clear, structured, and focused on student outcomes."
                                   disabled={disabled}
@@ -745,6 +766,11 @@ export function CourseDescriptionForm({
                                       result={graceResults[course.id]}
                                     />
                                   </div>
+                                )}
+                                {graceErrors[course.id] && (
+                                  <p className="mt-2 text-sm text-destructive" role="alert">
+                                    GRACE service error: {graceErrors[course.id]}
+                                  </p>
                                 )}
                               </div>
 
