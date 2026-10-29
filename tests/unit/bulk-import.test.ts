@@ -34,6 +34,28 @@ describe("spreadsheet file parsing", () => {
 });
 
 describe("bulk staff import validation", () => {
+  it("accepts common labels for adjunct academic staff", () => {
+    const [row] = validateStaffImportRows([
+      {
+        "Staff Type": "Adjunct Academic Staff",
+        Title: "Prof.",
+        Surname: "Adebayo",
+        "First Name": "Tunde",
+        Gender: "Male",
+        "Highest Qualification": "PhD",
+        "Academic Rank / Job Title": "Professor",
+        Email: "tunde.adebayo@example.edu",
+      },
+    ]);
+
+    expect(row.errors).toEqual([]);
+    expect(row.data).toMatchObject({
+      type: "ADJUNCT",
+      title: "PROF",
+      academicRank: "PROFESSOR",
+    });
+  });
+
   it("normalizes a non-academic job title into the supported data model", () => {
     const [row] = validateStaffImportRows([
       {
