@@ -16,6 +16,10 @@ export interface ImportableCourse {
   prerequisites?: string;
   id?: string;
   description?: string | ImportableDescription;
+  learningOutcomes?: string[];
+  courseContent?: string;
+  labWork?: string;
+  entrepreneurialAspect?: string;
 }
 
 export interface ImportedCourseDraft {
@@ -45,8 +49,20 @@ export function courseFromRegistry(
     prerequisites: course.prerequisites || "",
     masterCourseId: course.id,
     importedDescription:
-      typeof course.description === "string" && course.description
-        ? { courseContent: course.description }
+      course.learningOutcomes?.length ||
+      course.courseContent ||
+      course.labWork ||
+      course.entrepreneurialAspect
+        ? {
+            learningOutcomes: course.learningOutcomes || [],
+            courseContent:
+              course.courseContent ||
+              (typeof course.description === "string" ? course.description : ""),
+            labWork: course.labWork,
+            entrepreneurialAspect: course.entrepreneurialAspect,
+          }
+        : typeof course.description === "string" && course.description
+          ? { courseContent: course.description }
         : typeof course.description === "object"
           ? course.description
           : undefined,
