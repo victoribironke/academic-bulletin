@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
+import { preloadGstCoursesForSubmission } from "@/lib/courses/gst-pool";
 
 const SUBMISSION_STATUSES = [
   "DRAFT",
@@ -186,6 +187,8 @@ export async function POST(request: NextRequest) {
         content: true,
       },
     });
+
+    await preloadGstCoursesForSubmission(submission.id);
 
     return NextResponse.json(submission, { status: 201 });
   } catch (error: unknown) {
