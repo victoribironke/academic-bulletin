@@ -180,6 +180,10 @@ export async function POST(request: Request) {
       level,
       semester,
       description,
+      learningOutcomes,
+      courseContent,
+      labWork,
+      entrepreneurialAspect,
       ownerDeptId,
       ownerSchoolId,
       prerequisiteIds,
@@ -255,8 +259,10 @@ export async function POST(request: Request) {
 
     // Ownership validation based on type
     const resolvedOwnership = ownership || "DEPARTMENT";
-    const finalDeptId =
-      resolvedOwnership === "INSTITUTIONAL" ? null : ownerDeptId;
+    // University-wide GST courses may retain a hosting department. They are
+    // still available to every programme, while the host HoD can maintain the
+    // shared learning details.
+    const finalDeptId = ownerDeptId || null;
     const finalSchoolId =
       resolvedOwnership === "INSTITUTIONAL" ? null : ownerSchoolId;
 
@@ -319,6 +325,15 @@ export async function POST(request: Request) {
         level,
         semester,
         description: description || null,
+        learningOutcomes: Array.isArray(learningOutcomes)
+          ? learningOutcomes
+              .filter((item): item is string => typeof item === "string")
+              .map((item) => item.trim())
+              .filter(Boolean)
+          : [],
+        courseContent: courseContent || description || null,
+        labWork: labWork || null,
+        entrepreneurialAspect: entrepreneurialAspect || null,
         ownerDeptId: finalDeptId || null,
         ownerSchoolId: finalSchoolId || null,
         prerequisites: prerequisiteIds?.length
