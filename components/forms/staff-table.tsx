@@ -24,6 +24,7 @@ import {
   validateStaffImportRows,
   type StaffImportData,
 } from "@/lib/imports/staff";
+import { validateStaffEntryRows } from "@/lib/validation/staff-entry";
 
 // Updated StaffMember interface with new structured fields
 interface StaffMember {
@@ -49,6 +50,7 @@ interface StaffMember {
 interface StaffTableProps {
   departmentId: string;
   disabled?: boolean;
+  readOnlyReason?: string;
 }
 
 type ImageVerificationFeedback = {
@@ -214,6 +216,7 @@ const nonAcademicColumns: Column<StaffMember>[] = [
 export function StaffTable({
   departmentId,
   disabled = false,
+  readOnlyReason,
 }: StaffTableProps) {
   const [academicStaff, setAcademicStaff] = useState<StaffMember[]>([]);
   const [adjunctStaff, setAdjunctStaff] = useState<StaffMember[]>([]);
@@ -274,9 +277,9 @@ export function StaffTable({
   }, [departmentId]);
 
   useEffect(() => {
-    if (departmentId) {
-      fetchStaff();
-    }
+    if (!departmentId) return;
+    const timeoutId = window.setTimeout(() => void fetchStaff(), 0);
+    return () => window.clearTimeout(timeoutId);
   }, [departmentId, fetchStaff]);
 
   // Pick up staff added elsewhere (e.g. the Staff Directory in another tab)
@@ -327,27 +330,44 @@ export function StaffTable({
   });
 
   const saveStaff = async () => {
-    setIsSaving(true);
     const errors: string[] = [];
     const createdMap = new Map<number, string>();
-    try {
-      const allStaff = [
-        ...academicStaff.map((s) => ({ ...s, type: "ACADEMIC" })),
-        ...adjunctStaff.map((s) => ({ ...s, type: "ADJUNCT" })),
-        ...nonAcademicStaff.map((s) => ({
-          ...s,
-          type: "NON_ACADEMIC",
-          customJobTitle: s.academicRank,
-          academicRank: "OTHER",
-        })),
-      ];
+    const allStaff = [
+      ...academicStaff.map((s) => ({ ...s, type: "ACADEMIC" as const })),
+      ...adjunctStaff.map((s) => ({ ...s, type: "ADJUNCT" as const })),
+      ...nonAcademicStaff.map((s) => ({
+        ...s,
+        type: "NON_ACADEMIC" as const,
+        customJobTitle: s.academicRank,
+        academicRank: "OTHER",
+      })),
+    ];
+    const validationErrors = validateStaffEntryRows(allStaff);
+    if (validationErrors.length > 0) {
+      toast.error(validationErrors[0].message, {
+        description:
+          validationErrors.length > 1
+            ? `${validationErrors.length - 1} more staff entry issue(s) need attention.`
+            : undefined,
+      });
+      return;
+    }
 
+    setIsSaving(true);
+    try {
       const currentStaffIds = new Set<string>();
+
+      const responseError = async (res: Response, fallback: string) => {
+        try {
+          const body = (await res.json()) as { error?: string };
+          return body.error || fallback;
+        } catch {
+          return fallback;
+        }
+      };
 
       for (let i = 0; i < allStaff.length; i++) {
         const staff = allStaff[i];
-        if (!staff.surname?.trim()) continue;
-
         if (staff.id && !staff.isNew) {
           currentStaffIds.add(staff.id);
         }
@@ -359,7 +379,12 @@ export function StaffTable({
             body: JSON.stringify({ ...staff, departmentId }),
           });
           if (!res.ok) {
-            errors.push(`Failed to create ${staff.surname || "new staff"}`);
+            errors.push(
+              await responseError(
+                res,
+                `Failed to create ${staff.surname || "new staff"}.`,
+              ),
+            );
           } else {
             const created = await res.json();
             createdMap.set(i, created.id);
@@ -372,7 +397,9 @@ export function StaffTable({
             body: JSON.stringify(staff),
           });
           if (!res.ok) {
-            errors.push(`Failed to update ${staff.surname}`);
+            errors.push(
+              await responseError(res, `Failed to update ${staff.surname}.`),
+            );
           }
         }
       }
@@ -383,31 +410,38 @@ export function StaffTable({
             method: "DELETE",
           });
           if (!res.ok) {
-            errors.push("Failed to delete a removed staff member");
+            errors.push(
+              await responseError(res, "Failed to delete a removed staff member."),
+            );
+            // Keep failed deletions in the tracked set so a later save retries
+            // them instead of treating the record as successfully removed.
+            currentStaffIds.add(originalId);
           }
         }
       }
 
+      // Keep successful creations in sync even if another row failed. This
+      // prevents a retry from creating duplicate staff records.
+      const patchList = (list: StaffMember[], offset: number): StaffMember[] =>
+        list.map((s, i) => {
+          const createdId = createdMap.get(offset + i);
+          return createdId ? { ...s, id: createdId, isNew: false } : s;
+        });
+      const acadLen = academicStaff.length;
+      const adjLen = adjunctStaff.length;
+      setAcademicStaff((prev) => patchList(prev, 0));
+      setAdjunctStaff((prev) => patchList(prev, acadLen));
+      setNonAcademicStaff((prev) => patchList(prev, acadLen + adjLen));
+      setOriginalStaffIds(currentStaffIds);
+
       if (errors.length > 0) {
-        toast.error(`Some staff failed to save: ${errors.join("; ")}`);
+        markDirty(true);
+        toast.error("Some staff entries were not saved.", {
+          description: errors.join(" "),
+        });
       } else {
         toast.success("All staff saved successfully");
         markDirty(false);
-
-        // Patch local state: assign server IDs to created entries, clear isNew
-        const patchList = (list: StaffMember[], offset: number): StaffMember[] =>
-          list.map((s, i) => {
-            const createdId = createdMap.get(offset + i);
-            if (createdId) return { ...s, id: createdId, isNew: false };
-            return s.isNew ? { ...s, isNew: false } : s;
-          });
-
-        const acadLen = academicStaff.length;
-        const adjLen = adjunctStaff.length;
-        setAcademicStaff((prev) => patchList(prev, 0));
-        setAdjunctStaff((prev) => patchList(prev, acadLen));
-        setNonAcademicStaff((prev) => patchList(prev, acadLen + adjLen));
-        setOriginalStaffIds(currentStaffIds);
       }
     } catch (error) {
       console.error("Failed to save staff:", error);
@@ -524,13 +558,13 @@ export function StaffTable({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-2">
           <Users className="h-5 w-5" />
           <CardTitle>Staff Directory</CardTitle>
         </div>
         {!disabled && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {isDirty && (
               <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
                 Unsaved changes
@@ -557,7 +591,7 @@ export function StaffTable({
               <Camera className="h-4 w-4 mr-2" />
               Manage Photos
             </Button>
-            <Button onClick={saveStaff} disabled={isSaving}>
+            <Button onClick={saveStaff} disabled={isSaving || !isDirty}>
               {isSaving ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
@@ -569,6 +603,14 @@ export function StaffTable({
         )}
       </CardHeader>
       <CardContent>
+        {disabled && (
+          <Alert className="mb-4">
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              {readOnlyReason || "This staff directory is currently read-only."}
+            </AlertDescription>
+          </Alert>
+        )}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-4">
             <TabsTrigger value="academic" className="flex items-center gap-2">
