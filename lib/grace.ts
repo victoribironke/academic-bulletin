@@ -12,6 +12,17 @@ import { GEMINI_MODEL } from "@/lib/site-config";
 import { GoogleGenAI, ThinkingLevel, Type } from "@google/genai";
 
 export const GRACE_MODEL = GEMINI_MODEL;
+export const GRACE_MINIMUM_WORDS = 150;
+
+export class GraceServiceError extends Error {
+  readonly status: 503;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "GraceServiceError";
+    this.status = 503;
+  }
+}
 
 let client: GoogleGenAI | null = null;
 
@@ -116,7 +127,12 @@ export type GraceAnalysisResult = {
   recommendation: string;
   passed: boolean;
   modelUsed?: string;
+  wordCount?: number;
 };
+
+export function countWords(content: string): number {
+  return content.trim().split(/\s+/).filter(Boolean).length;
+}
 
 function parseNewGraceShape(obj: Record<string, unknown>): {
   scores: Record<string, number>;
@@ -195,8 +211,22 @@ export function parseGraceAnalysis(
     }
   }
 
-  const scoreValues = Object.values(scores);
-  const passed = scoreValues.length > 0 && scoreValues.every((s) => s >= 3);
+  const missingPillars = ["G", "R", "A", "C", "E"].filter(
+    (letter) => !Number.isInteger(scores[letter]),
+  );
+  const invalidScores = Object.values(scores).some(
+    (score) => score < 0 || score > 5,
+  );
+  if (missingPillars.length > 0 || invalidScores) {
+    throw new GraceServiceError(
+      "The GRACE service returned an incomplete assessment. Please try again.",
+    );
+  }
+
+  const scoreValues = ["G", "R", "A", "C", "E"].map(
+    (letter) => scores[letter],
+  );
+  const passed = scoreValues.every((s) => s >= 3);
 
   return {
     scores,
@@ -208,13 +238,14 @@ export function parseGraceAnalysis(
   };
 }
 
-function failedResult(explanation: string): GraceAnalysisResult {
+function minimumLengthResult(wordCount: number): GraceAnalysisResult {
   return {
-    scores: {},
+    scores: { G: 0, R: 0, A: 0, C: 0, E: 0 },
     pillarSummaries: {},
-    explanation,
-    recommendation: "",
+    explanation: `The submission contains ${wordCount} words. At least ${GRACE_MINIMUM_WORDS} words are required before a GRACE assessment can be completed.`,
+    recommendation: `Expand the content to at least ${GRACE_MINIMUM_WORDS} words, then run the GRACE check again.`,
     passed: false,
+    wordCount,
   };
 }
 
@@ -225,9 +256,14 @@ export async function runGraceCheck(
   title: string,
   content: string,
 ): Promise<GraceAnalysisResult> {
+  const wordCount = countWords(content);
+  if (wordCount < GRACE_MINIMUM_WORDS) {
+    return minimumLengthResult(wordCount);
+  }
+
   const ai = getClient();
   if (!ai) {
-    return failedResult(
+    throw new GraceServiceError(
       "GRACE checks are not configured on the server. Please contact an administrator.",
     );
   }
@@ -246,11 +282,21 @@ export async function runGraceCheck(
     });
 
     const text = response.text?.trim();
-    if (!text) return failedResult("No analysis returned. Please try again.");
-    return parseGraceAnalysis(text, GRACE_MODEL);
+    if (!text) {
+      throw new GraceServiceError(
+        "The GRACE service returned no assessment. Please try again.",
+      );
+    }
+    return {
+      ...parseGraceAnalysis(text, GRACE_MODEL),
+      wordCount,
+    };
   } catch (error) {
     console.error("GRACE check failed:", error);
-    return failedResult("Compliance check failed. Please try again.");
+    if (error instanceof GraceServiceError) throw error;
+    throw new GraceServiceError(
+      "The GRACE compliance service is temporarily unavailable. Please try again.",
+    );
   }
 }
 
