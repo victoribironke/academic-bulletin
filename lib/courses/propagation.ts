@@ -6,6 +6,7 @@
  */
 
 import prisma from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 // Types for propagation
 interface PropagationResult {
@@ -22,6 +23,10 @@ interface MasterCourseUpdate {
   level?: number;
   semester?: number;
   type?: string;
+  learningOutcomes?: string[];
+  courseContent?: string | null;
+  labWork?: string | null;
+  entrepreneurialAspect?: string | null;
 }
 
 /**
@@ -63,8 +68,23 @@ export async function propagateMasterCourseChanges(
     if (update.level !== undefined) updateData.level = update.level;
     if (update.semester !== undefined) updateData.semester = update.semester;
 
+    const descriptionUpdate: Prisma.CourseDescriptionUpdateInput = {};
+    if (update.learningOutcomes !== undefined) {
+      descriptionUpdate.learningOutcomes = update.learningOutcomes;
+    }
+    if (update.courseContent !== undefined) {
+      descriptionUpdate.courseContent = update.courseContent;
+    }
+    if (update.labWork !== undefined) descriptionUpdate.labWork = update.labWork;
+    if (update.entrepreneurialAspect !== undefined) {
+      descriptionUpdate.entrepreneurialAspect = update.entrepreneurialAspect;
+    }
+
     // Skip if no fields to update
-    if (Object.keys(updateData).length === 0) {
+    if (
+      Object.keys(updateData).length === 0 &&
+      Object.keys(descriptionUpdate).length === 0
+    ) {
       return {
         success: true,
         updatedCount: 0,
@@ -73,9 +93,12 @@ export async function propagateMasterCourseChanges(
       };
     }
 
-    // Update only courses in DRAFT status (can't modify submitted/approved)
+    // Update only courses that are still editable (never alter a bulletin that
+    // is already under review or approved).
     const draftCourses = linkedCourses.filter(
-      (c) => c.submission?.status === "DRAFT",
+      (c) =>
+        c.submission?.status === "DRAFT" ||
+        c.submission?.status === "CORRECTIONS_REQUIRED",
     );
 
     // Track affected programmes
@@ -90,17 +113,37 @@ export async function propagateMasterCourseChanges(
     const courseIds = draftCourses.map((c) => c.id);
 
     if (courseIds.length > 0) {
-      await prisma.course.updateMany({
-        where: { id: { in: courseIds } },
-        data: updateData,
-      });
+      if (Object.keys(updateData).length > 0) {
+        await prisma.course.updateMany({
+          where: { id: { in: courseIds } },
+          data: updateData,
+        });
+      }
+
+      if (Object.keys(descriptionUpdate).length > 0) {
+        for (const course of draftCourses) {
+          await prisma.courseDescription.upsert({
+            where: { courseId: course.id },
+            create: {
+              courseId: course.id,
+              submissionId: course.submission.id,
+              learningOutcomes: update.learningOutcomes || [],
+              courseContent: update.courseContent || null,
+              labWork: update.labWork || null,
+              entrepreneurialAspect: update.entrepreneurialAspect || null,
+              gracePass: false,
+            },
+            update: { ...descriptionUpdate, gracePass: false },
+          });
+        }
+      }
     }
 
     // Log courses that couldn't be updated (non-draft)
     const nonDraftCount = linkedCourses.length - draftCourses.length;
     if (nonDraftCount > 0) {
       errors.push(
-        `${nonDraftCount} courses in non-DRAFT submissions were not updated`,
+        `${nonDraftCount} courses in non-editable submissions were not updated`,
       );
     }
 
