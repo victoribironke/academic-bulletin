@@ -59,9 +59,12 @@ import { POST as transitionSubmission } from "@/app/api/submissions/[id]/transit
 import { POST as createComment } from "@/app/api/submissions/[id]/comments/route";
 import { POST as checkGrace } from "@/app/api/grace-check/route";
 import { GET as listMasterCourses } from "@/app/api/master-courses/route";
+import { PATCH as updateMasterCourse } from "@/app/api/master-courses/[id]/route";
 import { canExportBulletin } from "@/lib/bulletin/access";
 import { GET as getCurrentUser } from "@/app/api/users/me/route";
 import { POST as bulkImportStaff } from "@/app/api/staff/bulk/route";
+import { POST as createStaff } from "@/app/api/staff/route";
+import { PATCH as updateStaff } from "@/app/api/staff/[id]/route";
 import { POST as bulkImportCourses } from "@/app/api/courses/bulk/route";
 import { POST as bulkImportMasterCourses } from "@/app/api/master-courses/bulk/route";
 
@@ -635,6 +638,94 @@ describe("route authorization", () => {
     );
   });
 
+  it("automatically preloads the central GST pool into an HoD submission", async () => {
+    authState.userId = ids.hod;
+    await prisma.submission.update({
+      where: { id: ids.submission },
+      data: { status: "DRAFT", currentPhase: 1 },
+    });
+    const masterCourse = await prisma.masterCourse.create({
+      data: {
+        code: "GST 111",
+        title: "Communication in English",
+        units: 2,
+        type: "GST_NUC",
+        ownership: "INSTITUTIONAL",
+        level: 100,
+        semester: 1,
+        description: "Shared course content from the central GST pool.",
+        learningOutcomes: ["Communicate effectively in an academic setting"],
+        courseContent: "Shared course content from the central GST pool.",
+        ownerDeptId: ids.departmentA,
+        discoverable: true,
+      },
+    });
+
+    const response = await listCourses(
+      new Request(
+        `http://localhost/api/courses?submissionId=${ids.submission}`,
+      ),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "GST 111",
+          masterCourse: expect.objectContaining({
+            ownership: "INSTITUTIONAL",
+          }),
+          description: expect.objectContaining({
+            courseContent: "Shared course content from the central GST pool.",
+          }),
+        }),
+      ]),
+    );
+    expect(
+      await prisma.programmeCourse.findUnique({
+        where: {
+          programmeId_courseId: {
+            programmeId: ids.programmeA,
+            courseId: (
+              await prisma.masterCourse.findUniqueOrThrow({
+                where: { code: "GST 111" },
+              })
+            ).id,
+          },
+        },
+      }),
+    ).not.toBeNull();
+
+    const updated = await updateMasterCourse(
+      new Request(`http://localhost/api/master-courses/${masterCourse.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          learningOutcomes: ["Write and present clearly for different audiences"],
+          courseContent: "Updated centrally by the hosting department.",
+        }),
+      }),
+      { params: Promise.resolve({ id: masterCourse.id }) },
+    );
+    expect(updated.status).toBe(200);
+    expect(
+      await prisma.course.findUnique({
+        where: {
+          code_submissionId: {
+            code: "GST 111",
+            submissionId: ids.submission,
+          },
+        },
+        include: { description: true },
+      }),
+    ).toMatchObject({
+      description: {
+        learningOutcomes: ["Write and present clearly for different audiences"],
+        courseContent: "Updated centrally by the hosting department.",
+        gracePass: false,
+      },
+    });
+  });
+
   it("hides another department's discoverable courses from an HOD", async () => {
     authState.userId = ids.admin;
     await prisma.masterCourse.create({
@@ -701,6 +792,68 @@ describe("route authorization", () => {
       }),
     );
     expect(denied.status).toBe(403);
+  });
+
+  it("validates staff email and non-academic job titles on create and update", async () => {
+    authState.userId = ids.hod;
+    const base = {
+      type: "NON_ACADEMIC",
+      title: "MS",
+      gender: "FEMALE",
+      surname: "Directory",
+      firstName: "Tester",
+      middleName: "",
+      highestQualification: "MASTERS",
+      academicRank: "OTHER",
+      specialization: "Administration",
+      departmentId: ids.departmentA,
+    };
+
+    const missingJobTitle = await createStaff(
+      new Request("http://localhost/api/staff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...base, email: "directory@example.edu" }),
+      }),
+    );
+    expect(missingJobTitle.status).toBe(400);
+
+    const invalidEmail = await createStaff(
+      new Request("http://localhost/api/staff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...base,
+          customJobTitle: "Programme Officer",
+          email: "not-an-email",
+        }),
+      }),
+    );
+    expect(invalidEmail.status).toBe(400);
+
+    const created = await createStaff(
+      new Request("http://localhost/api/staff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...base,
+          customJobTitle: "Programme Officer",
+          email: "directory.tester@example.edu",
+        }),
+      }),
+    );
+    expect(created.status).toBe(201);
+    const createdBody = (await created.json()) as { id: string };
+
+    const invalidUpdate = await updateStaff(
+      new Request(`http://localhost/api/staff/${createdBody.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "still-not-an-email" }),
+      }),
+      { params: Promise.resolve({ id: createdBody.id }) },
+    );
+    expect(invalidUpdate.status).toBe(400);
   });
 
   it("bulk imports courses with their complete learning details", async () => {
@@ -793,7 +946,7 @@ describe("route authorization", () => {
     ).toMatchObject({ ownership: "INSTITUTIONAL", type: "GST_BU" });
   });
 
-  it("persists a course GRACE result even before details are saved", async () => {
+  it("does not persist a failed GRACE service call as a compliance result", async () => {
     authState.userId = ids.hod;
     const course = await prisma.course.create({
       data: {
@@ -805,30 +958,38 @@ describe("route authorization", () => {
         submissionId: ids.submission,
       },
     });
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(new Response(null, { status: 503 }));
+    const previousGeminiKey = process.env.GEMINI_API_KEY;
+    const previousGoogleKey = process.env.GOOGLE_API_KEY;
+    process.env.GEMINI_API_KEY = "";
+    process.env.GOOGLE_API_KEY = "";
 
-    const response = await checkGrace(
-      new NextRequest("http://localhost/api/grace-check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "course",
-          courseId: course.id,
-          title: course.title,
-          content: "New course content",
+    let response!: Response;
+    try {
+      response = await checkGrace(
+        new NextRequest("http://localhost/api/grace-check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "course",
+            courseId: course.id,
+            title: course.title,
+            content: Array.from({ length: 150 }, () => "word").join(" "),
+          }),
         }),
-      }),
-    );
-    fetchSpy.mockRestore();
+      );
+    } finally {
+      if (previousGeminiKey === undefined) delete process.env.GEMINI_API_KEY;
+      else process.env.GEMINI_API_KEY = previousGeminiKey;
+      if (previousGoogleKey === undefined) delete process.env.GOOGLE_API_KEY;
+      else process.env.GOOGLE_API_KEY = previousGoogleKey;
+    }
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(503);
     expect(
       await prisma.courseDescription.findUnique({
         where: { courseId: course.id },
         select: { submissionId: true, gracePass: true },
       }),
-    ).toEqual({ submissionId: ids.submission, gracePass: false });
+    ).toBeNull();
   });
 });
