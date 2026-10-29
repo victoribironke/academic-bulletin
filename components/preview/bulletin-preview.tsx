@@ -83,9 +83,9 @@ export function BulletinPreview({ submission }: BulletinPreviewProps) {
   }, [submission.id, submission.programme.id]);
 
   useEffect(() => {
-    if (isOpen) {
-      fetchData();
-    }
+    if (!isOpen) return;
+    const timeoutId = window.setTimeout(() => void fetchData(), 0);
+    return () => window.clearTimeout(timeoutId);
   }, [isOpen, fetchData]);
 
   const handlePrint = () => {
@@ -103,7 +103,13 @@ export function BulletinPreview({ submission }: BulletinPreviewProps) {
       const response = await fetch(`/api/bulletin/export?${params}`);
 
       if (!response.ok) {
-        throw new Error("Export failed");
+        const body = (await response.json().catch(() => null)) as
+          | { error?: string; issues?: Array<{ message: string }> }
+          | null;
+        const details = body?.issues?.map((issue) => issue.message).join(" ");
+        throw new Error(
+          [body?.error || "Export failed", details].filter(Boolean).join(" "),
+        );
       }
 
       const blob = await response.blob();
@@ -117,7 +123,11 @@ export function BulletinPreview({ submission }: BulletinPreviewProps) {
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error(`Failed to export ${format}:`, error);
-      alert(`Failed to export as ${format.toUpperCase()}. Please try again.`);
+      alert(
+        error instanceof Error
+          ? error.message
+          : `Failed to export as ${format.toUpperCase()}. Please try again.`,
+      );
     } finally {
       setExportingFormat(null);
     }
