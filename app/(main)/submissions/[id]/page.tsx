@@ -74,6 +74,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { PhaseTracker } from "@/components/shared/phase-tracker";
 import { EmptyState } from "@/components/shared/states";
 import { cn } from "@/lib/utils";
+import { GRACE_SUBMISSION_REQUIRED } from "@/lib/grace-config";
 
 interface Submission {
   id: string;
@@ -409,6 +410,9 @@ export default function SubmissionDetailPage({
     recommendation: string;
     passed: boolean;
   } | null>(null);
+  const [gracePhilosophyError, setGracePhilosophyError] = useState<string | null>(
+    null,
+  );
 
   // Review decision dialog (approve / send back) and submit blockers dialog
   const [reviewAction, setReviewAction] = useState<
@@ -747,28 +751,32 @@ export default function SubmissionDetailPage({
       if (!minimumDuration) {
         errors.push("Programme duration must be selected (4-6 years)");
       }
-      // GRACE compliance checks
-      if (!gracePhilosophyResult?.passed) {
+      // GRACE remains available as guidance, but can be made advisory while
+      // the service is unavailable during the current review exercise.
+      if (GRACE_SUBMISSION_REQUIRED && !gracePhilosophyResult?.passed) {
         errors.push("Programme philosophy must pass GRACE compliance check");
       }
-      // Check course description GRACE compliance
+      // Course descriptions are always required. GRACE compliance is only a
+      // submission blocker when the deployment enables the gate.
       try {
         const coursesRes = await fetch(
           `/api/courses?submissionId=${submission.id}`,
         );
         if (coursesRes.ok) {
           const courses = await coursesRes.json();
-          const failedCourses = courses.filter(
-            (c: {
-              description?: { gracePass?: boolean; courseContent?: string };
-              code: string;
-            }) => c.description?.courseContent && !c.description?.gracePass,
-          );
-          if (failedCourses.length > 0) {
-            const codes = failedCourses
-              .map((c: { code: string }) => c.code)
-              .join(", ");
-            errors.push(`Course descriptions not GRACE compliant: ${codes}`);
+          if (GRACE_SUBMISSION_REQUIRED) {
+            const failedCourses = courses.filter(
+              (c: {
+                description?: { gracePass?: boolean; courseContent?: string };
+                code: string;
+              }) => c.description?.courseContent && !c.description?.gracePass,
+            );
+            if (failedCourses.length > 0) {
+              const codes = failedCourses
+                .map((c: { code: string }) => c.code)
+                .join(", ");
+              errors.push(`Course descriptions not GRACE compliant: ${codes}`);
+            }
           }
           const missingDesc = courses.filter(
             (c: { description?: { courseContent?: string } }) =>
@@ -782,7 +790,7 @@ export default function SubmissionDetailPage({
           }
         }
       } catch {
-        errors.push("Could not verify course GRACE compliance");
+        errors.push("Could not verify the required course descriptions");
       }
       if (validationErrors.length > 0) {
         errors.push(...validationErrors);
@@ -847,6 +855,7 @@ export default function SubmissionDetailPage({
 
     setGraceCheckingPhilosophy(true);
     setGracePhilosophyResult(null);
+    setGracePhilosophyError(null);
 
     try {
       const res = await fetch("/api/grace-check", {
@@ -867,24 +876,18 @@ export default function SubmissionDetailPage({
         const result = await res.json();
         setGracePhilosophyResult(result);
       } else {
-        setGracePhilosophyResult({
-          scores: {},
-          pillarSummaries: {},
-          explanation: "Compliance check failed. Please try again.",
-          recommendation: "",
-          passed: false,
-        });
+        const error = (await res.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        setGracePhilosophyError(
+          error?.error || "The GRACE service could not complete the check.",
+        );
       }
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
-      setGracePhilosophyResult({
-        scores: {},
-        pillarSummaries: {},
-        explanation:
-          "Could not reach the GRACE compliance server. Please try again later.",
-        recommendation: "",
-        passed: false,
-      });
+      setGracePhilosophyError(
+        "Could not reach the GRACE compliance service. Please try again later.",
+      );
     } finally {
       if (!controller.signal.aborted) {
         setGraceCheckingPhilosophy(false);
@@ -1586,6 +1589,15 @@ export default function SubmissionDetailPage({
                     <StaffTable
                       departmentId={submission.programme.department.id}
                       disabled={!canEdit}
+                      readOnlyReason={
+                        !isOwnDepartment
+                          ? "You can only edit staff in your own department."
+                          : !["DRAFT", "CORRECTIONS_REQUIRED"].includes(
+                                submission.status,
+                              )
+                            ? "Staff entries can only be changed while the submission is a draft or has been returned for corrections."
+                            : "Your role does not have permission to edit staff entries."
+                      }
                     />
                   </div>
                 )}
@@ -1599,9 +1611,18 @@ export default function SubmissionDetailPage({
                         <div>
                           <Label>Programme Philosophy *</Label>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            Ensure this philosophy statement is{" "}
-                            <strong>GRACE compliant</strong> as proposed by the
-                            Vice Chancellor.
+                            {GRACE_SUBMISSION_REQUIRED ? (
+                              <>
+                                Ensure this philosophy statement is{" "}
+                                <strong>GRACE compliant</strong> as proposed by
+                                the Vice Chancellor.
+                              </>
+                            ) : (
+                              <>
+                                GRACE guidance is temporarily optional and will
+                                not prevent submission.
+                              </>
+                            )}
                           </p>
                         </div>
                         <div className="flex items-center gap-3">
@@ -1643,6 +1664,9 @@ export default function SubmissionDetailPage({
                             if (gracePhilosophyResult) {
                               setGracePhilosophyResult(null);
                             }
+                            if (gracePhilosophyError) {
+                              setGracePhilosophyError(null);
+                            }
                           }}
                           placeholder="The philosophy of this programme is to provide broad and high quality education... (GRACE compliant: clear, outcome-focused, and aligned with institutional goals)"
                           rows={4}
@@ -1661,6 +1685,14 @@ export default function SubmissionDetailPage({
                       {/* GRACE Compliance Feedback */}
                       {gracePhilosophyResult && (
                         <GraceResultPanel result={gracePhilosophyResult} />
+                      )}
+                      {gracePhilosophyError && (
+                        <Alert variant="destructive">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>
+                            GRACE service error: {gracePhilosophyError}
+                          </AlertDescription>
+                        </Alert>
                       )}
                     </div>
 
