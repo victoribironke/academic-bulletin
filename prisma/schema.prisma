@@ -457,7 +457,11 @@ model MasterCourse {
   ownership   CourseOwnership @default(DEPARTMENT)
   level       Int // 100, 200, 300, 400, 500
   semester    Int // 1 or 2
-  description  String?
+  description           String? // Short Registry summary
+  learningOutcomes      Json? // Central starting outcomes for GST/shared courses
+  courseContent         String? // Central starting course description/content
+  labWork               String?
+  entrepreneurialAspect String?
   discoverable Boolean @default(true)
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
