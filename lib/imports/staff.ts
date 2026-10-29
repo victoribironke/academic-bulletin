@@ -50,6 +50,19 @@ export const STAFF_TEMPLATE_EXAMPLES = [
     "chidi.okonkwo@babcock.edu.ng",
   ],
   [
+    "ADJUNCT",
+    "PROF",
+    "Adebayo",
+    "Tunde",
+    "",
+    "MALE",
+    "PHD",
+    "PROFESSOR",
+    "",
+    "Commercial Law",
+    "tunde.adebayo@babcock.edu.ng",
+  ],
+  [
     "NON_ACADEMIC",
     "MRS",
     "Adeyemi",
@@ -102,6 +115,16 @@ function normalizeQualification(value: unknown): string {
 function normalizeType(value: unknown): StaffImportData["type"] | "" {
   const normalized = enumValue(value || "ACADEMIC");
   if (normalized === "NONACADEMIC") return "NON_ACADEMIC";
+  if (
+    [
+      "ADJUNCT_ACADEMIC",
+      "ADJUNCT_ACADEMIC_STAFF",
+      "ADJUNCT_STAFF",
+      "ADJUNCT_LECTURER",
+    ].includes(normalized)
+  ) {
+    return "ADJUNCT";
+  }
   if (["ACADEMIC", "ADJUNCT", "NON_ACADEMIC"].includes(normalized)) {
     return normalized as StaffImportData["type"];
   }
