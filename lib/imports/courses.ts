@@ -35,6 +35,10 @@ export interface MasterCourseImportData {
   level: number;
   semester: number;
   description: string;
+  learningOutcomes: string[];
+  courseContent: string;
+  labWork: string;
+  entrepreneurialAspect: string;
   ownerDepartmentCode: string;
   ownerSchoolCode: string;
   discoverable: boolean;
@@ -77,6 +81,10 @@ export const MASTER_COURSE_TEMPLATE_COLUMNS: TemplateColumn[] = [
   { key: "level", label: "Level" },
   { key: "semester", label: "Semester" },
   { key: "description", label: "Description" },
+  { key: "learningOutcomes", label: "Learning Outcomes" },
+  { key: "courseContent", label: "Course Content" },
+  { key: "labWork", label: "Laboratory Work" },
+  { key: "entrepreneurialAspect", label: "Entrepreneurial Aspect" },
   { key: "ownerDepartmentCode", label: "Owner Department Code" },
   { key: "ownerSchoolCode", label: "Owner School Code" },
   { key: "discoverable", label: "Discoverable" },
@@ -91,6 +99,10 @@ export const MASTER_COURSE_TEMPLATE_EXAMPLES = [[
   100,
   1,
   "University-wide communication course.",
+  "Communicate clearly in academic settings | Produce well-structured written work",
+  "Academic reading, writing, speaking, listening, and information literacy.",
+  "Language laboratory and presentation exercises.",
+  "Professional communication portfolio.",
   "",
   "",
   "YES",
@@ -230,6 +242,18 @@ export function validateMasterCourseImportRows(
       level,
       semester,
       description: importText(getImportValue(raw, ["Description", "Course Description"])),
+      learningOutcomes: learningOutcomes(
+        getImportValue(raw, ["Learning Outcomes", "Outcomes"]),
+      ),
+      courseContent: importText(
+        getImportValue(raw, ["Course Content", "Content"]),
+      ),
+      labWork: importText(
+        getImportValue(raw, ["Laboratory Work", "Lab Work"]),
+      ),
+      entrepreneurialAspect: importText(
+        getImportValue(raw, ["Entrepreneurial Aspect", "Entrepreneurship"]),
+      ),
       ownerDepartmentCode,
       ownerSchoolCode,
       discoverable: importBoolean(getImportValue(raw, ["Discoverable"]), true),
