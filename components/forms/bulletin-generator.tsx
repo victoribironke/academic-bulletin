@@ -112,8 +112,17 @@ export function BulletinGenerator() {
 
       const response = await fetch(`/api/bulletin/export?${params}`);
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Export failed");
+        const error = (await response.json()) as {
+          error?: string;
+          issues?: Array<{ message?: string }>;
+        };
+        const details = error.issues
+          ?.map((issue) => issue.message)
+          .filter(Boolean)
+          .join(" ");
+        throw new Error(
+          [error.error || "Export failed", details].filter(Boolean).join(" "),
+        );
       }
 
       const blob = await response.blob();
