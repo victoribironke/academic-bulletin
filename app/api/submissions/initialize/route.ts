@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     if (programmesToInit.length === 0) {
       return NextResponse.json({ 
         message: "All programmes already have submissions for this cycle",
-        createdCount: 0 
+        createdCount: 0,
       });
     }
 
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ 
       message: "Initialization successful", 
-      createdCount 
+      createdCount,
     }, { status: 201 });
 
   } catch (error) {
