@@ -45,6 +45,7 @@ export interface BulletinStaff {
   qualification: string;
   specialization?: string;
   email?: string;
+  imageUrl?: string;
   type: string;
 }
 
@@ -57,6 +58,7 @@ export interface BulletinProgramme {
   departmentCode: string;
   school: string;
   schoolCode: string;
+  submissionStatus?: string;
   courses: BulletinCourse[];
   staff: BulletinStaff[];
   content?: {
@@ -144,7 +146,9 @@ export async function generateDepartmentBulletin(
   });
 
   // Format staff with new structured fields
-  const formattedStaff: BulletinStaff[] = programme.department.staff.map(
+  const formattedStaff: BulletinStaff[] = programme.department.staff
+    .filter((s) => s.isActive)
+    .map(
     (s) => ({
       id: s.id,
       fullName: formatStaffName({
@@ -158,6 +162,7 @@ export async function generateDepartmentBulletin(
       qualification: s.highestQualification,
       specialization: s.specialization || undefined,
       email: s.email || undefined,
+      imageUrl: s.imageUrl || undefined,
       type: s.type,
     }),
   );
@@ -197,6 +202,7 @@ export async function generateDepartmentBulletin(
     departmentCode: programme.department.code,
     school: programme.department.school.name,
     schoolCode: programme.department.school.code,
+    submissionStatus: submission?.status,
     courses: formattedCourses,
     staff: formattedStaff,
     content: submission?.content
@@ -301,7 +307,9 @@ export async function generateSchoolBulletin(
         },
       });
 
-      const formattedStaff: BulletinStaff[] = dept.staff.map((s) => ({
+      const formattedStaff: BulletinStaff[] = dept.staff
+        .filter((s) => s.isActive)
+        .map((s) => ({
         id: s.id,
         fullName: formatStaffName({
           title: s.title,
@@ -314,6 +322,7 @@ export async function generateSchoolBulletin(
         qualification: s.highestQualification,
         specialization: s.specialization || undefined,
         email: s.email || undefined,
+        imageUrl: s.imageUrl || undefined,
         type: s.type,
       }));
 
@@ -351,6 +360,7 @@ export async function generateSchoolBulletin(
         departmentCode: dept.code,
         school: school.name,
         schoolCode: school.code,
+        submissionStatus: submission?.status,
         courses: formattedCourses,
         staff: formattedStaff,
         content: submission?.content
@@ -454,7 +464,9 @@ export async function generateInstitutionBulletin(): Promise<BulletinData> {
           },
         });
 
-        const formattedStaff: BulletinStaff[] = dept.staff.map((s) => ({
+        const formattedStaff: BulletinStaff[] = dept.staff
+          .filter((s) => s.isActive)
+          .map((s) => ({
           id: s.id,
           fullName: formatStaffName({
             title: s.title,
@@ -467,6 +479,7 @@ export async function generateInstitutionBulletin(): Promise<BulletinData> {
           qualification: s.highestQualification,
           specialization: s.specialization || undefined,
           email: s.email || undefined,
+          imageUrl: s.imageUrl || undefined,
           type: s.type,
         }));
 
@@ -504,6 +517,7 @@ export async function generateInstitutionBulletin(): Promise<BulletinData> {
           departmentCode: dept.code,
           school: school.name,
           schoolCode: school.code,
+          submissionStatus: submission?.status,
           courses: formattedCourses,
           staff: formattedStaff,
           content: submission?.content
