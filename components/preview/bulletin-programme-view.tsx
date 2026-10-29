@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Separator } from "@/components/ui/separator";
+import { departmentLabel } from "@/lib/bulletin/document-utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BulletinProgramme, BulletinCourse } from "@/lib/bulletin/generation";
 
@@ -41,7 +42,7 @@ export function BulletinProgrammeView({
       <div className="text-center space-y-2">
         <h1 className="text-2xl font-bold">{programme.school.toUpperCase()}</h1>
         <h2 className="text-xl font-semibold">
-          Department of {programme.department}
+          {departmentLabel(programme.department)}
         </h2>
         <h3 className="text-lg font-medium">{programme.name}</h3>
       </div>
