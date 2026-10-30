@@ -1,5 +1,5 @@
 /**
- * GRACE checks, run directly against Gemini from the Next.js server.
+ * GRACE checks, run with Claude (Anthropic API) from the Next.js server.
  *
  * Two checks:
  *  - runGraceCheck: scores a course description / philosophy against the
@@ -8,10 +8,12 @@
  *
  * Server-only: never import this from a client component (it reads the API key).
  */
-import { GEMINI_MODEL } from "@/lib/site-config";
-import { GoogleGenAI, ThinkingLevel, Type } from "@google/genai";
+import Anthropic from "@anthropic-ai/sdk";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { z } from "zod";
+import { AI_MODEL } from "@/lib/site-config";
 
-export const GRACE_MODEL = GEMINI_MODEL;
+export const GRACE_MODEL = AI_MODEL;
 export const GRACE_MINIMUM_WORDS = 150;
 
 export class GraceServiceError extends Error {
@@ -24,56 +26,46 @@ export class GraceServiceError extends Error {
   }
 }
 
-let client: GoogleGenAI | null = null;
+let client: Anthropic | null = null;
 
-function getClient(): GoogleGenAI | null {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+function getClient(): Anthropic | null {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
-  if (!client) client = new GoogleGenAI({ apiKey });
+  // One retry keeps a temporary hiccup from failing the check, without making
+  // the person wait through several back-offs.
+  if (!client) client = new Anthropic({ apiKey, maxRetries: 1, timeout: 60_000 });
   return client;
 }
 
 const SYSTEM_INSTRUCTION =
-  "You are a specialized institutional compliance auditor for Babcock University. " +
-  "Output ONLY valid JSON.";
+  "You are a specialized institutional compliance auditor for Babcock University.";
 
-const pillar = {
-  type: Type.OBJECT,
-  properties: {
-    score: { type: Type.INTEGER },
-    summary: { type: Type.STRING },
-  },
-  required: ["score", "summary"],
-};
+const Pillar = z.object({
+  score: z.number().int().describe("Score from 0 to 5 using the rubric"),
+  summary: z.string(),
+});
 
-const GRACE_RESPONSE_SCHEMA = {
-  type: Type.OBJECT,
-  properties: {
-    G_Global_Relevance: pillar,
-    R_Research_Focus: pillar,
-    A_Adventist_Rooted: pillar,
-    C_Competent_Community: pillar,
-    E_Entrepreneurship: pillar,
-    Vision_Alignment_Summary: { type: Type.STRING },
-  },
-  required: [
-    "G_Global_Relevance",
-    "R_Research_Focus",
-    "A_Adventist_Rooted",
-    "C_Competent_Community",
-    "E_Entrepreneurship",
-    "Vision_Alignment_Summary",
-  ],
-};
+const GraceResponse = z.object({
+  G_Global_Relevance: Pillar,
+  R_Research_Focus: Pillar,
+  A_Adventist_Rooted: Pillar,
+  C_Competent_Community: Pillar,
+  E_Entrepreneurship: Pillar,
+  Vision_Alignment_Summary: z.string(),
+});
 
-const IMAGE_RESPONSE_SCHEMA = {
-  type: Type.OBJECT,
-  properties: {
-    result: { type: Type.STRING, enum: ["pass", "fail"] },
-    reason: { type: Type.STRING },
-  },
-  required: ["result", "reason"],
-};
+const ImageResponse = z.object({
+  result: z.enum(["pass", "fail"]),
+  reason: z.string(),
+});
+
+type ImageMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+const IMAGE_MEDIA_TYPES: ImageMediaType[] = [
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+];
 
 function createGracePrompt(title: string, content: string): string {
   return `Evaluate if this course description aligns with the Administration's GRACE vision.
@@ -98,8 +90,7 @@ DIRECTIVE: Be highly strict. DO NOT award high scores (3, 4, or 5) unless the co
 Course Title: ${title}
 Description: "${content}"
 
-Task: provide a score (0-5) for each pillar and a brief "Vision Alignment" summary.
-Format: JSON only.`;
+Task: provide a score (0-5) for each pillar and a brief "Vision Alignment" summary.`;
 }
 
 const IMAGE_PROMPT =
@@ -269,26 +260,22 @@ export async function runGraceCheck(
   }
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await ai.messages.parse({
       model: GRACE_MODEL,
-      contents: createGracePrompt(title, content),
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        responseMimeType: "application/json",
-        responseSchema: GRACE_RESPONSE_SCHEMA,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        abortSignal: AbortSignal.timeout(60_000),
-      },
+      max_tokens: 8000,
+      system: SYSTEM_INSTRUCTION,
+      messages: [{ role: "user", content: createGracePrompt(title, content) }],
+      // A scoring task: light reasoning keeps it quick and cheap.
+      output_config: { effort: "low", format: zodOutputFormat(GraceResponse) },
     });
 
-    const text = response.text?.trim();
-    if (!text) {
+    if (response.stop_reason === "refusal" || !response.parsed_output) {
       throw new GraceServiceError(
         "The GRACE service returned no assessment. Please try again.",
       );
     }
     return {
-      ...parseGraceAnalysis(text, GRACE_MODEL),
+      ...parseGraceAnalysis(response.parsed_output, GRACE_MODEL),
       wordCount,
     };
   } catch (error) {
@@ -306,7 +293,7 @@ export type ImageCheckFailure = {
   message: string;
 };
 
-/** Asks Gemini whether a photo is professional enough for the bulletin. */
+/** Asks Claude whether a photo is professional enough for the bulletin. */
 export async function checkProfessionalImageFile(
   file: File,
 ): Promise<{ ok: true } | ImageCheckFailure> {
@@ -320,41 +307,37 @@ export async function checkProfessionalImageFile(
     };
   }
 
+  const mediaType = IMAGE_MEDIA_TYPES.find((t) => t === file.type);
+  if (!mediaType) {
+    return {
+      ok: false,
+      status: 400,
+      message: "The uploaded file was not accepted as a valid image. Use JPG, PNG, or WEBP.",
+    };
+  }
+
   try {
     const data = Buffer.from(await file.arrayBuffer()).toString("base64");
-    const response = await ai.models.generateContent({
+    const response = await ai.messages.parse({
       model: GRACE_MODEL,
-      contents: [
+      max_tokens: 4000,
+      messages: [
         {
           role: "user",
-          parts: [
-            { text: IMAGE_PROMPT },
-            { inlineData: { mimeType: file.type, data } },
+          content: [
+            { type: "image", source: { type: "base64", media_type: mediaType, data } },
+            { type: "text", text: IMAGE_PROMPT },
           ],
         },
       ],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: IMAGE_RESPONSE_SCHEMA,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        abortSignal: AbortSignal.timeout(60_000),
-      },
+      output_config: { effort: "low", format: zodOutputFormat(ImageResponse) },
     });
 
-    let result: string | undefined;
-    let reason = "";
-    try {
-      const parsed = JSON.parse(response.text ?? "{}") as {
-        result?: string;
-        reason?: string;
-      };
-      result = parsed.result?.toLowerCase();
-      reason = parsed.reason?.trim() ?? "";
-    } catch {
-      // Malformed output is treated as a failed review below.
-    }
+    // A refusal or unreadable answer counts as a failed review.
+    const parsed = response.stop_reason === "refusal" ? null : response.parsed_output;
+    const reason = parsed?.reason.trim() ?? "";
 
-    if (result === "pass") return { ok: true };
+    if (parsed?.result === "pass") return { ok: true };
 
     return {
       ok: false,
