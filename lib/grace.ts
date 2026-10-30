@@ -106,9 +106,10 @@ Task: score all five pillars, provide a brief Vision Alignment summary, and retu
 const IMAGE_PROMPT =
   "You are a professional content auditor for an institutional bulletin. " +
   "Evaluate if this image is professional and fit for submission in an official, high-quality university bulletin. " +
-  "It should be in focus, appropriately framed, visually pleasing, and suitable for a professional academic context. " +
-  "IT SHOULD NOT BE BLURRY BUT CLEAR. IT SHOULD BE A PORTRAIT. IT SHOULD HAVE A SUITABLE BACKGROUND. " +
-  "IF IT DOES NOT MEET ANY OF THESE REQUIREMENTS IT SHOULD FAIL AND THE REASON SHOULD BE EXPLAINED. " +
+  "It must be a clear portrait of one person looking towards the camera, with the face centred and the head and shoulders fully visible. " +
+  "It must have even lighting, a plain uncluttered background, and professional clothing suitable for an academic bulletin. " +
+  "It must not be a group photo, screenshot, filtered image, landscape crop, or contain logos or text, and nothing should hide the face. " +
+  "If any requirement is not met, it should fail and the reason should be explained. " +
   "Return the result as 'pass' or 'fail', and explain your reasoning.";
 
 // ── Result parsing ───────────────────────────────────────────────────────────
