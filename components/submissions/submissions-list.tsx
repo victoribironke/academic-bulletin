@@ -22,10 +22,12 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { Progress } from "@/components/ui/progress";
 import { TableCard, TableToolbar } from "@/components/shared/table-toolbar";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/shared/states";
 import { PHASE_NAMES, STATUS_LABELS } from "@/lib/submissions/phases";
 import { cn } from "@/lib/utils";
+import type { SubmissionProgress } from "@/lib/submissions/progress";
 
 export interface SubmissionRow {
   id: string;
@@ -49,6 +51,7 @@ export interface SubmissionRow {
   createdBy: { id: string; firstName: string; lastName: string };
   _count: { comments: number; phaseTransitions: number };
   cycle: { id: string; name: string; isActive: boolean } | null;
+  progress: SubmissionProgress;
 }
 
 interface Cycle {
@@ -303,8 +306,30 @@ export function SubmissionsList({
                         {PHASE_NAMES[submission.currentPhase]}
                       </p>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="min-w-44">
                       <StatusBadge status={submission.status} />
+                      <div
+                        className="mt-2 space-y-1"
+                        title={submission.progress.sections
+                          .map((section) => `${section.label}: ${section.percentage}%`)
+                          .join("\n")}
+                      >
+                        <div className="flex items-center justify-between gap-3 text-xs">
+                          <span className="text-muted-foreground">Content progress</span>
+                          <span className="font-medium tabular-nums">
+                            {submission.progress.percentage}%
+                          </span>
+                        </div>
+                        <Progress
+                          value={submission.progress.percentage}
+                          aria-label={`${submission.progress.percentage}% of bulletin content completed`}
+                          className="h-1.5"
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          {submission.progress.completedSections} of{" "}
+                          {submission.progress.totalSections} sections complete
+                        </p>
+                      </div>
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       <span className="text-sm">{submission.cycle?.name ?? "—"}</span>
