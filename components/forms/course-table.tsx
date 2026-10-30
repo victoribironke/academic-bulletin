@@ -714,13 +714,13 @@ export function CourseTable({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2">
           <BookOpen className="h-5 w-5" />
           <CardTitle>Course Structure</CardTitle>
         </div>
         {!disabled && (
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
             <Button variant="outline" onClick={openBulletinDialog}>
               <History className="h-4 w-4 mr-2" />
               Previous Bulletin
@@ -738,7 +738,7 @@ export function CourseTable({
               }}
             >
               <Upload className="h-4 w-4 mr-2" />
-              Bulk Upload
+              Bulk Upload Courses
             </Button>
             <Button variant="outline" onClick={openImportDialog}>
               <Import className="h-4 w-4 mr-2" />
@@ -984,8 +984,8 @@ export function CourseTable({
         open={bulkImportOpen}
         onOpenChange={setBulkImportOpen}
         title="Bulk Upload Departmental Courses"
-        description="Upload an Excel or CSV file for this bulletin submission. Course details and learning content are validated before the complete batch is saved."
-        templateFilename="course-structure-bulk-upload-template.csv"
+        description="Download the Excel template and enter courses on its Upload sheet. Course structure, learning outcomes, and course content are validated before import."
+        templateFilename="course-structure-bulk-upload-template.xlsx"
         templateColumns={COURSE_TEMPLATE_COLUMNS}
         templateRows={COURSE_TEMPLATE_EXAMPLES}
         previewColumns={[
