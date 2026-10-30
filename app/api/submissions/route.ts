@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
 import { preloadGstCoursesForSubmission } from "@/lib/courses/gst-pool";
+import { calculateSubmissionProgress } from "@/lib/submissions/progress";
 
 const SUBMISSION_STATUSES = [
   "DRAFT",
@@ -85,6 +86,11 @@ export async function GET(request: NextRequest) {
                 id: true,
                 name: true,
                 code: true,
+                _count: {
+                  select: {
+                    staff: { where: { isActive: true } },
+                  },
+                },
                 school: {
                   select: { id: true, name: true, code: true },
                 },
@@ -106,11 +112,60 @@ export async function GET(request: NextRequest) {
         cycle: {
           select: { id: true, name: true, isActive: true },
         },
+        content: {
+          select: {
+            programmeInfo: true,
+            philosophy: true,
+            mission: true,
+            vision: true,
+            objectives: true,
+            uniqueFeatures: true,
+            employability: true,
+            utmeRequirements: true,
+            directEntryRequirements: true,
+            transferRequirements: true,
+            minimumDuration: true,
+            graduationRequirements: true,
+            minimumCGPA: true,
+            totalUnits: true,
+            sectionF: true,
+            sectionG: true,
+          },
+        },
+        courses: {
+          select: {
+            description: {
+              select: {
+                courseContent: true,
+                learningOutcomes: true,
+              },
+            },
+          },
+        },
       },
       orderBy: { updatedAt: "desc" },
     });
 
-    return NextResponse.json(submissions);
+    return NextResponse.json(
+      submissions.map((submission) => {
+        const { content, courses, ...submissionFields } = submission;
+        const { _count: departmentCount, ...department } =
+          submissionFields.programme.department;
+
+        return {
+          ...submissionFields,
+          programme: {
+            ...submissionFields.programme,
+            department,
+          },
+          progress: calculateSubmissionProgress({
+            content,
+            activeStaffCount: departmentCount.staff,
+            courses,
+          }),
+        };
+      }),
+    );
   } catch (error) {
     console.error("Failed to fetch submissions:", error);
     return NextResponse.json(
