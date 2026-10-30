@@ -8,7 +8,7 @@ import {
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
 
-// Gemini calls can take a while; allow up to a minute.
+// GRACE model calls can take a while; allow up to a minute.
 export const maxDuration = 60;
 
 // POST /api/grace-check - Start a GRACE compliance check
