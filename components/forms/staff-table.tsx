@@ -848,8 +848,8 @@ export function StaffTable({
         open={bulkImportOpen}
         onOpenChange={setBulkImportOpen}
         title="Bulk Upload Staff"
-        description="Upload an Excel or CSV file for this department. All rows are validated before anything is saved. Staff photos remain individually managed."
-        templateFilename="staff-bulk-upload-template.csv"
+        description="Download the Excel template and enter staff only on its Upload sheet. All rows are validated before anything is saved. Staff photos remain individually managed."
+        templateFilename="staff-bulk-upload-template.xlsx"
         templateColumns={STAFF_TEMPLATE_COLUMNS}
         templateRows={STAFF_TEMPLATE_EXAMPLES}
         previewColumns={[
