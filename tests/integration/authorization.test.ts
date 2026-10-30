@@ -61,6 +61,7 @@ import { POST as checkGrace } from "@/app/api/grace-check/route";
 import { GET as listMasterCourses } from "@/app/api/master-courses/route";
 import { PATCH as updateMasterCourse } from "@/app/api/master-courses/[id]/route";
 import { canExportBulletin } from "@/lib/bulletin/access";
+import { sendDailyDigests } from "@/lib/email/notifications";
 import { GET as getCurrentUser } from "@/app/api/users/me/route";
 import { POST as bulkImportStaff } from "@/app/api/staff/bulk/route";
 import { POST as createStaff } from "@/app/api/staff/route";
@@ -1071,5 +1072,76 @@ describe("route authorization", () => {
         select: { submissionId: true, gracePass: true },
       }),
     ).toBeNull();
+  });
+});
+
+describe("daily summary emails", () => {
+  it("sends one summary per person and never repeats activity", async () => {
+    // Earlier tests leave transitions behind; treat them as already summarised.
+    await prisma.phaseTransition.updateMany({
+      where: { notifiedAt: null },
+      data: { notifiedAt: new Date() },
+    });
+
+    const submitted = new Date(Date.now() - 60 * 60 * 1000);
+    await prisma.phaseTransition.createMany({
+      data: [
+        {
+          submissionId: ids.submission,
+          fromPhase: 1,
+          toPhase: 1,
+          action: "SUBMIT",
+          performedById: ids.hod,
+          transitionedAt: submitted,
+        },
+        {
+          submissionId: ids.submission,
+          fromPhase: 1,
+          toPhase: 1,
+          action: "REJECT",
+          remarks: "Please expand the programme philosophy.",
+          performedById: ids.admin,
+          transitionedAt: new Date(submitted.getTime() + 60_000),
+        },
+      ],
+    });
+
+    const sent: Array<{ to: string[]; subject: string; text: string }> = [];
+    const previousKey = process.env.RESEND_API_KEY;
+    process.env.RESEND_API_KEY = "test-key";
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (_url, init) => {
+        sent.push(JSON.parse(String(init?.body)));
+        return new Response("{}", { status: 200 });
+      });
+
+    try {
+      const first = await sendDailyDigests();
+      expect(first).toMatchObject({ transitions: 2, failed: 0 });
+
+      // Every active admin gets one combined email about the submission.
+      const adminEmails = sent.filter((m) => m.subject.includes("to review"));
+      expect(adminEmails.map((m) => m.to[0]).sort()).toEqual(
+        [`${ids.admin}@example.edu`, `${ids.super}@example.edu`].sort(),
+      );
+
+      // The department's HOD gets the decision with the remarks; the
+      // deactivated HOD in the same department gets nothing.
+      const hodEmails = sent.filter((m) => m.subject.includes("your bulletin"));
+      expect(hodEmails.map((m) => m.to[0])).toEqual([`${ids.hod}@example.edu`]);
+      expect(hodEmails[0].subject).toContain("changes requested");
+      expect(hodEmails[0].text).toContain("Please expand the programme philosophy.");
+
+      // A second run finds nothing new and sends nothing.
+      sent.length = 0;
+      const second = await sendDailyDigests();
+      expect(second.transitions).toBe(0);
+      expect(sent).toHaveLength(0);
+    } finally {
+      fetchSpy.mockRestore();
+      if (previousKey === undefined) delete process.env.RESEND_API_KEY;
+      else process.env.RESEND_API_KEY = previousKey;
+    }
   });
 });
