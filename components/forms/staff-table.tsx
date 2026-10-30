@@ -25,6 +25,7 @@ import {
   type StaffImportData,
 } from "@/lib/imports/staff";
 import { validateStaffEntryRows } from "@/lib/validation/staff-entry";
+import { PhotoUploadGuidance } from "@/components/shared/photo-upload-guidance";
 
 // Updated StaffMember interface with new structured fields
 interface StaffMember {
@@ -719,13 +720,7 @@ export function StaffTable({
 
           {!imageStaff ? (
             <div className="flex-1 min-h-0 overflow-y-auto space-y-2 py-2">
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertDescription className="text-xs">
-                  <strong>Photo guidelines:</strong> JPEG, PNG, or WebP. Max 4 MB.
-                  Passport-style, at least 300×400 px, with a plain background.
-                </AlertDescription>
-              </Alert>
+              <PhotoUploadGuidance compact />
               {allStaffForPhotos.map((staff) => (
                 <div
                   key={staff.id}
@@ -767,12 +762,7 @@ export function StaffTable({
             </div>
           ) : (
             <div className="flex-1 min-h-0 overflow-y-auto space-y-4 py-2">
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertDescription className="text-xs">
-                  Upload a passport-style photo. JPEG, PNG, or WebP, max 4 MB, at least 300×400 px. Use a plain background and ensure the face is clearly visible.
-                </AlertDescription>
-              </Alert>
+              <PhotoUploadGuidance />
 
               <div className="flex justify-center">
                 {imageStaff.imageUrl ? (
