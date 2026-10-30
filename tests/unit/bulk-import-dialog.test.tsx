@@ -60,6 +60,14 @@ describe("bulk import dialog", () => {
     const importButton = await screen.findByRole("button", {
       name: "Import 1 Valid Row",
     });
+    const dialog = document.querySelector('[data-slot="dialog-content"]');
+    const footer = document.querySelector('[data-slot="dialog-footer"]');
+    const scrollArea = document.querySelector('[data-slot="scroll-area"]');
+    expect(dialog?.className).toContain(
+      "grid-rows-[auto_auto_minmax(0,1fr)_auto]",
+    );
+    expect(footer?.className).toContain("z-20");
+    expect(scrollArea?.className).toContain("flex-1");
     expect((importButton as HTMLButtonElement).disabled).toBe(false);
     expect(input).toHaveProperty("value", "");
 
