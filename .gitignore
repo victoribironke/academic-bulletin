@@ -56,3 +56,6 @@ prisma/migrations/*
 
 updates-2-feb-2026.md
 !.env.example
+
+# local test database (scripts/test-with-postgres.mjs)
+/.test-postgres/
