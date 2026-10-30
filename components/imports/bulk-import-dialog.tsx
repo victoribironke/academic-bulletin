@@ -24,7 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  downloadCsvTemplate,
+  downloadSpreadsheetTemplate,
   parseSpreadsheetFile,
   type SpreadsheetRecord,
   type TemplateColumn,
@@ -98,6 +98,14 @@ export function BulkImportDialog<T>({
     }
   };
 
+  const handleTemplateDownload = async () => {
+    try {
+      await downloadSpreadsheetTemplate(templateFilename, templateColumns, templateRows);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to create the template.");
+    }
+  };
+
   const errorCount = rows.reduce((total, row) => total + row.errors.length, 0);
   const validRows = rows.filter((row) => row.errors.length === 0 && row.data);
 
@@ -127,7 +135,7 @@ export function BulkImportDialog<T>({
           <Button
             type="button"
             variant="outline"
-            onClick={() => downloadCsvTemplate(templateFilename, templateColumns, templateRows)}
+            onClick={handleTemplateDownload}
           >
             <Download className="h-4 w-4 mr-2" />
             Download Template
