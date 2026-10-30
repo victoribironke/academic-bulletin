@@ -133,13 +133,19 @@ export function BulkImportDialog<T>({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader>
+      <DialogContent
+        className={`max-w-5xl overflow-hidden grid grid-rows-[auto_auto_minmax(0,1fr)_auto] ${
+          rows.length > 0
+            ? "h-[calc(100dvh-2rem)] max-h-[56rem] sm:h-[90vh]"
+            : "max-h-[90vh]"
+        }`}
+      >
+        <DialogHeader className="shrink-0">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-wrap items-center gap-3 border rounded-md p-4 bg-muted/30">
+        <div className="shrink-0 flex flex-wrap items-center gap-3 border rounded-md p-4 bg-muted/30">
           <Button
             type="button"
             variant="outline"
@@ -168,8 +174,9 @@ export function BulkImportDialog<T>({
           )}
         </div>
 
-        {rows.length > 0 && (
-          <>
+        <div className="min-h-0 overflow-hidden">
+          {rows.length > 0 && (
+            <div className="flex h-full min-h-0 flex-col gap-4">
             <Alert variant={errorCount > 0 ? "destructive" : "default"}>
               {errorCount > 0 ? (
                 <AlertCircle className="h-4 w-4" />
@@ -183,7 +190,7 @@ export function BulkImportDialog<T>({
               </AlertDescription>
             </Alert>
 
-            <ScrollArea className="flex-1 min-h-0 max-h-[52vh] border rounded-md">
+            <ScrollArea className="min-h-0 flex-1 border rounded-md">
               <Table>
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
@@ -211,10 +218,11 @@ export function BulkImportDialog<T>({
                 </TableBody>
               </Table>
             </ScrollArea>
-          </>
-        )}
+            </div>
+          )}
+        </div>
 
-        <DialogFooter>
+        <DialogFooter className="relative z-20 shrink-0 border-t bg-background pt-4">
           <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={isImporting}>
             Cancel
           </Button>
