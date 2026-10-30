@@ -10,6 +10,9 @@ export interface ValidatedImportRow<T> {
 export interface TemplateColumn {
   key: string;
   label: string;
+  required?: boolean;
+  options?: string[];
+  guidance?: string;
 }
 
 function parseCsvRows(text: string): string[][] {
@@ -112,6 +115,117 @@ export function downloadCsvTemplate(
     .join("\r\n");
   const url = URL.createObjectURL(
     new Blob([csv], { type: "text/csv;charset=utf-8" }),
+  );
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function createExcelTemplateBuffer(
+  columns: TemplateColumn[],
+  exampleRows: unknown[][],
+) {
+  const ExcelJS = await import("exceljs");
+  const workbook = new ExcelJS.Workbook();
+  const uploadSheet = workbook.addWorksheet("Upload", {
+    views: [{ state: "frozen", ySplit: 1 }],
+  });
+  const headerRow = uploadSheet.addRow(columns.map((column) => column.label));
+  headerRow.height = 28;
+  headerRow.eachCell((cell, columnNumber) => {
+    const column = columns[columnNumber - 1];
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: column.required ? "FFB8860B" : "FF17365D" },
+    };
+    cell.alignment = { vertical: "middle", wrapText: true };
+  });
+
+  columns.forEach((column, index) => {
+    const worksheetColumn = uploadSheet.getColumn(index + 1);
+    worksheetColumn.width = Math.min(Math.max(column.label.length + 4, 16), 34);
+
+    if (column.options?.length) {
+      const optionList = column.options.join(",");
+      for (let rowNumber = 2; rowNumber <= 501; rowNumber += 1) {
+        uploadSheet.getCell(rowNumber, index + 1).dataValidation = {
+          type: "list",
+          allowBlank: !column.required,
+          formulae: [`"${optionList}"`],
+          showErrorMessage: true,
+          errorTitle: "Invalid value",
+          error: "Choose one of the values in the list.",
+        };
+      }
+    }
+  });
+  uploadSheet.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: 1, column: columns.length },
+  };
+
+  const instructionsSheet = workbook.addWorksheet("Instructions");
+  instructionsSheet.getColumn(1).width = 30;
+  instructionsSheet.getColumn(2).width = 85;
+  instructionsSheet.addRow(["BULK UPLOAD TEMPLATE"]);
+  instructionsSheet.getCell("A1").font = { bold: true, size: 16, color: { argb: "FF17365D" } };
+  instructionsSheet.addRow([]);
+  instructionsSheet.addRow(["How to use", "Enter records only on the Upload sheet, beginning on row 2."]);
+  instructionsSheet.addRow(["Required fields", "Gold headers are required. Blue headers are optional."]);
+  instructionsSheet.addRow(["Do not change headers", "Keep the first row and the worksheet names unchanged."]);
+  instructionsSheet.addRow(["Examples", "The Examples sheet is for guidance only and will not be uploaded."]);
+  instructionsSheet.addRow(["Maximum rows", "Up to 500 records can be uploaded at once."]);
+  instructionsSheet.addRow([]);
+  instructionsSheet.addRow(["Column", "Accepted values / guidance"]);
+  instructionsSheet.getRow(instructionsSheet.rowCount).font = { bold: true };
+  columns.forEach((column) => {
+    const guidance = column.options?.length
+      ? column.options.join(", ")
+      : column.guidance || (column.required ? "Required" : "Optional");
+    instructionsSheet.addRow([column.label, guidance]);
+  });
+
+  if (exampleRows.length > 0) {
+    const exampleSheet = workbook.addWorksheet("Examples", {
+      views: [{ state: "frozen", ySplit: 1 }],
+    });
+    const exampleHeader = exampleSheet.addRow(columns.map((column) => column.label));
+    exampleHeader.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    exampleHeader.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF17365D" },
+    };
+    exampleRows.forEach((row) => exampleSheet.addRow(row));
+    columns.forEach((column, index) => {
+      exampleSheet.getColumn(index + 1).width = Math.min(Math.max(column.label.length + 4, 16), 34);
+    });
+  }
+
+  return workbook.xlsx.writeBuffer();
+}
+
+export async function downloadSpreadsheetTemplate(
+  filename: string,
+  columns: TemplateColumn[],
+  exampleRows: unknown[][],
+) {
+  if (!filename.toLowerCase().endsWith(".xlsx")) {
+    downloadCsvTemplate(filename, columns, exampleRows);
+    return;
+  }
+
+  const buffer = await createExcelTemplateBuffer(columns, exampleRows);
+  const url = URL.createObjectURL(
+    new Blob([buffer as BlobPart], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }),
   );
   const anchor = document.createElement("a");
   anchor.href = url;
