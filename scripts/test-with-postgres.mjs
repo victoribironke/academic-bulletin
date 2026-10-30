@@ -4,7 +4,6 @@ import {
   mkdirSync,
   readdirSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const port = Number(process.env.TEST_DATABASE_PORT || "55432");
@@ -79,9 +78,11 @@ try {
     pgCtl = postgresBinary("pg_ctl");
     const psql = postgresBinary("psql");
     const createdb = postgresBinary("createdb");
+    // Kept inside the project (git-ignored) rather than the system temp
+    // folder: Windows' temp clean-up deletes the empty folders Postgres needs.
     dataDirectory =
       process.env.TEST_POSTGRES_DATA_DIR ||
-      join(tmpdir(), "academic-bulletin-vitest-postgres-v2");
+      join(process.cwd(), ".test-postgres");
     mkdirSync(dataDirectory, { recursive: true });
 
     if (!existsSync(join(dataDirectory, "PG_VERSION"))) {
