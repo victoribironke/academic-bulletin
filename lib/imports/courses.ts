@@ -45,17 +45,17 @@ export interface MasterCourseImportData {
 }
 
 export const COURSE_TEMPLATE_COLUMNS: TemplateColumn[] = [
-  { key: "code", label: "Course Code" },
-  { key: "title", label: "Course Title" },
-  { key: "units", label: "Units" },
-  { key: "status", label: "Status" },
-  { key: "semester", label: "Semester" },
-  { key: "level", label: "Level" },
-  { key: "prerequisites", label: "Prerequisites" },
-  { key: "learningOutcomes", label: "Learning Outcomes" },
-  { key: "courseContent", label: "Course Content" },
-  { key: "labWork", label: "Laboratory Work" },
-  { key: "entrepreneurialAspect", label: "Entrepreneurial Aspect" },
+  { key: "code", label: "Course Code", required: true, guidance: "Use a code such as COS 101." },
+  { key: "title", label: "Course Title", required: true },
+  { key: "units", label: "Units", required: true, options: ["1", "2", "3", "4", "5", "6"] },
+  { key: "status", label: "Status", required: true, options: ["CORE", "ELECTIVE"] },
+  { key: "semester", label: "Semester", required: true, options: ["1", "2"] },
+  { key: "level", label: "Level", required: true, options: ["100", "200", "300", "400", "500", "600"] },
+  { key: "prerequisites", label: "Prerequisites", guidance: "Optional course codes or prerequisite description." },
+  { key: "learningOutcomes", label: "Learning Outcomes", guidance: "Separate multiple outcomes with |, semicolons, or new lines." },
+  { key: "courseContent", label: "Course Content", guidance: "Detailed course description/content." },
+  { key: "labWork", label: "Laboratory Work", guidance: "Optional; complete where applicable." },
+  { key: "entrepreneurialAspect", label: "Entrepreneurial Aspect", guidance: "Optional practical or entrepreneurial component." },
 ];
 
 export const COURSE_TEMPLATE_EXAMPLES = [[
@@ -120,6 +120,9 @@ function numberValue(value: unknown): number {
 }
 
 function learningOutcomes(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map(importText).filter(Boolean);
+  }
   return importText(value)
     .split(/\r?\n|\s*\|\s*|\s*;\s*/)
     .map((item) => item.trim())
