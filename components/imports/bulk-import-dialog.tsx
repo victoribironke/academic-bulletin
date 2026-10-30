@@ -62,14 +62,17 @@ export function BulkImportDialog<T>({
   onImport,
 }: BulkImportDialogProps<T>) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const readRequestRef = useRef(0);
   const [filename, setFilename] = useState("");
   const [rows, setRows] = useState<ValidatedImportRow<T>[]>([]);
   const [isReading, setIsReading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
 
   const reset = () => {
+    readRequestRef.current += 1;
     setFilename("");
     setRows([]);
+    setIsReading(false);
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -80,10 +83,13 @@ export function BulkImportDialog<T>({
 
   const handleFile = async (file?: File) => {
     if (!file) return;
+    const requestId = readRequestRef.current + 1;
+    readRequestRef.current = requestId;
     setIsReading(true);
     setFilename(file.name);
     try {
       const records = await parseSpreadsheetFile(file);
+      if (requestId !== readRequestRef.current) return;
       if (records.length === 0) {
         setRows([]);
         toast.error("The spreadsheet does not contain any data rows.");
@@ -91,10 +97,11 @@ export function BulkImportDialog<T>({
       }
       setRows(validateRows(records));
     } catch (error) {
+      if (requestId !== readRequestRef.current) return;
       setRows([]);
       toast.error(error instanceof Error ? error.message : "Unable to read the spreadsheet.");
     } finally {
-      setIsReading(false);
+      if (requestId === readRequestRef.current) setIsReading(false);
     }
   };
 
@@ -108,9 +115,10 @@ export function BulkImportDialog<T>({
 
   const errorCount = rows.reduce((total, row) => total + row.errors.length, 0);
   const validRows = rows.filter((row) => row.errors.length === 0 && row.data);
+  const invalidRows = rows.filter((row) => row.errors.length > 0 || !row.data);
 
   const importRows = async () => {
-    if (errorCount > 0 || validRows.length === 0) return;
+    if (validRows.length === 0) return;
     setIsImporting(true);
     try {
       await onImport(validRows.map((row) => row.data as T));
@@ -146,7 +154,11 @@ export function BulkImportDialog<T>({
             accept=".csv,.xlsx"
             className="max-w-sm"
             disabled={isReading || isImporting}
-            onChange={(event) => handleFile(event.target.files?.[0])}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              void handleFile(file);
+            }}
           />
           {isReading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
           {filename && !isReading && (
@@ -166,7 +178,7 @@ export function BulkImportDialog<T>({
               )}
               <AlertDescription>
                 {errorCount > 0
-                  ? `${errorCount} validation issue(s) must be corrected before import. No rows have been saved.`
+                  ? `${validRows.length} valid row(s) are ready to import. ${invalidRows.length} row(s) with ${errorCount} validation issue(s) will be skipped.`
                   : `${validRows.length} row(s) are ready to import.`}
               </AlertDescription>
             </Alert>
@@ -208,10 +220,11 @@ export function BulkImportDialog<T>({
           </Button>
           <Button
             onClick={importRows}
-            disabled={isReading || isImporting || validRows.length === 0 || errorCount > 0}
+            disabled={isReading || isImporting || validRows.length === 0}
           >
             {isImporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-            Import {validRows.length || ""} Row{validRows.length === 1 ? "" : "s"}
+            Import {validRows.length || ""}{errorCount > 0 ? " Valid" : ""} Row
+            {validRows.length === 1 ? "" : "s"}
           </Button>
         </DialogFooter>
       </DialogContent>
