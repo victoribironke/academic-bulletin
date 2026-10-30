@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   countWords,
   GraceServiceError,
@@ -13,6 +13,7 @@ const complete = {
   C_Competent_Community: { score: 3, summary: "Community impact is explicit." },
   E_Entrepreneurship: { score: 3, summary: "Innovation is explicit." },
   Vision_Alignment_Summary: "Meets the stated standard.",
+  Revised_Content: Array.from({ length: 150 }, () => "improved").join(" "),
 };
 
 describe("GRACE validation", () => {
@@ -23,7 +24,10 @@ describe("GRACE validation", () => {
   });
 
   it("passes only a complete result whose five scores meet the threshold", () => {
-    expect(parseGraceAnalysis(complete).passed).toBe(true);
+    expect(parseGraceAnalysis(complete)).toMatchObject({
+      passed: true,
+      suggestedContent: complete.Revised_Content,
+    });
     expect(
       parseGraceAnalysis({
         ...complete,
@@ -33,11 +37,16 @@ describe("GRACE validation", () => {
   });
 
   it("enforces the 150-word minimum before calling the AI service", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
     const content = Array.from({ length: 149 }, () => "word").join(" ");
-    expect(countWords(content)).toBe(149);
-    const result = await runGraceCheck("Test", content);
-    expect(result.passed).toBe(false);
-    expect(result.wordCount).toBe(149);
-    expect(result.explanation).toContain("At least 150 words");
+    try {
+      expect(countWords(content)).toBe(149);
+      const result = await runGraceCheck("Test", content);
+      expect(result.passed).toBe(false);
+      expect(result.wordCount).toBe(149);
+      expect(result.explanation).toContain("At least 150 words");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
