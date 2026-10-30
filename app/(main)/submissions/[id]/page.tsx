@@ -75,6 +75,7 @@ import { PhaseTracker } from "@/components/shared/phase-tracker";
 import { EmptyState } from "@/components/shared/states";
 import { cn } from "@/lib/utils";
 import { GRACE_SUBMISSION_REQUIRED } from "@/lib/grace-config";
+import { PhotoUploadGuidance } from "@/components/shared/photo-upload-guidance";
 
 interface Submission {
   id: string;
@@ -1458,9 +1459,7 @@ export default function SubmissionDetailPage({
                 {/* Deans & HODs Section */}
                 {activeSection === "deans_hods" && (
                   <div className="space-y-6">
-                    <p className="text-xs text-muted-foreground">
-                      Upload passport-style photos. JPEG, PNG, or WebP, max 4 MB.
-                    </p>
+                    <PhotoUploadGuidance />
                     {imageVerificationFeedback && (
                       <Alert
                         variant={
