@@ -6,12 +6,45 @@ import {
   validateMasterCourseImportRows,
 } from "@/lib/imports/courses";
 import {
+  STAFF_TEMPLATE_COLUMNS,
+  STAFF_TEMPLATE_EXAMPLES,
   staffDuplicateKey,
   validateStaffImportRows,
 } from "@/lib/imports/staff";
-import { parseSpreadsheetFile } from "@/lib/imports/spreadsheet";
+import {
+  createExcelTemplateBuffer,
+  parseSpreadsheetFile,
+} from "@/lib/imports/spreadsheet";
 
 describe("spreadsheet file parsing", () => {
+  it("creates a blank Excel upload sheet and keeps examples separate", async () => {
+    const buffer = await createExcelTemplateBuffer(
+      STAFF_TEMPLATE_COLUMNS,
+      STAFF_TEMPLATE_EXAMPLES,
+    );
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
+
+    expect(workbook.worksheets.map((sheet) => sheet.name)).toEqual([
+      "Upload",
+      "Instructions",
+      "Examples",
+    ]);
+    expect(workbook.getWorksheet("Upload")?.getRow(1).values).toEqual([
+      ,
+      ...STAFF_TEMPLATE_COLUMNS.map((column) => column.label),
+    ]);
+    expect(workbook.getWorksheet("Upload")?.getCell("A2").value).toBeNull();
+    expect(workbook.getWorksheet("Upload")?.getCell("A2").dataValidation.type).toBe("list");
+    expect(workbook.getWorksheet("Examples")?.getCell("A2").value).toBe("ACADEMIC");
+
+    const bytes = Uint8Array.from(buffer as unknown as ArrayLike<number>);
+    const file = new File([new Blob([bytes])], "staff-template.xlsx", {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    await expect(parseSpreadsheetFile(file as unknown as globalThis.File)).resolves.toEqual([]);
+  });
+
   it("reads an Excel workbook into import records", async () => {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Courses");
@@ -34,6 +67,53 @@ describe("spreadsheet file parsing", () => {
 });
 
 describe("bulk staff import validation", () => {
+  it("accepts a newly filled staff Excel template with ordinary display labels", async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Staff Upload");
+    sheet.addRow([
+      "Staff Type",
+      "Title",
+      "Surname",
+      "First Name",
+      "Middle Name",
+      "Gender",
+      "Highest Qualification",
+      "Academic Rank / Job Title",
+      "Custom Job Title",
+      "Specialization",
+      "Email",
+    ]);
+    sheet.addRow([
+      "Academic Staff",
+      "Professor",
+      "Ibironke",
+      "Victor",
+      "",
+      "Male",
+      "LL.B, BL, LL.M, Ph.D.",
+      "Lecturer I",
+      "",
+      "Commercial Law",
+      "victor.ibironke@example.edu",
+    ]);
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const bytes = Uint8Array.from(buffer as unknown as ArrayLike<number>);
+    const file = new File([new Blob([bytes])], "staff-upload.xlsx", {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const records = await parseSpreadsheetFile(file as unknown as globalThis.File);
+    const [row] = validateStaffImportRows(records);
+
+    expect(row.errors).toEqual([]);
+    expect(row.data).toMatchObject({
+      type: "ACADEMIC",
+      title: "PROF",
+      highestQualification: "PHD",
+      academicRank: "LECTURER_I",
+    });
+  });
+
   it("accepts common labels for adjunct academic staff", () => {
     const [row] = validateStaffImportRows([
       {
