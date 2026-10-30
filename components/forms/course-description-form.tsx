@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -50,6 +51,7 @@ function getScoreBgColor(score: number) {
 
 function GraceResultDisplay({
   result,
+  onApplySuggestion,
 }: {
   result: {
     scores: Record<string, number>;
@@ -57,7 +59,9 @@ function GraceResultDisplay({
     explanation: string;
     recommendation: string;
     passed: boolean;
+    suggestedContent?: string;
   };
+  onApplySuggestion?: (content: string) => void;
 }) {
   const hasScores = Object.keys(result.scores).length > 0;
   const pillarKeys = Object.keys(GRACE_PILLAR_LABELS);
@@ -147,6 +151,31 @@ function GraceResultDisplay({
           </div>
         </div>
       )}
+
+      {!result.passed && result.suggestedContent?.trim() && (
+        <div className="space-y-3 border-t border-amber-200 pt-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              Suggested corrected version
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Review this wording before applying it to the course description.
+            </p>
+          </div>
+          <div className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-md border bg-background p-3 text-sm leading-relaxed">
+            {result.suggestedContent}
+          </div>
+          {onApplySuggestion && (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => onApplySuggestion(result.suggestedContent!)}
+            >
+              Use corrected version
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -166,6 +195,7 @@ interface GraceResult {
   explanation: string;
   recommendation: string;
   passed: boolean;
+  suggestedContent?: string;
 }
 
 interface CourseDescription {
@@ -466,6 +496,32 @@ export function CourseDescriptionForm({
     }
   };
 
+  const applyGraceSuggestion = (courseId: string, content: string) => {
+    setDescriptions((prev) => ({
+      ...prev,
+      [courseId]: {
+        ...prev[courseId],
+        courseContent: content,
+        gracePass: false,
+        graceResult: null,
+      },
+    }));
+    setGraceResults((prev) => {
+      const next = { ...prev };
+      delete next[courseId];
+      return next;
+    });
+    setGraceErrors((prev) => {
+      const next = { ...prev };
+      delete next[courseId];
+      return next;
+    });
+    setDirtyDescriptions((prev) => new Set(prev).add(courseId));
+    toast.success("Corrected course description applied", {
+      description: "Review it, make any edits you need, then run GRACE again.",
+    });
+  };
+
   // Group courses by level
   const coursesByLevel = courses.reduce(
     (acc, course) => {
@@ -764,6 +820,15 @@ export function CourseDescriptionForm({
                                   <div className="mt-2">
                                     <GraceResultDisplay
                                       result={graceResults[course.id]}
+                                      onApplySuggestion={
+                                        disabled
+                                          ? undefined
+                                          : (content) =>
+                                              applyGraceSuggestion(
+                                                course.id,
+                                                content,
+                                              )
+                                      }
                                     />
                                   </div>
                                 )}
