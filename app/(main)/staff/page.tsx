@@ -724,8 +724,8 @@ export default function StaffPage() {
         open={bulkImportOpen}
         onOpenChange={setBulkImportOpen}
         title="Bulk Upload Staff"
-        description="Upload an Excel or CSV file. All rows are checked before anything is saved, and every imported staff member is assigned to the selected department. Photos remain individually managed."
-        templateFilename="staff-bulk-upload-template.csv"
+        description="Download the Excel template and enter staff only on its Upload sheet. All rows are checked before anything is saved, and every imported staff member is assigned to the selected department."
+        templateFilename="staff-bulk-upload-template.xlsx"
         templateColumns={STAFF_TEMPLATE_COLUMNS}
         templateRows={STAFF_TEMPLATE_EXAMPLES}
         previewColumns={[
