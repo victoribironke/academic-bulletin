@@ -406,6 +406,8 @@ model PhaseTransition {
   action         String // e.g., "APPROVED", "RETURNED", "ESCALATED"
   remarks        String?
   transitionedAt DateTime @default(now())
+  // When this was included in a daily summary email (null = not yet sent)
+  notifiedAt     DateTime?
 
   // Foreign Keys
   submissionId  String
@@ -415,6 +417,7 @@ model PhaseTransition {
   submission  Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
   performedBy User       @relation(fields: [performedById], references: [id], onDelete: Restrict)
 
+  @@index([notifiedAt, transitionedAt])
   @@map("phase_transitions")
 }
 
