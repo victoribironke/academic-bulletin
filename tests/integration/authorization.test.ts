@@ -67,6 +67,7 @@ import { POST as createStaff } from "@/app/api/staff/route";
 import { PATCH as updateStaff } from "@/app/api/staff/[id]/route";
 import { POST as bulkImportCourses } from "@/app/api/courses/bulk/route";
 import { POST as bulkImportMasterCourses } from "@/app/api/master-courses/bulk/route";
+import { GET as listSubmissions } from "@/app/api/submissions/route";
 
 const ids = {
   schoolA: "test-school-a",
@@ -281,6 +282,89 @@ describe("academic-unit authorization", () => {
       where: { id: ids.submission },
       data: { status: "DRAFT" },
     });
+  });
+});
+
+describe("submission progress visibility", () => {
+  it("includes content completion progress in the admin submissions list", async () => {
+    authState.userId = ids.admin;
+
+    await prisma.submissionContent.create({
+      data: {
+        submissionId: ids.submission,
+        programmeInfo: {
+          deanImageUrl: "https://example.edu/dean.jpg",
+          hodImageUrl: "https://example.edu/hod.jpg",
+        },
+        philosophy: "A complete philosophy.",
+        mission: "A complete mission.",
+        vision: "A complete vision.",
+        objectives: ["Develop capable graduates"],
+        uniqueFeatures: ["Practice-led teaching"],
+        employability: "Professional practice",
+        utmeRequirements: "Five credits.",
+        directEntryRequirements: "Direct entry requirements.",
+        transferRequirements: "Transfer requirements.",
+        minimumDuration: "4 years",
+        graduationRequirements: "Complete the required credits.",
+        minimumCGPA: 2.5,
+        totalUnits: 154,
+        sectionF: { content: "Programme regulations." },
+        sectionG: { content: "Summary of changes." },
+      },
+    });
+    const staff = await prisma.staff.create({
+      data: {
+        departmentId: ids.departmentA,
+        title: "DR",
+        gender: "FEMALE",
+        surname: "Progress",
+        firstName: "Tester",
+        highestQualification: "PHD",
+        academicRank: "LECTURER_I",
+        type: "ACADEMIC",
+      },
+    });
+    const course = await prisma.course.create({
+      data: {
+        submissionId: ids.submission,
+        code: "TST 101",
+        title: "Progress Testing",
+        units: 2,
+        semester: 1,
+        level: 100,
+        description: {
+          create: {
+            submissionId: ids.submission,
+            learningOutcomes: ["Explain progress tracking"],
+            courseContent: "Progress tracking fundamentals.",
+          },
+        },
+      },
+    });
+
+    try {
+      const response = await listSubmissions(
+        new NextRequest(`http://localhost/api/submissions?cycleId=${ids.cycle}`),
+      );
+      expect(response.status).toBe(200);
+      const submissions = await response.json();
+      expect(submissions).toHaveLength(1);
+      expect(submissions[0].progress).toMatchObject({
+        percentage: 100,
+        completedSections: 8,
+        totalSections: 8,
+      });
+      expect(submissions[0].content).toBeUndefined();
+      expect(submissions[0].courses).toBeUndefined();
+    } finally {
+      await prisma.courseDescription.deleteMany({ where: { courseId: course.id } });
+      await prisma.course.delete({ where: { id: course.id } });
+      await prisma.staff.delete({ where: { id: staff.id } });
+      await prisma.submissionContent.delete({
+        where: { submissionId: ids.submission },
+      });
+    }
   });
 });
 
@@ -958,10 +1042,8 @@ describe("route authorization", () => {
         submissionId: ids.submission,
       },
     });
-    const previousGeminiKey = process.env.GEMINI_API_KEY;
-    const previousGoogleKey = process.env.GOOGLE_API_KEY;
-    process.env.GEMINI_API_KEY = "";
-    process.env.GOOGLE_API_KEY = "";
+    const previousKey = process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = "";
 
     let response!: Response;
     try {
@@ -978,10 +1060,8 @@ describe("route authorization", () => {
         }),
       );
     } finally {
-      if (previousGeminiKey === undefined) delete process.env.GEMINI_API_KEY;
-      else process.env.GEMINI_API_KEY = previousGeminiKey;
-      if (previousGoogleKey === undefined) delete process.env.GOOGLE_API_KEY;
-      else process.env.GOOGLE_API_KEY = previousGoogleKey;
+      if (previousKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = previousKey;
     }
 
     expect(response.status).toBe(503);
