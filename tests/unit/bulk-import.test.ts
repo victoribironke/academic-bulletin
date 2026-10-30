@@ -2,6 +2,8 @@ import { Blob, File } from "node:buffer";
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 import {
+  COURSE_TEMPLATE_COLUMNS,
+  COURSE_TEMPLATE_EXAMPLES,
   validateCourseImportRows,
   validateMasterCourseImportRows,
 } from "@/lib/imports/courses";
@@ -43,6 +45,23 @@ describe("spreadsheet file parsing", () => {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
     await expect(parseSpreadsheetFile(file as unknown as globalThis.File)).resolves.toEqual([]);
+  });
+
+  it("creates a blank Excel template for Course Structure bulk uploads", async () => {
+    const buffer = await createExcelTemplateBuffer(
+      COURSE_TEMPLATE_COLUMNS,
+      COURSE_TEMPLATE_EXAMPLES,
+    );
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
+
+    expect(workbook.getWorksheet("Upload")?.getRow(1).values).toEqual([
+      ,
+      ...COURSE_TEMPLATE_COLUMNS.map((column) => column.label),
+    ]);
+    expect(workbook.getWorksheet("Upload")?.getCell("A2").value).toBeNull();
+    expect(workbook.getWorksheet("Upload")?.getCell("D2").dataValidation.type).toBe("list");
+    expect(workbook.getWorksheet("Examples")?.getCell("A2").value).toBe("COS 101");
   });
 
   it("reads an Excel workbook into import records", async () => {
@@ -218,6 +237,26 @@ describe("bulk course import validation", () => {
       labWork: "Programming exercises",
       entrepreneurialAspect: "Prototype a software product",
     });
+  });
+
+  it("preserves learning outcomes when normalized rows are checked again by the API", () => {
+    const [row] = validateCourseImportRows([
+      {
+        code: "COS 102",
+        title: "Computing Practice",
+        units: 2,
+        status: "CORE",
+        semester: 2,
+        level: 100,
+        learningOutcomes: ["Explain computing practice", "Apply computing practice"],
+      },
+    ]);
+
+    expect(row.errors).toEqual([]);
+    expect(row.data?.learningOutcomes).toEqual([
+      "Explain computing practice",
+      "Apply computing practice",
+    ]);
   });
 
   it("rejects duplicate codes and levels outside the programme", () => {
