@@ -11,5 +11,5 @@ export const SITE_URL = "https://academicplanning.app";
 export const EMAIL_FROM =
   "Academic Bulletin <notifications@academicplanning.app>";
 
-/** Gemini model used for GRACE and photo checks. */
-export const GEMINI_MODEL = "gemini-3.8-flash";
+/** Claude model used for GRACE and photo checks. */
+export const AI_MODEL = "claude-haiku-5-5";
