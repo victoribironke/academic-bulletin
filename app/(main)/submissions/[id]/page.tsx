@@ -115,6 +115,7 @@ interface Submission {
       explanation: string;
       recommendation: string;
       passed: boolean;
+      suggestedContent?: string;
     } | null;
     mission?: string;
     vision?: string;
@@ -247,6 +248,7 @@ const GRACE_PILLAR_LABELS: Record<string, string> = {
 
 function GraceResultPanel({
   result,
+  onApplySuggestion,
 }: {
   result: {
     scores: Record<string, number>;
@@ -254,7 +256,9 @@ function GraceResultPanel({
     explanation: string;
     recommendation: string;
     passed: boolean;
+    suggestedContent?: string;
   };
+  onApplySuggestion?: (content: string) => void;
 }) {
   const hasScores = Object.keys(result.scores).length > 0;
   const pillarKeys = Object.keys(GRACE_PILLAR_LABELS);
@@ -352,6 +356,31 @@ function GraceResultPanel({
           </div>
         </div>
       )}
+
+      {!result.passed && result.suggestedContent?.trim() && (
+        <div className="space-y-3 border-t border-amber-200 pt-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              Suggested corrected version
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Review this wording before applying it to the bulletin.
+            </p>
+          </div>
+          <div className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-md border bg-background p-3 text-sm leading-relaxed">
+            {result.suggestedContent}
+          </div>
+          {onApplySuggestion && (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => onApplySuggestion(result.suggestedContent!)}
+            >
+              Use corrected version
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -409,6 +438,7 @@ export default function SubmissionDetailPage({
     explanation: string;
     recommendation: string;
     passed: boolean;
+    suggestedContent?: string;
   } | null>(null);
   const [gracePhilosophyError, setGracePhilosophyError] = useState<string | null>(
     null,
@@ -894,6 +924,16 @@ export default function SubmissionDetailPage({
         setHasChanges(true);
       }
     }
+  };
+
+  const applyPhilosophyGraceSuggestion = (content: string) => {
+    setPhilosophy(content);
+    setGracePhilosophyResult(null);
+    setGracePhilosophyError(null);
+    setHasChanges(true);
+    toast.success("Corrected philosophy applied", {
+      description: "Review it, make any edits you need, then run GRACE again.",
+    });
   };
 
   const handleAddComment = async () => {
@@ -1684,7 +1724,12 @@ export default function SubmissionDetailPage({
 
                       {/* GRACE Compliance Feedback */}
                       {gracePhilosophyResult && (
-                        <GraceResultPanel result={gracePhilosophyResult} />
+                        <GraceResultPanel
+                          result={gracePhilosophyResult}
+                          onApplySuggestion={
+                            canEdit ? applyPhilosophyGraceSuggestion : undefined
+                          }
+                        />
                       )}
                       {gracePhilosophyError && (
                         <Alert variant="destructive">
