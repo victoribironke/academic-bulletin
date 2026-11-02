@@ -835,6 +835,49 @@ describe("route authorization", () => {
     );
   });
 
+  it("pages and searches the Registry on the server", async () => {
+    authState.userId = ids.admin;
+    await prisma.masterCourse.createMany({
+      data: Array.from({ length: 30 }, (_, i) => ({
+        code: `PGN ${String(101 + i)}`,
+        title: `Paging Course ${i + 1}`,
+        units: 2,
+        type: "CORE" as const,
+        ownership: "INSTITUTIONAL" as const,
+        level: 100,
+        semester: 1,
+        discoverable: true,
+      })),
+    });
+
+    const firstPage = await listMasterCourses(
+      new Request("http://localhost/api/master-courses?page=1&q=paging%20course"),
+    );
+    expect(firstPage.status).toBe(200);
+    const first = await firstPage.json();
+    expect(first).toMatchObject({ total: 30, page: 1, pageSize: 25, pageCount: 2 });
+    expect(first.items).toHaveLength(25);
+
+    const secondPage = await listMasterCourses(
+      new Request("http://localhost/api/master-courses?page=2&q=PGN"),
+    );
+    const second = await secondPage.json();
+    expect(second.items).toHaveLength(5);
+    const firstCodes = new Set(first.items.map((c: { code: string }) => c.code));
+    expect(second.items.some((c: { code: string }) => firstCodes.has(c.code))).toBe(false);
+
+    const summary = await listMasterCourses(
+      new Request("http://localhost/api/master-courses?fields=summary&q=PGN"),
+    );
+    const summaryRows = await summary.json();
+    expect(summaryRows).toHaveLength(30);
+    expect(Object.keys(summaryRows[0]).sort()).toEqual(
+      ["code", "id", "level", "semester", "title", "type", "units"],
+    );
+
+    await prisma.masterCourse.deleteMany({ where: { code: { startsWith: "PGN " } } });
+  });
+
   it("automatically preloads the central GST pool into an HoD submission", async () => {
     authState.userId = ids.hod;
     await prisma.submission.update({
