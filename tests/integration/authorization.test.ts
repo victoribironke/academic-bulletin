@@ -62,6 +62,8 @@ import { GET as listMasterCourses } from "@/app/api/master-courses/route";
 import { PATCH as updateMasterCourse } from "@/app/api/master-courses/[id]/route";
 import { canExportBulletin } from "@/lib/bulletin/access";
 import { sendDailyDigests } from "@/lib/email/notifications";
+import { getCcmasCatalogueSummary, syncCcmasCatalogue } from "@/lib/courses/ccmas-catalogue";
+import { recordActivity } from "@/lib/activity-log";
 import { GET as getCurrentUser } from "@/app/api/users/me/route";
 import { POST as bulkImportStaff } from "@/app/api/staff/bulk/route";
 import { POST as createStaff } from "@/app/api/staff/route";
@@ -69,6 +71,8 @@ import { PATCH as updateStaff } from "@/app/api/staff/[id]/route";
 import { POST as bulkImportCourses } from "@/app/api/courses/bulk/route";
 import { POST as bulkImportMasterCourses } from "@/app/api/master-courses/bulk/route";
 import { GET as listSubmissions } from "@/app/api/submissions/route";
+import { GET as listActivities } from "@/app/api/activity-log/route";
+import { GET as getDashboardStats } from "@/app/api/dashboard/stats/route";
 
 const ids = {
   schoolA: "test-school-a",
@@ -83,10 +87,12 @@ const ids = {
   admin: "test-admin",
   dean: "test-dean",
   hod: "test-hod",
+  coordinator: "test-programme-coordinator",
   inactive: "test-inactive",
 };
 
 async function clearFixtures() {
+  await prisma.activityLog.deleteMany({});
   await prisma.courseDescription.deleteMany({});
   await prisma.course.deleteMany({});
   await prisma.comment.deleteMany({});
@@ -178,6 +184,15 @@ beforeAll(async () => {
         departmentId: ids.departmentA,
       },
       {
+        id: ids.coordinator,
+        email: `${ids.coordinator}@example.edu`,
+        firstName: "Programme",
+        lastName: "Coordinator",
+        role: "PROGRAMME_COORDINATOR",
+        schoolId: ids.schoolA,
+        departmentId: ids.departmentA,
+      },
+      {
         id: ids.inactive,
         email: `${ids.inactive}@example.edu`,
         firstName: "Inactive",
@@ -187,6 +202,9 @@ beforeAll(async () => {
         departmentId: ids.departmentA,
       },
     ],
+  });
+  await prisma.userProgramme.create({
+    data: { userId: ids.coordinator, programmeId: ids.programmeA },
   });
   await prisma.reviewCycle.create({
     data: {
@@ -260,6 +278,55 @@ describe("academic-unit authorization", () => {
     const dean = (await getApiUser())!;
     expect(await canAccessDepartment(dean, ids.departmentA)).toBe(true);
     expect(await canAccessDepartment(dean, ids.departmentB)).toBe(false);
+  });
+
+  it("limits programme coordinators to their assigned programmes", async () => {
+    authState.userId = ids.coordinator;
+    const coordinator = (await getApiUser())!;
+
+    expect(coordinator.programmeIds).toEqual([ids.programmeA]);
+    expect(await canAccessDepartment(coordinator, ids.departmentA)).toBe(true);
+    expect(await canAccessDepartment(coordinator, ids.departmentB)).toBe(false);
+    expect(await canViewSubmission(coordinator, ids.submission)).toBe(true);
+    expect(await canWriteSubmission(coordinator, ids.submission)).toBe(true);
+
+    const outside = await prisma.submission.create({
+      data: {
+        title: "Coordinator Access Boundary",
+        programmeId: ids.programmeB,
+        createdById: ids.super,
+        cycleId: ids.cycle,
+        status: "DRAFT",
+      },
+    });
+    try {
+      expect(await canViewSubmission(coordinator, outside.id)).toBe(false);
+      expect(await canWriteSubmission(coordinator, outside.id)).toBe(false);
+    } finally {
+      await prisma.submission.delete({ where: { id: outside.id } });
+    }
+  });
+
+  it("scopes programme coordinator dashboard totals to assigned programmes", async () => {
+    const outside = await prisma.submission.create({
+      data: {
+        title: "Outside Dashboard Scope",
+        programmeId: ids.programmeB,
+        createdById: ids.super,
+        cycleId: ids.cycle,
+        status: "DRAFT",
+      },
+    });
+    authState.userId = ids.coordinator;
+    try {
+      const response = await getDashboardStats(
+        new Request("http://localhost/api/dashboard/stats"),
+      );
+      expect(response.status).toBe(200);
+      expect((await response.json()).submissions.total).toBe(1);
+    } finally {
+      await prisma.submission.delete({ where: { id: outside.id } });
+    }
   });
 
   it("allows edits in draft and corrections-required states only", async () => {
@@ -394,6 +461,24 @@ describe("route authorization", () => {
     );
     expect(response.status).toBe(201);
     expect(await prisma.school.count({ where: { code: "CRT" } })).toBe(1);
+
+    const activity = await prisma.activityLog.findFirst({
+      where: { action: "SCHOOL_CREATED", actorId: ids.admin },
+    });
+    expect(activity).toMatchObject({
+      entityType: "SCHOOL",
+      description: expect.stringContaining("Created School"),
+    });
+
+    const activityResponse = await listActivities(
+      new NextRequest("http://localhost/api/activity-log?action=SCHOOL_CREATED"),
+    );
+    expect(activityResponse.status).toBe(200);
+    expect((await activityResponse.json()).items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ action: "SCHOOL_CREATED" }),
+      ]),
+    );
   });
 
   it("deactivates and bans a user, making API authentication fail", async () => {
@@ -539,6 +624,33 @@ describe("route authorization", () => {
       role: "DEAN",
       schoolId: ids.schoolA,
       departmentId: null,
+    });
+  });
+
+  it("creates a programme coordinator with explicit programme assignments", async () => {
+    authState.userId = ids.super;
+    const form = new FormData();
+    form.set("firstName", "Second");
+    form.set("lastName", "Coordinator");
+    form.set("email", "second.coordinator@example.edu");
+    form.set("role", "PROGRAMME_COORDINATOR");
+    form.set("schoolId", ids.schoolA);
+    form.set("departmentId", ids.departmentA);
+    form.append("programmeIds", ids.programmeA);
+
+    const result = await adminCreateUser(null, form);
+    expect(result).toMatchObject({ success: true });
+    expect(
+      await prisma.user.findUnique({
+        where: { email: "second.coordinator@example.edu" },
+        include: { programmeAssignments: true },
+      }),
+    ).toMatchObject({
+      role: "PROGRAMME_COORDINATOR",
+      departmentId: ids.departmentA,
+      programmeAssignments: [
+        expect.objectContaining({ programmeId: ids.programmeA }),
+      ],
     });
   });
 
@@ -1031,6 +1143,67 @@ describe("route authorization", () => {
     ).toMatchObject({ ownership: "INSTITUTIONAL", type: "GST_BU" });
   });
 
+  it("matches an official source programme name and preloads its Registry course", async () => {
+    authState.userId = ids.admin;
+    const response = await bulkImportMasterCourses(
+      new Request("http://localhost/api/master-courses/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rows: [
+            {
+              code: "CCM 301",
+              title: "CCMAS Programme Course",
+              units: 3,
+              type: "CORE",
+              ownership: "INSTITUTIONAL",
+              level: 300,
+              semester: 1,
+              learningOutcomes: ["Apply the programme curriculum"],
+              courseContent: "Official programme course content.",
+              curriculumSource: "CCMAS 2023",
+              sourceReference: "Official test source",
+              sourceProgrammes: ["Test Programme A"],
+              discoverable: true,
+            },
+          ],
+        }),
+      }),
+    );
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ linked: 1 });
+
+    const master = await prisma.masterCourse.findUniqueOrThrow({
+      where: { code: "CCM 301" },
+    });
+    expect(
+      await prisma.programmeCourse.findUnique({
+        where: {
+          programmeId_courseId: {
+            programmeId: ids.programmeA,
+            courseId: master.id,
+          },
+        },
+      }),
+    ).not.toBeNull();
+    expect(
+      await prisma.course.findUnique({
+        where: {
+          code_submissionId: {
+            code: "CCM 301",
+            submissionId: ids.submission,
+          },
+        },
+        include: { description: true },
+      }),
+    ).toMatchObject({
+      description: {
+        learningOutcomes: ["Apply the programme curriculum"],
+        courseContent: "Official programme course content.",
+      },
+    });
+  });
+
   it("does not persist a failed GRACE service call as a compliance result", async () => {
     authState.userId = ids.hod;
     const course = await prisma.course.create({
@@ -1126,10 +1299,16 @@ describe("daily summary emails", () => {
         [`${ids.admin}@example.edu`, `${ids.super}@example.edu`].sort(),
       );
 
-      // The department's HOD gets the decision with the remarks; the
-      // deactivated HOD in the same department gets nothing.
+      // The department's HOD and every assigned programme coordinator get the
+      // decision with the remarks; the deactivated HOD gets nothing.
       const hodEmails = sent.filter((m) => m.subject.includes("your bulletin"));
-      expect(hodEmails.map((m) => m.to[0])).toEqual([`${ids.hod}@example.edu`]);
+      expect(hodEmails.map((m) => m.to[0]).sort()).toEqual(
+        [
+          `${ids.hod}@example.edu`,
+          `${ids.coordinator}@example.edu`,
+          "second.coordinator@example.edu",
+        ].sort(),
+      );
       expect(hodEmails[0].subject).toContain("changes requested");
       expect(hodEmails[0].text).toContain("Please expand the programme philosophy.");
 
@@ -1143,5 +1322,100 @@ describe("daily summary emails", () => {
       if (previousKey === undefined) delete process.env.RESEND_API_KEY;
       else process.env.RESEND_API_KEY = previousKey;
     }
+  });
+});
+
+describe("CCMAS catalogue sync", () => {
+  it("never overwrites university courses and changes nothing on a repeat run", async () => {
+    const { version } = getCcmasCatalogueSummary();
+    // Take a real CCMAS code and pretend the university already created it.
+    const catalogueCode = (await import("@/data/ccmas/catalogue.json")).default
+      .courses[0].code as string;
+    await prisma.masterCourse.create({
+      data: {
+        code: catalogueCode,
+        title: "Babcock's own version",
+        units: 2,
+        type: "CORE",
+        ownership: "DEPARTMENT",
+        ownerDeptId: ids.departmentA,
+        level: 100,
+        semester: 1,
+      },
+    });
+
+    try {
+      const started = Date.now();
+      const first = await syncCcmasCatalogue(ids.super);
+      const firstMs = Date.now() - started;
+
+      expect(first.skippedUniversityCodes).toContain(catalogueCode);
+      expect(first.created).toBe(first.catalogueCourses - first.skippedUniversityCodes.length);
+      const kept = await prisma.masterCourse.findUnique({
+        where: { code: catalogueCode },
+        select: { title: true, ownership: true, curriculumSource: true },
+      });
+      expect(kept).toEqual({
+        title: "Babcock's own version",
+        ownership: "DEPARTMENT",
+        curriculumSource: null,
+      });
+
+      // The batched sync should comfortably fit a serverless time limit.
+      expect(firstMs).toBeLessThan(120_000);
+
+      // Nothing changed, so a second run writes nothing.
+      const second = await syncCcmasCatalogue(ids.super);
+      expect(second).toMatchObject({ created: 0, updated: 0, linksCreated: 0, linksUpdated: 0 });
+
+      // In-progress submissions are not modified by the sync.
+      expect(
+        await prisma.course.count({ where: { submissionId: ids.submission, code: catalogueCode } }),
+      ).toBe(0);
+
+      const logged = await prisma.activityLog.count({
+        where: { action: "CCMAS_CATALOGUE_SYNCHRONISED" },
+      });
+      expect(logged).toBe(2);
+    } finally {
+      await prisma.programmeCourse.deleteMany({
+        where: { course: { curriculumSource: version } },
+      });
+      await prisma.masterCourse.deleteMany({ where: { curriculumSource: version } });
+      await prisma.masterCourse.deleteMany({ where: { code: catalogueCode } });
+    }
+  }, 180_000);
+});
+
+describe("activity log", () => {
+  it("records one entry per autosave session but keeps different records apart", async () => {
+    const base = {
+      actorId: ids.hod,
+      action: "COURSE_UPDATED",
+      entityType: "SUBMISSION",
+      entityId: ids.submission,
+      coalesceWithinMinutes: 30,
+    };
+    await recordActivity({ ...base, description: "Updated TST 901 - Coalesce Test." });
+    await recordActivity({ ...base, description: "Updated TST 901 - Coalesce Test." });
+    await recordActivity({ ...base, description: "Updated TST 901 - Coalesce Test." });
+    await recordActivity({ ...base, description: "Updated TST 902 - Another Course." });
+
+    const entries = await prisma.activityLog.findMany({
+      where: { actorId: ids.hod, description: { startsWith: "Updated TST 90" } },
+      select: { description: true },
+    });
+    expect(entries.map((e) => e.description).sort()).toEqual([
+      "Updated TST 901 - Coalesce Test.",
+      "Updated TST 902 - Another Course.",
+    ]);
+
+    // Without a window every call is recorded.
+    await recordActivity({ ...base, coalesceWithinMinutes: undefined, description: "Updated TST 901 - Coalesce Test." });
+    expect(
+      await prisma.activityLog.count({
+        where: { actorId: ids.hod, description: "Updated TST 901 - Coalesce Test." },
+      }),
+    ).toBe(2);
   });
 });
