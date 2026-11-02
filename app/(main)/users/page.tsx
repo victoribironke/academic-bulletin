@@ -234,8 +234,16 @@ export default function UsersPage() {
     }
   };
 
+  // Coordinators need a department and programmes, so picking that role
+  // from the table opens the Edit dialog instead of saving straight away.
+  const [coordinatorTarget, setCoordinatorTarget] = useState<User | null>(null);
+
   const handleRoleChange = async (user: User, role: string) => {
     if (!canManage) return;
+    if (role === "PROGRAMME_COORDINATOR") {
+      setCoordinatorTarget(user);
+      return;
+    }
     setRoleUpdatingUserId(user.id);
     try {
       const res = await fetch(`/api/users/${user.id}`, {
@@ -266,6 +274,27 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-4">
+      {coordinatorTarget && (
+        <EditUserDialog
+          key={coordinatorTarget.id}
+          user={coordinatorTarget}
+          schools={schools}
+          departments={departments}
+          programmes={programmes}
+          canChangeRole
+          allowSuperAdmin={isSuperAdmin}
+          initialRole="PROGRAMME_COORDINATOR"
+          open
+          onOpenChange={(isOpen) => {
+            if (!isOpen) setCoordinatorTarget(null);
+          }}
+          onSuccess={() => {
+            setCoordinatorTarget(null);
+            toast.success("Role updated");
+            reload();
+          }}
+        />
+      )}
       <PageHeader
         title="Users"
         description="People who can sign in. Each person signs in with Google using the email added here."
@@ -406,11 +435,9 @@ export default function UsersPage() {
                             </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
-                            {user.role === "PROGRAMME_COORDINATOR" && (
-                              <SelectItem value="PROGRAMME_COORDINATOR">
-                                {getRoleDisplayName("PROGRAMME_COORDINATOR")}
-                              </SelectItem>
-                            )}
+                            <SelectItem value="PROGRAMME_COORDINATOR">
+                              {getRoleDisplayName("PROGRAMME_COORDINATOR")}
+                            </SelectItem>
                             <SelectItem value="HOD">{getRoleDisplayName("HOD")}</SelectItem>
                             <SelectItem value="DEAN">{getRoleDisplayName("DEAN")}</SelectItem>
                             <SelectItem value="ADMIN">{getRoleDisplayName("ADMIN")}</SelectItem>
