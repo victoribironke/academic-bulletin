@@ -31,7 +31,16 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Plus, BookOpen, Link, Trash, Upload, Pencil } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  BookOpen,
+  Link,
+  Trash,
+  Upload,
+  Pencil,
+  RefreshCw,
+} from "lucide-react";
 import { TableCard, TableToolbar } from "@/components/shared/table-toolbar";
 import { EmptyState, TableSkeleton } from "@/components/shared/states";
 import { toast } from "sonner";
@@ -102,7 +111,7 @@ const OWNERSHIP_TYPES = [
   { value: "INSTITUTIONAL", label: "University-wide" },
 ];
 
-const LEVELS = [100, 200, 300, 400, 500];
+const LEVELS = [100, 200, 300, 400, 500, 600];
 const SEMESTERS = [1, 2];
 
 export function MasterCourseManager({
@@ -121,6 +130,7 @@ export function MasterCourseManager({
   const [isTogglingCourseId, setIsTogglingCourseId] = useState<string | null>(null);
   const [isDeletingCourseId, setIsDeletingCourseId] = useState<string | null>(null);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
+  const [isSyncingCcmas, setIsSyncingCcmas] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [isEditingCourse, setIsEditingCourse] = useState(false);
   const [editDraft, setEditDraft] = useState({
@@ -141,6 +151,53 @@ export function MasterCourseManager({
 
   const canManageRegistry =
     currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
+
+  const handleSyncCcmas = async () => {
+    if (
+      !window.confirm(
+        "Load or refresh the official CCMAS catalogue? Courses the university created itself are not changed, and submissions already in progress are not modified.",
+      )
+    ) {
+      return;
+    }
+
+    setIsSyncingCcmas(true);
+    try {
+      const response = await fetch("/api/master-courses/ccmas", {
+        method: "POST",
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to load the CCMAS catalogue.");
+      }
+      toast.success(
+        `CCMAS catalogue loaded: ${result.created} added, ${result.updated} updated, ${result.linked} programme links.`,
+      );
+      if (result.skippedUniversityCodes?.length > 0) {
+        toast.info(
+          `${result.skippedUniversityCodes.length} course code(s) already belong to university-developed courses and were left unchanged.`,
+        );
+      }
+      const reviewCount =
+        result.unmatchedProgrammeNames.length +
+        result.ambiguousProgrammeNames.length +
+        result.reviewProgrammeNames.length;
+      if (reviewCount > 0) {
+        toast.warning(
+          `${reviewCount} source programme name(s) are not configured locally or need manual review. Their courses remain available in the central Registry.`,
+        );
+      }
+      await fetchData();
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to load the CCMAS catalogue.",
+      );
+    } finally {
+      setIsSyncingCcmas(false);
+    }
+  };
 
   // New course form state
   const [newCourse, setNewCourse] = useState({
@@ -666,6 +723,14 @@ export function MasterCourseManager({
         actions={
         canManageRegistry && (
           <>
+            <Button
+              variant="outline"
+              onClick={handleSyncCcmas}
+              disabled={isSyncingCcmas}
+            >
+              <RefreshCw className={isSyncingCcmas ? "animate-spin" : ""} />
+              {isSyncingCcmas ? "Loading CCMAS..." : "Load CCMAS"}
+            </Button>
             <Button variant="outline" onClick={() => setBulkImportOpen(true)}>
               <Upload />
               Bulk upload
@@ -1117,8 +1182,8 @@ export function MasterCourseManager({
           open={bulkImportOpen}
           onOpenChange={setBulkImportOpen}
           title="Bulk Upload Registry Courses"
-          description="Upload centrally managed courses, including university-wide GST courses. Department and school ownership codes must already exist in the system."
-          templateFilename="registry-course-bulk-upload-template.csv"
+          description="Upload or refresh centrally managed courses, including official CCMAS and university-wide GST courses. Add programme codes to preload courses into the correct programme submissions. Existing course codes are updated without creating duplicates."
+          templateFilename="registry-course-bulk-upload-template.xlsx"
           templateColumns={MASTER_COURSE_TEMPLATE_COLUMNS}
           templateRows={MASTER_COURSE_TEMPLATE_EXAMPLES}
           previewColumns={[
@@ -1136,6 +1201,7 @@ export function MasterCourseManager({
               existingTitles: courses.map(
                 (course) => courseDuplicateKeys(course).title,
               ),
+              allowExisting: true,
             })
           }
           onImport={async (rows) => {
@@ -1148,7 +1214,9 @@ export function MasterCourseManager({
             if (!response.ok) {
               throw new Error(data.error || "Failed to import Registry courses.");
             }
-            toast.success(`${data.imported} Registry course(s) imported successfully.`);
+            toast.success(
+              `${data.imported} new course(s), ${data.updated} updated, and ${data.linked} programme link(s) processed.`,
+            );
             await fetchData();
           }}
         />
