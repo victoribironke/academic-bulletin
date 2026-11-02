@@ -10,6 +10,7 @@ export interface ApiUser {
   isActive: boolean;
   departmentId: string | null;
   schoolId: string | null;
+  programmeIds: string[];
 }
 
 type AuthGate =
@@ -35,6 +36,9 @@ export async function getApiUser(options?: {
         isActive: true,
         departmentId: true,
         schoolId: true,
+        programmeAssignments: {
+          select: { programmeId: true },
+        },
       },
     });
 
@@ -42,7 +46,13 @@ export async function getApiUser(options?: {
       return null;
     }
 
-    return dbUser;
+    const { programmeAssignments, ...profile } = dbUser;
+    return {
+      ...profile,
+      programmeIds: programmeAssignments.map(
+        (assignment) => assignment.programmeId,
+      ),
+    };
   } catch {
     return null;
   }
@@ -78,7 +88,12 @@ export async function canAccessDepartment(
   departmentId: string,
 ): Promise<boolean> {
   if (isAdministrator(user)) return true;
-  if (user.role === "HOD") return user.departmentId === departmentId;
+  if (
+    user.role === "HOD" ||
+    user.role === "PROGRAMME_COORDINATOR"
+  ) {
+    return user.departmentId === departmentId;
+  }
   if (user.role !== "DEAN" || !user.schoolId) return false;
 
   const department = await prisma.department.findUnique({
@@ -99,6 +114,7 @@ export async function canViewSubmission(
     select: {
       programme: {
         select: {
+          id: true,
           department: { select: { id: true, schoolId: true } },
         },
       },
@@ -109,6 +125,18 @@ export async function canViewSubmission(
   if (user.role === "HOD") {
     return submission.programme.department.id === user.departmentId;
   }
+  if (user.role === "PROGRAMME_COORDINATOR") {
+    const assigned = await prisma.userProgramme.findUnique({
+      where: {
+        userId_programmeId: {
+          userId: user.id,
+          programmeId: submission.programme.id,
+        },
+      },
+      select: { id: true },
+    });
+    return Boolean(assigned);
+  }
   if (user.role === "DEAN") {
     return submission.programme.department.schoolId === user.schoolId;
   }
@@ -118,6 +146,7 @@ export async function canViewSubmission(
 /**
  * Check if the user can write to a submission (content, courses, images, submit draft).
  * HOD: own department only, editable statuses only.
+ * Programme Coordinator: assigned programme(s) only, editable statuses only.
  * DEAN: same school, editable statuses only.
  * SUPER_ADMIN: unrestricted. ADMIN: no direct edits (review-only in product).
  */
@@ -134,6 +163,7 @@ export async function canWriteSubmission(
       status: true,
       programme: {
         select: {
+          id: true,
           department: { select: { id: true, schoolId: true } },
         },
       },
@@ -149,6 +179,10 @@ export async function canWriteSubmission(
 
   if (user.role === "HOD") {
     return submission.programme.department.id === user.departmentId;
+  }
+
+  if (user.role === "PROGRAMME_COORDINATOR") {
+    return user.programmeIds.includes(submission.programme.id);
   }
 
   if (user.role === "DEAN") {
