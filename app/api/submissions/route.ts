@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
 import { preloadGstCoursesForSubmission } from "@/lib/courses/gst-pool";
 import { calculateSubmissionProgress } from "@/lib/submissions/progress";
+import { recordActivity } from "@/lib/activity-log";
 
 const SUBMISSION_STATUSES = [
   "DRAFT",
@@ -19,6 +20,8 @@ export async function GET(request: NextRequest) {
     if (!auth.ok) return auth.response;
     if (
       (auth.user.role === "HOD" && !auth.user.departmentId) ||
+      (auth.user.role === "PROGRAMME_COORDINATOR" &&
+        auth.user.programmeIds.length === 0) ||
       (auth.user.role === "DEAN" && !auth.user.schoolId)
     ) {
       return NextResponse.json(
@@ -70,6 +73,9 @@ export async function GET(request: NextRequest) {
         }),
         ...(phaseNumber !== null && { currentPhase: phaseNumber }),
         ...(programmeId && { programmeId }),
+        ...(auth.user.role === "PROGRAMME_COORDINATOR" && {
+          programmeId: { in: auth.user.programmeIds },
+        }),
         ...(departmentId && { programme: { departmentId } }),
         ...(schoolId && { programme: { department: { schoolId } } }),
         ...(createdById && { createdById }),
@@ -244,6 +250,17 @@ export async function POST(request: NextRequest) {
     });
 
     await preloadGstCoursesForSubmission(submission.id);
+    await recordActivity({
+      actorId: auth.user.id,
+      action: "SUBMISSION_CREATED",
+      entityType: "SUBMISSION",
+      entityId: submission.id,
+      description: `Created a bulletin submission for ${submission.programme.name}.`,
+      metadata: {
+        programmeId: submission.programme.id,
+        cycleId,
+      },
+    });
 
     return NextResponse.json(submission, { status: 201 });
   } catch (error: unknown) {
