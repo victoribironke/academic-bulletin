@@ -41,6 +41,10 @@ export interface MasterCourseImportData {
   entrepreneurialAspect: string;
   ownerDepartmentCode: string;
   ownerSchoolCode: string;
+  programmeCodes: string[];
+  curriculumSource: string;
+  sourceReference: string;
+  sourceProgrammes: string[];
   discoverable: boolean;
 }
 
@@ -73,13 +77,13 @@ export const COURSE_TEMPLATE_EXAMPLES = [[
 ]];
 
 export const MASTER_COURSE_TEMPLATE_COLUMNS: TemplateColumn[] = [
-  { key: "code", label: "Course Code" },
-  { key: "title", label: "Course Title" },
-  { key: "units", label: "Units" },
-  { key: "type", label: "Course Type" },
-  { key: "ownership", label: "Ownership" },
-  { key: "level", label: "Level" },
-  { key: "semester", label: "Semester" },
+  { key: "code", label: "Course Code", required: true },
+  { key: "title", label: "Course Title", required: true },
+  { key: "units", label: "Units", required: true, options: ["1", "2", "3", "4", "5", "6"] },
+  { key: "type", label: "Course Type", required: true, options: ["GENERAL", "CORE", "ELECTIVE", "REQUIRED", "GST_NUC", "GST_BU"] },
+  { key: "ownership", label: "Ownership", required: true, options: ["DEPARTMENT", "SCHOOL", "INSTITUTIONAL"] },
+  { key: "level", label: "Level", required: true, options: ["100", "200", "300", "400", "500", "600"] },
+  { key: "semester", label: "Semester", required: true, options: ["1", "2"] },
   { key: "description", label: "Description" },
   { key: "learningOutcomes", label: "Learning Outcomes" },
   { key: "courseContent", label: "Course Content" },
@@ -87,6 +91,10 @@ export const MASTER_COURSE_TEMPLATE_COLUMNS: TemplateColumn[] = [
   { key: "entrepreneurialAspect", label: "Entrepreneurial Aspect" },
   { key: "ownerDepartmentCode", label: "Owner Department Code" },
   { key: "ownerSchoolCode", label: "Owner School Code" },
+  { key: "programmeCodes", label: "Programme Codes", guidance: "Separate multiple programme codes with |, semicolons, commas, or new lines. Courses are preloaded into these programmes." },
+  { key: "curriculumSource", label: "Curriculum Source", guidance: "For official NUC courses, use CCMAS 2023." },
+  { key: "sourceReference", label: "Source Reference", guidance: "Official discipline document or source URL." },
+  { key: "sourceProgrammes", label: "Source Programmes", guidance: "Official programme names from the source, separated with |." },
   { key: "discoverable", label: "Discoverable" },
 ];
 
@@ -105,6 +113,10 @@ export const MASTER_COURSE_TEMPLATE_EXAMPLES = [[
   "Professional communication portfolio.",
   "",
   "",
+  "BSC-COS | BSC-SE",
+  "CCMAS 2023",
+  "NUC Computing Discipline CCMAS",
+  "Computer Science",
   "YES",
 ]];
 
@@ -194,10 +206,16 @@ export function validateCourseImportRows(
 
 export function validateMasterCourseImportRows(
   rows: SpreadsheetRecord[],
-  options: { existingCodes?: Iterable<string>; existingTitles?: Iterable<string> } = {},
+  options: {
+    existingCodes?: Iterable<string>;
+    existingTitles?: Iterable<string>;
+    allowExisting?: boolean;
+  } = {},
 ): ValidatedImportRow<MasterCourseImportData>[] {
-  const seenCodes = new Set(Array.from(options.existingCodes || [], (value) => value.toUpperCase()));
-  const seenTitles = new Set(Array.from(options.existingTitles || [], (value) => value.toLowerCase()));
+  const existingCodes = new Set(Array.from(options.existingCodes || [], (value) => value.toUpperCase()));
+  const existingTitles = new Set(Array.from(options.existingTitles || [], (value) => value.toLowerCase()));
+  const seenCodes = new Set<string>();
+  const seenTitles = new Set<string>();
   const types = ["GENERAL", "CORE", "ELECTIVE", "REQUIRED", "GST_NUC", "GST_BU"];
   const ownerships = ["DEPARTMENT", "SCHOOL", "INSTITUTIONAL"];
 
@@ -220,7 +238,7 @@ export function validateMasterCourseImportRows(
     if (!Number.isInteger(units) || units < 1 || units > 6) errors.push("Units must be a whole number from 1 to 6.");
     if (!types.includes(type)) errors.push("Invalid Course Type.");
     if (!ownerships.includes(ownership)) errors.push("Invalid Ownership.");
-    if (![100, 200, 300, 400, 500].includes(level)) errors.push("Level must be 100, 200, 300, 400, or 500.");
+    if (![100, 200, 300, 400, 500, 600].includes(level)) errors.push("Level must be 100, 200, 300, 400, 500, or 600.");
     if (![1, 2].includes(semester)) errors.push("Semester must be 1 or 2.");
     if (ownership === "DEPARTMENT" && !ownerDepartmentCode) errors.push("Owner Department Code is required.");
     if (ownership === "SCHOOL" && !ownerSchoolCode) errors.push("Owner School Code is required.");
@@ -229,8 +247,14 @@ export function validateMasterCourseImportRows(
     }
 
     const duplicate = courseDuplicateKeys({ code, title });
-    if (seenCodes.has(duplicate.code)) errors.push("Course Code is duplicated or already exists.");
-    if (seenTitles.has(duplicate.title)) errors.push("Course Title is duplicated or already exists.");
+    if (seenCodes.has(duplicate.code)) errors.push("Course Code is duplicated in this upload.");
+    if (seenTitles.has(duplicate.title)) errors.push("Course Title is duplicated in this upload.");
+    if (!options.allowExisting && existingCodes.has(duplicate.code)) {
+      errors.push("Course Code already exists.");
+    }
+    if (!options.allowExisting && existingTitles.has(duplicate.title)) {
+      errors.push("Course Title already exists.");
+    }
     seenCodes.add(duplicate.code);
     seenTitles.add(duplicate.title);
 
@@ -259,6 +283,24 @@ export function validateMasterCourseImportRows(
       ),
       ownerDepartmentCode,
       ownerSchoolCode,
+      programmeCodes: importText(
+        getImportValue(raw, ["Programme Codes", "Program Codes", "Programmes"]),
+      )
+        .split(/\r?\n|\s*\|\s*|\s*;\s*|\s*,\s*/)
+        .map((value) => value.trim().toUpperCase())
+        .filter(Boolean),
+      curriculumSource: importText(
+        getImportValue(raw, ["Curriculum Source", "Source"]),
+      ),
+      sourceReference: importText(
+        getImportValue(raw, ["Source Reference", "Reference"]),
+      ),
+      sourceProgrammes: importText(
+        getImportValue(raw, ["Source Programmes", "Source Programme"]),
+      )
+        .split(/\r?\n|\s*\|\s*|\s*;\s*/)
+        .map((value) => value.trim())
+        .filter(Boolean),
       discoverable: importBoolean(getImportValue(raw, ["Discoverable"]), true),
     };
     return { rowNumber: index + 2, raw, data, errors };
