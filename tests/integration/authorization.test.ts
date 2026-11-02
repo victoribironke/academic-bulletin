@@ -521,6 +521,76 @@ describe("route authorization", () => {
     );
   });
 
+  it("turns an existing user into a programme coordinator only with programmes", async () => {
+    authState.userId = ids.admin;
+    const user = await prisma.user.create({
+      data: {
+        id: "test-existing-user",
+        email: "existing.user@babcock.edu.ng",
+        firstName: "Existing",
+        lastName: "User",
+        role: "HOD",
+        departmentId: ids.departmentA,
+      },
+    });
+    const patch = (body: object) =>
+      updateUser(
+        new NextRequest(`http://localhost/api/users/${user.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+        { params: Promise.resolve({ id: user.id }) },
+      );
+
+    try {
+      // No programmes chosen: refused, nothing changes.
+      expect(
+        (await patch({ role: "PROGRAMME_COORDINATOR", departmentId: ids.departmentA, programmeIds: [] }))
+          .status,
+      ).toBe(400);
+      expect((await prisma.user.findUnique({ where: { id: user.id } }))?.role).toBe("HOD");
+
+      // A school that doesn't own the department is still refused.
+      expect(
+        (
+          await patch({
+            role: "PROGRAMME_COORDINATOR",
+            schoolId: ids.schoolB,
+            departmentId: ids.departmentA,
+            programmeIds: [ids.programmeA],
+          })
+        ).status,
+      ).toBe(400);
+
+      // No school sent (this account never had one): taken from the department.
+      const response = await patch({
+        role: "PROGRAMME_COORDINATOR",
+        departmentId: ids.departmentA,
+        programmeIds: [ids.programmeA],
+      });
+      expect(response.status).toBe(200);
+      expect(
+        await prisma.user.findUnique({
+          where: { id: user.id },
+          select: {
+            role: true,
+            schoolId: true,
+            programmeAssignments: { select: { programmeId: true } },
+          },
+        }),
+      ).toEqual({
+        role: "PROGRAMME_COORDINATOR",
+        schoolId: ids.schoolA,
+        programmeAssignments: [{ programmeId: ids.programmeA }],
+      });
+    } finally {
+      await prisma.userProgramme.deleteMany({ where: { userId: user.id } });
+      await prisma.activityLog.deleteMany({ where: { entityId: user.id } });
+      await prisma.user.delete({ where: { id: user.id } });
+    }
+  });
+
   it("lets admins rename users and users rename themselves, but nothing more", async () => {
     const patch = (id: string, body: object) =>
       updateUser(
