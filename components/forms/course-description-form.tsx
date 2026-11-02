@@ -206,6 +206,23 @@ interface CourseDescription {
   entrepreneurialAspect: string;
   gracePass: boolean;
   graceResult: GraceResult | null;
+  graceStatus:
+    | "PENDING"
+    | "CHECKING"
+    | "COMPLIANT"
+    | "NEEDS_REVISION"
+    | "ERROR";
+  graceCheckedAt?: string | null;
+}
+
+interface GraceProgress {
+  total: number;
+  missing: number;
+  pending: number;
+  checking: number;
+  compliant: number;
+  needsRevision: number;
+  error: number;
 }
 
 interface CourseWithDescription extends Course {
@@ -234,6 +251,9 @@ export function CourseDescriptionForm({
     {},
   );
   const [graceErrors, setGraceErrors] = useState<Record<string, string>>({});
+  const [graceProgress, setGraceProgress] = useState<GraceProgress | null>(null);
+  const [isProcessingGraceQueue, setIsProcessingGraceQueue] = useState(false);
+  const [graceQueueVersion, setGraceQueueVersion] = useState(0);
 
   // Autosave state
   const [dirtyDescriptions, setDirtyDescriptions] = useState<Set<string>>(
@@ -246,9 +266,9 @@ export function CourseDescriptionForm({
     string | null
   >(null);
 
-  const fetchCourses = useCallback(async () => {
+  const fetchCourses = useCallback(async (showLoading = true) => {
     try {
-      setIsLoading(true);
+      if (showLoading) setIsLoading(true);
       const res = await fetch(`/api/courses?submissionId=${submissionId}`);
       if (!res.ok) throw new Error("Failed to fetch courses");
 
@@ -272,6 +292,8 @@ export function CourseDescriptionForm({
             gracePass: course.description.gracePass || false,
             graceResult:
               (course.description.graceResult as GraceResult) || null,
+            graceStatus: course.description.graceStatus || "PENDING",
+            graceCheckedAt: course.description.graceCheckedAt || null,
           };
           if (course.description.graceResult) {
             loadedGrace[course.id] = course.description
@@ -285,6 +307,7 @@ export function CourseDescriptionForm({
             entrepreneurialAspect: "",
             gracePass: false,
             graceResult: null,
+            graceStatus: "PENDING",
           };
         }
       });
@@ -293,7 +316,7 @@ export function CourseDescriptionForm({
     } catch (error) {
       console.error("Failed to fetch courses:", error);
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
   }, [submissionId]);
 
@@ -303,18 +326,98 @@ export function CourseDescriptionForm({
     return () => window.clearTimeout(timeoutId);
   }, [submissionId, fetchCourses]);
 
+  useEffect(() => {
+    const handleCoursesChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ submissionId?: string }>).detail;
+      if (detail?.submissionId !== submissionId) return;
+      void fetchCourses(false);
+      setGraceQueueVersion((version) => version + 1);
+    };
+    window.addEventListener("bulletin:courses-changed", handleCoursesChanged);
+    return () =>
+      window.removeEventListener(
+        "bulletin:courses-changed",
+        handleCoursesChanged,
+      );
+  }, [fetchCourses, submissionId]);
+
+  // Bulk uploads, Registry imports, CCMAS, GST, and existing descriptions all
+  // enter the same queue. Drain it in small batches while this page is open.
+  useEffect(() => {
+    if (!submissionId) return;
+    let cancelled = false;
+    const timeoutId = window.setTimeout(async () => {
+      setIsProcessingGraceQueue(true);
+      // Checks claimed by another tab or the daily job finish elsewhere, so
+      // keep polling a while for them instead of stopping early.
+      let idlePolls = 0;
+      try {
+        while (!cancelled) {
+          const response = await fetch("/api/grace-check/process", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ submissionId, limit: 3 }),
+          });
+          if (!response.ok) break;
+          const data = (await response.json()) as {
+            processed: number;
+            progress: GraceProgress | null;
+          };
+          if (cancelled) break;
+          setGraceProgress(data.progress);
+          if (data.processed > 0) {
+            idlePolls = 0;
+            await fetchCourses(false);
+            continue;
+          }
+          if (!data.progress?.checking || idlePolls >= 24) break;
+          idlePolls += 1;
+          await new Promise((resolve) => window.setTimeout(resolve, 5000));
+          if (cancelled) break;
+          await fetchCourses(false);
+        }
+      } finally {
+        if (!cancelled) setIsProcessingGraceQueue(false);
+      }
+    }, 750);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [submissionId, fetchCourses, graceQueueVersion]);
+
   const updateDescription = (
     courseId: string,
     field: keyof CourseDescription,
     value: unknown,
   ) => {
+    const invalidatesGrace =
+      field === "courseContent" || field === "learningOutcomes";
     setDescriptions((prev) => ({
       ...prev,
       [courseId]: {
         ...prev[courseId],
         [field]: value,
+        ...(invalidatesGrace && {
+          gracePass: false,
+          graceResult: null,
+          graceStatus: "PENDING" as const,
+          graceCheckedAt: null,
+        }),
       },
     }));
+    if (invalidatesGrace) {
+      setGraceResults((prev) => {
+        const next = { ...prev };
+        delete next[courseId];
+        return next;
+      });
+      setGraceErrors((prev) => {
+        const next = { ...prev };
+        delete next[courseId];
+        return next;
+      });
+    }
     setDirtyDescriptions((prev) => new Set(prev).add(courseId));
   };
 
@@ -342,11 +445,20 @@ export function CourseDescriptionForm({
               courseContent: desc.courseContent,
               labWork: desc.labWork,
               entrepreneurialAspect: desc.entrepreneurialAspect,
-              gracePass: desc.gracePass,
-              graceResult: desc.graceResult,
             }),
           });
           if (res.ok) {
+            const savedDescription = (await res.json()) as CourseDescription;
+            setDescriptions((prev) => ({
+              ...prev,
+              [courseId]: {
+                ...prev[courseId],
+                gracePass: savedDescription.gracePass,
+                graceResult: savedDescription.graceResult,
+                graceStatus: savedDescription.graceStatus,
+                graceCheckedAt: savedDescription.graceCheckedAt,
+              },
+            }));
             saved.add(courseId);
           } else {
             console.error(`Autosave failed for course ${courseId}: ${res.status}`);
@@ -357,6 +469,7 @@ export function CourseDescriptionForm({
       }
       // Only clear dirty flags for successfully saved descriptions
       if (saved.size > 0) {
+        setGraceQueueVersion((version) => version + 1);
         setDirtyDescriptions((prev) => {
           const next = new Set(prev);
           saved.forEach((id) => next.delete(id));
@@ -406,11 +519,21 @@ export function CourseDescriptionForm({
           courseContent: desc.courseContent,
           labWork: desc.labWork,
           entrepreneurialAspect: desc.entrepreneurialAspect,
-          gracePass: desc.gracePass,
-          graceResult: desc.graceResult,
         }),
       });
       if (res.ok) {
+        const savedDescription = (await res.json()) as CourseDescription;
+        setDescriptions((prev) => ({
+          ...prev,
+          [courseId]: {
+            ...prev[courseId],
+            gracePass: savedDescription.gracePass,
+            graceResult: savedDescription.graceResult,
+            graceStatus: savedDescription.graceStatus,
+            graceCheckedAt: savedDescription.graceCheckedAt,
+          },
+        }));
+        setGraceQueueVersion((version) => version + 1);
         setDirtyDescriptions((prev) => {
           const next = new Set(prev);
           next.delete(courseId);
@@ -436,15 +559,13 @@ export function CourseDescriptionForm({
         ...prev[courseId],
         gracePass: result.passed,
         graceResult: result,
+        graceStatus: result.passed ? "COMPLIANT" : "NEEDS_REVISION",
       },
     }));
     setDirtyDescriptions((prev) => new Set(prev).add(courseId));
   };
 
-  const checkGraceCompliance = async (
-    courseId: string,
-    courseTitle: string,
-  ) => {
+  const checkGraceCompliance = async (courseId: string) => {
     const desc = descriptions[courseId];
     if (!desc?.courseContent?.trim()) return;
 
@@ -461,14 +582,25 @@ export function CourseDescriptionForm({
     });
 
     try {
+      const saveResponse = await fetch(`/api/courses/${courseId}/description`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          learningOutcomes: desc.learningOutcomes.filter((o) => o.trim()),
+          courseContent: desc.courseContent,
+          labWork: desc.labWork,
+          entrepreneurialAspect: desc.entrepreneurialAspect,
+        }),
+      });
+      if (!saveResponse.ok) {
+        throw new Error("Save the course description before running GRACE.");
+      }
       const res = await fetch("/api/grace-check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: "course",
           courseId,
-          title: courseTitle,
-          content: desc.courseContent,
         }),
       });
 
@@ -485,11 +617,13 @@ export function CourseDescriptionForm({
             error?.error || "The GRACE service could not complete the check.",
         }));
       }
-    } catch {
+    } catch (error) {
       setGraceErrors((prev) => ({
         ...prev,
         [courseId]:
-          "Could not reach the GRACE compliance service. Please try again later.",
+          error instanceof Error
+            ? error.message
+            : "Could not reach the GRACE compliance service. Please try again later.",
       }));
     } finally {
       setGraceChecking(null);
@@ -504,6 +638,8 @@ export function CourseDescriptionForm({
         courseContent: content,
         gracePass: false,
         graceResult: null,
+        graceStatus: "PENDING",
+        graceCheckedAt: null,
       },
     }));
     setGraceResults((prev) => {
@@ -575,6 +711,35 @@ export function CourseDescriptionForm({
         </p>
       </CardHeader>
       <CardContent>
+        {graceProgress && graceProgress.total > 0 && (
+          <div className="mb-4 rounded-lg border bg-muted/30 p-3 text-sm">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {isProcessingGraceQueue && (
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              )}
+              <span className="font-medium">
+                {graceProgress.compliant + graceProgress.needsRevision} of{" "}
+                {graceProgress.total - graceProgress.missing} courses checked —{" "}
+                {graceProgress.compliant} compliant
+                {graceProgress.needsRevision > 0 && (
+                  <span className="text-amber-700">
+                    , {graceProgress.needsRevision} require review
+                  </span>
+                )}
+              </span>
+              {graceProgress.error > 0 && (
+                <span className="text-destructive">
+                  {graceProgress.error} need to be retried
+                </span>
+              )}
+              {graceProgress.missing > 0 && (
+                <span className="text-muted-foreground">
+                  {graceProgress.missing} have no description yet
+                </span>
+              )}
+            </div>
+          </div>
+        )}
         {Object.entries(coursesByLevel)
           .sort(([a], [b]) => parseInt(a) - parseInt(b))
           .map(([level, levelCourses]) => (
@@ -589,6 +754,9 @@ export function CourseDescriptionForm({
                       courseContent: "",
                       labWork: "",
                       entrepreneurialAspect: "",
+                      gracePass: false,
+                      graceResult: null,
+                      graceStatus: "PENDING" as const,
                     };
 
                     const hasGraceResult = graceResults[course.id];
@@ -627,7 +795,19 @@ export function CourseDescriptionForm({
                                 </Badge>
                               )}
 
-                              {hasGraceResult ? (
+                              {desc.graceStatus === "CHECKING" ||
+                              desc.graceStatus === "PENDING" ? (
+                                desc.courseContent ? (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-xs text-blue-700 border-blue-200 bg-blue-50"
+                                  >
+                                    {desc.graceStatus === "CHECKING"
+                                      ? "Checking"
+                                      : "GRACE check required"}
+                                  </Badge>
+                                ) : null
+                              ) : hasGraceResult ? (
                                 <Badge
                                   variant={isPassed ? "default" : "destructive"}
                                   className={
@@ -637,15 +817,17 @@ export function CourseDescriptionForm({
                                   }
                                 >
                                   {isPassed
-                                    ? "GRACE Compliant"
-                                    : "Needs Revision"}
+                                    ? "GRACE compliant"
+                                    : hasGraceResult.suggestedContent?.trim()
+                                      ? "Correction available"
+                                      : "Correction required"}
                                 </Badge>
-                              ) : desc.courseContent ? (
+                              ) : desc.graceStatus === "ERROR" ? (
                                 <Badge
-                                  variant="outline"
-                                  className="text-xs text-amber-600 border-amber-200 bg-amber-50"
+                                  variant="destructive"
+                                  className="text-xs"
                                 >
-                                  Unchecked
+                                  Check failed — retry required
                                 </Badge>
                               ) : null}
                             </div>
@@ -758,10 +940,7 @@ export function CourseDescriptionForm({
                                       variant="outline"
                                       size="sm"
                                       onClick={() =>
-                                        checkGraceCompliance(
-                                          course.id,
-                                          course.title,
-                                        )
+                                        checkGraceCompliance(course.id)
                                       }
                                       disabled={
                                         graceChecking === course.id ||
