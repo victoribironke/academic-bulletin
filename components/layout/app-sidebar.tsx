@@ -11,6 +11,7 @@ import {
   GraduationCap,
   LayoutDashboard,
   LibraryBig,
+  ScrollText,
   LogOut,
   Network,
   UserCog,
@@ -118,6 +119,12 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/users",
         icon: Users,
         permission: "view:users",
+      },
+      {
+        title: "Activity Log",
+        href: "/activity-log",
+        icon: ScrollText,
+        permission: "view:audit",
       },
     ],
   },
@@ -241,11 +248,9 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
     return !item.permission || hasPermission(item.permission);
   };
 
-  // HODs work on their own department's submission.
-  const hrefFor = (item: NavItem) =>
-    item.href === "/submissions" && currentUser?.role === "HOD"
-      ? "/submissions/me"
-      : item.href;
+  // Departmental users may cover several programmes, so the submissions
+  // list is their starting point rather than an arbitrary single record.
+  const hrefFor = (item: NavItem) => item.href;
 
   return (
     <Sidebar collapsible="icon" variant="inset" {...props}>
