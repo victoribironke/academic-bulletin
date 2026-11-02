@@ -11,6 +11,7 @@ import {
   requireApiUser,
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
+import { AUTOSAVE_COALESCE_MINUTES, recordActivity } from "@/lib/activity-log";
 
 // GET /api/courses/[id] - Get single course with description
 export async function GET(
@@ -147,6 +148,17 @@ export async function PATCH(
       },
     });
 
+    await recordActivity({
+      actorId: user!.id,
+      action: "COURSE_UPDATED",
+      entityType: "SUBMISSION",
+      entityId: existing.submissionId,
+      description: `Updated ${course.code} - ${course.title}.`,
+      metadata: { courseId: id, fields: Object.keys(updateData) },
+      // Autosave fires every few seconds; log one entry per editing session.
+      coalesceWithinMinutes: AUTOSAVE_COALESCE_MINUTES,
+    });
+
     return NextResponse.json(course);
   } catch (error) {
     console.error("Failed to update course:", error);
@@ -184,7 +196,20 @@ export async function DELETE(
     }
 
     // Delete course (cascades to description)
-    await prisma.course.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      await recordActivity(
+        {
+          actorId: user!.id,
+          action: "COURSE_DELETED",
+          entityType: "SUBMISSION",
+          entityId: existing.submissionId,
+          description: `Deleted ${existing.code} - ${existing.title}.`,
+          metadata: { courseId: id },
+        },
+        tx,
+      );
+      await tx.course.delete({ where: { id } });
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
