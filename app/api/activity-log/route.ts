@@ -3,6 +3,12 @@ import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
 
+function parseDate(value: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireApiUser(["ADMIN", "SUPER_ADMIN"]);
@@ -13,6 +19,10 @@ export async function GET(request: NextRequest) {
     const action = searchParams.get("action") || "";
     const entityType = searchParams.get("entityType") || "";
     const actorId = searchParams.get("actorId") || "";
+    // The page sends the start and end of the chosen day in the viewer's
+    // own time zone, so the server doesn't have to guess it.
+    const from = parseDate(searchParams.get("from"));
+    const to = parseDate(searchParams.get("to"));
     const page = Math.max(1, Number(searchParams.get("page")) || 1);
     const pageSize = Math.min(
       100,
@@ -23,6 +33,9 @@ export async function GET(request: NextRequest) {
       ...(action && { action }),
       ...(entityType && { entityType }),
       ...(actorId && { actorId }),
+      ...((from || to) && {
+        createdAt: { ...(from && { gte: from }), ...(to && { lt: to }) },
+      }),
       ...(query && {
         OR: [
           { description: { contains: query, mode: "insensitive" } },
