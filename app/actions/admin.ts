@@ -5,8 +5,15 @@ import prisma from "@/lib/prisma";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendAccessGrantedEmail } from "@/lib/email/notifications";
+import { recordActivity } from "@/lib/activity-log";
 
-const USER_ROLES = ["HOD", "DEAN", "ADMIN", "SUPER_ADMIN"] as const;
+const USER_ROLES = [
+  "PROGRAMME_COORDINATOR",
+  "HOD",
+  "DEAN",
+  "ADMIN",
+  "SUPER_ADMIN",
+] as const;
 
 export async function adminCreateUser(prevState: any, formData: FormData) {
   // 1. Verify Requesting User's Permissions
@@ -51,6 +58,14 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
   const rawRole = formData.get("role") as string;
   let schoolId = formData.get("schoolId") as string | null;
   let departmentId = formData.get("departmentId") as string | null;
+  const programmeIds = Array.from(
+    new Set(
+      formData
+        .getAll("programmeIds")
+        .map(String)
+        .filter(Boolean),
+    ),
+  );
 
   if (schoolId === "none") schoolId = null;
   if (departmentId === "none") departmentId = null;
@@ -74,8 +89,16 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
   }
 
 
-  if (role === "HOD" && !departmentId) {
-    return { error: "A Head of Department must be assigned to a department." };
+  if (["PROGRAMME_COORDINATOR", "HOD"].includes(role) && !departmentId) {
+    return {
+      error:
+        role === "PROGRAMME_COORDINATOR"
+          ? "A Programme Coordinator must be assigned to a department."
+          : "A Head of Department must be assigned to a department.",
+    };
+  }
+  if (role === "PROGRAMME_COORDINATOR" && programmeIds.length === 0) {
+    return { error: "Assign at least one programme to this coordinator." };
   }
   if (role === "DEAN" && !schoolId) {
     return { error: "A Dean must be assigned to a school." };
@@ -95,6 +118,16 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
     if (!department || department.schoolId !== schoolId) {
       return {
         error: "The selected department does not belong to the selected school.",
+      };
+    }
+  }
+  if (role === "PROGRAMME_COORDINATOR") {
+    const matchingProgrammes = await prisma.programme.count({
+      where: { id: { in: programmeIds }, departmentId: departmentId! },
+    });
+    if (matchingProgrammes !== programmeIds.length) {
+      return {
+        error: "Every selected programme must belong to the selected department.",
       };
     }
   }
@@ -125,16 +158,34 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
     const userId = created.user.id;
 
     try {
-      await prisma.user.create({
-        data: {
-          id: userId,
-          email,
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          role,
-          schoolId: schoolId || null,
-          departmentId: departmentId || null,
-        },
+      await prisma.$transaction(async (tx) => {
+        await tx.user.create({
+          data: {
+            id: userId,
+            email,
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            role,
+            schoolId: schoolId || null,
+            departmentId: departmentId || null,
+            ...(role === "PROGRAMME_COORDINATOR" && {
+              programmeAssignments: {
+                create: programmeIds.map((programmeId) => ({ programmeId })),
+              },
+            }),
+          },
+        });
+        await recordActivity(
+          {
+            actorId: requestingUser.id,
+            action: "USER_CREATED",
+            entityType: "USER",
+            entityId: userId,
+            description: `Created ${firstName.trim()} ${lastName.trim()}'s ${role.toLowerCase().replaceAll("_", " ")} account.`,
+            metadata: { email, role, programmeIds },
+          },
+          tx,
+        );
       });
     } catch (profileError) {
       await adminAuthClient.auth.admin.deleteUser(userId);
