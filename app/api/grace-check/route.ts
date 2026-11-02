@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { GraceServiceError, runGraceCheck } from "@/lib/grace";
 import {
+  processGraceAssessment,
+  synchronizeCourseGraceAssessment,
+} from "@/lib/courses/grace-compliance";
+import {
   canViewSubmission,
   getApiUser,
   requireApiUser,
@@ -16,13 +20,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { type, submissionId, courseId, title, content } = body;
-
-    if (!title || !content) {
-      return NextResponse.json(
-        { error: "title and content are required" },
-        { status: 400 },
-      );
-    }
 
     let targetSubmissionId = submissionId as string | undefined;
     if (type === "course" && courseId) {
@@ -45,10 +42,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: gate.message }, { status: gate.status });
     }
 
-    const graceResult = await runGraceCheck(title, content);
-
-    // Persist result based on type
     if (type === "philosophy" && submissionId) {
+      if (!title || !content) {
+        return NextResponse.json(
+          { error: "title and content are required" },
+          { status: 400 },
+        );
+      }
+      const graceResult = await runGraceCheck(title, content);
       await prisma.submissionContent.update({
         where: { submissionId },
         data: {
@@ -56,23 +57,51 @@ export async function POST(request: NextRequest) {
           philosophyGrace: graceResult,
         },
       });
-    } else if (type === "course" && courseId) {
-      await prisma.courseDescription.upsert({
-        where: { courseId },
-        update: {
-          gracePass: graceResult.passed,
-          graceResult: graceResult,
-        },
-        create: {
-          courseId,
-          submissionId: targetSubmissionId,
-          gracePass: graceResult.passed,
-          graceResult: graceResult,
-        },
-      });
+      return NextResponse.json(graceResult);
     }
 
-    return NextResponse.json(graceResult);
+    if (type === "course" && courseId) {
+      await synchronizeCourseGraceAssessment(courseId);
+      const description = await prisma.courseDescription.findUnique({
+        where: { courseId },
+        select: {
+          courseContent: true,
+          graceContentHash: true,
+          graceStatus: true,
+        },
+      });
+      if (!description?.courseContent?.trim() || !description.graceContentHash) {
+        return NextResponse.json(
+          { error: "Save the course description before running GRACE." },
+          { status: 400 },
+        );
+      }
+
+      const assessment = await processGraceAssessment(
+        description.graceContentHash,
+        { retry: description.graceStatus === "ERROR" },
+      );
+      if (assessment?.status === "ERROR") {
+        return NextResponse.json(
+          {
+            error:
+              assessment.error ||
+              "The GRACE compliance service is temporarily unavailable.",
+            code: "GRACE_SERVICE_UNAVAILABLE",
+          },
+          { status: 503 },
+        );
+      }
+      if (assessment?.result) {
+        return NextResponse.json(assessment.result);
+      }
+      return NextResponse.json(
+        { error: "The GRACE check is already being processed." },
+        { status: 409 },
+      );
+    }
+
+    return NextResponse.json({ error: "Unknown GRACE check type." }, { status: 400 });
   } catch (error) {
     console.error("GRACE check failed:", error);
     if (error instanceof GraceServiceError) {
@@ -122,11 +151,20 @@ export async function GET(request: NextRequest) {
       }
       const desc = await prisma.courseDescription.findUnique({
         where: { courseId },
-        select: { gracePass: true, graceResult: true },
+        select: {
+          gracePass: true,
+          graceResult: true,
+          graceStatus: true,
+          graceCheckedAt: true,
+          graceAssessment: { select: { error: true } },
+        },
       });
       return NextResponse.json({
         passed: desc?.gracePass ?? false,
         result: desc?.graceResult ?? null,
+        status: desc?.graceStatus ?? "PENDING",
+        checkedAt: desc?.graceCheckedAt ?? null,
+        error: desc?.graceAssessment?.error ?? null,
       });
     }
 
