@@ -43,27 +43,42 @@ interface Department {
   schoolId: string;
 }
 
+interface Programme {
+  id: string;
+  name: string;
+  code: string;
+  departmentId: string;
+}
+
 interface User {
   id: string;
   email: string;
   firstName: string;
   lastName: string;
-  role: "HOD" | "DEAN" | "ADMIN" | "SUPER_ADMIN";
+  role:
+    | "PROGRAMME_COORDINATOR"
+    | "HOD"
+    | "DEAN"
+    | "ADMIN"
+    | "SUPER_ADMIN";
   isActive: boolean;
   schoolId: string | null;
   departmentId: string | null;
   school?: School | null;
   department?: Department | null;
+  programmes?: Programme[];
 }
 
 const ROLE_TIERS: Record<string, number> = {
-  HOD: 1,
-  DEAN: 2,
-  ADMIN: 3,
-  SUPER_ADMIN: 4,
+  PROGRAMME_COORDINATOR: 1,
+  HOD: 2,
+  DEAN: 3,
+  ADMIN: 4,
+  SUPER_ADMIN: 5,
 };
 
 const ROLE_STYLES: Record<string, string> = {
+  PROGRAMME_COORDINATOR: "border-brand-gold/40 bg-brand-gold/10 text-foreground",
   HOD: "border-border bg-muted text-foreground",
   DEAN: "border-primary/20 bg-primary/10 text-primary",
   ADMIN: "border-primary/30 bg-background text-primary",
@@ -95,6 +110,7 @@ export default function UsersPage() {
   const [users, setUsers] = useState<User[] | null>(null);
   const [schools, setSchools] = useState<School[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [programmes, setProgrammes] = useState<Programme[]>([]);
   const [failed, setFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
@@ -117,18 +133,21 @@ export default function UsersPage() {
       fetch("/api/users/full"),
       fetch("/api/schools"),
       fetch("/api/departments"),
+      fetch("/api/programmes"),
     ])
-      .then(async ([usersRes, schoolsRes, deptsRes]) => {
+      .then(async ([usersRes, schoolsRes, deptsRes, programmesRes]) => {
         if (!usersRes.ok) throw new Error("users");
-        const [u, s, d] = await Promise.all([
+        const [u, s, d, p] = await Promise.all([
           usersRes.json(),
           schoolsRes.ok ? schoolsRes.json() : [],
           deptsRes.ok ? deptsRes.json() : [],
+          programmesRes.ok ? programmesRes.json() : [],
         ]);
         if (cancelled) return;
         setUsers(u);
         setSchools(s);
         setDepartments(d);
+        setProgrammes(p);
         setFailed(false);
       })
       .catch(() => {
@@ -247,6 +266,7 @@ export default function UsersPage() {
             <CreateUserDialog
               schools={schools}
               departments={departments}
+              programmes={programmes}
               isSuperAdmin={isSuperAdmin}
               onSuccess={reload}
             />
@@ -266,6 +286,9 @@ export default function UsersPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All roles</SelectItem>
+                <SelectItem value="PROGRAMME_COORDINATOR">
+                  {getRoleDisplayName("PROGRAMME_COORDINATOR")}
+                </SelectItem>
                 <SelectItem value="HOD">{getRoleDisplayName("HOD")}</SelectItem>
                 <SelectItem value="DEAN">{getRoleDisplayName("DEAN")}</SelectItem>
                 <SelectItem value="ADMIN">{getRoleDisplayName("ADMIN")}</SelectItem>
@@ -374,6 +397,11 @@ export default function UsersPage() {
                             </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
+                            {user.role === "PROGRAMME_COORDINATOR" && (
+                              <SelectItem value="PROGRAMME_COORDINATOR">
+                                {getRoleDisplayName("PROGRAMME_COORDINATOR")}
+                              </SelectItem>
+                            )}
                             <SelectItem value="HOD">{getRoleDisplayName("HOD")}</SelectItem>
                             <SelectItem value="DEAN">{getRoleDisplayName("DEAN")}</SelectItem>
                             <SelectItem value="ADMIN">{getRoleDisplayName("ADMIN")}</SelectItem>
@@ -415,6 +443,9 @@ export default function UsersPage() {
                             user={user}
                             schools={schools}
                             departments={departments}
+                            programmes={programmes}
+                            canChangeRole={canChangeRole}
+                            allowSuperAdmin={isSuperAdmin}
                             onSuccess={reload}
                           />
                         )}
