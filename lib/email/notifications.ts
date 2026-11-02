@@ -177,6 +177,7 @@ export async function sendDailyDigests(now = new Date()): Promise<DigestResult> 
         select: {
           id: true,
           status: true,
+          programmeId: true,
           programme: {
             select: {
               name: true,
@@ -241,9 +242,29 @@ export async function sendDailyDigests(now = new Date()): Promise<DigestResult> 
     const departmentIds = [
       ...new Set(decisions.map((t) => t.submission.programme.department.id)),
     ];
-    const hods = await prisma.user.findMany({
-      where: { role: "HOD", isActive: true, departmentId: { in: departmentIds } },
-      select: { id: true, email: true, departmentId: true },
+    const programmeIds = [
+      ...new Set(decisions.map((t) => t.submission.programmeId)),
+    ];
+    const departmentalUsers = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { role: "HOD", departmentId: { in: departmentIds } },
+          {
+            role: "PROGRAMME_COORDINATOR",
+            programmeAssignments: {
+              some: { programmeId: { in: programmeIds } },
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        departmentId: true,
+        programmeAssignments: { select: { programmeId: true } },
+      },
     });
 
     // Group decisions by recipient. The department's HOD(s) get them; if a
@@ -251,10 +272,26 @@ export async function sendDailyDigests(now = new Date()): Promise<DigestResult> 
     const byRecipient = new Map<string, { email: string; items: DigestItem[] }>();
     for (const t of decisions) {
       const deptId = t.submission.programme.department.id;
-      let recipients = hods.filter((h) => h.departmentId === deptId);
+      let recipients = departmentalUsers.filter(
+        (user) =>
+          (user.role === "HOD" && user.departmentId === deptId) ||
+          (user.role === "PROGRAMME_COORDINATOR" &&
+            user.programmeAssignments.some(
+              (assignment) =>
+                assignment.programmeId === t.submission.programmeId,
+            )),
+      );
       const creator = t.submission.createdBy;
       if (recipients.length === 0 && creator.role === "HOD" && creator.isActive) {
-        recipients = [{ id: creator.id, email: creator.email, departmentId: deptId }];
+        recipients = [
+          {
+            id: creator.id,
+            email: creator.email,
+            role: creator.role,
+            departmentId: deptId,
+            programmeAssignments: [],
+          },
+        ];
       }
       const finalApproval = t.action === "APPROVE" && t.toPhase === 11;
       const item: DigestItem = {
@@ -313,6 +350,7 @@ export async function sendDailyDigests(now = new Date()): Promise<DigestResult> 
 // ── New user access ──────────────────────────────────────────────────────────
 
 const ROLE_LABELS: Record<string, string> = {
+  PROGRAMME_COORDINATOR: "Programme Coordinator",
   HOD: "Head of Department",
   DEAN: "Dean",
   ADMIN: "Administrator",
