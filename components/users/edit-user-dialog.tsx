@@ -31,6 +31,9 @@ export function EditUserDialog({
   canChangeRole = false,
   allowSuperAdmin = false,
   onSuccess,
+  initialRole,
+  open: controlledOpen,
+  onOpenChange,
 }: {
   user: any;
   schools: any[];
@@ -39,15 +42,30 @@ export function EditUserDialog({
   canChangeRole?: boolean;
   allowSuperAdmin?: boolean;
   onSuccess: () => void;
+  /** Opens with this role already chosen (e.g. picked from the table). */
+  initialRole?: string;
+  /** When set, the parent opens and closes the dialog and no Edit button is shown. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  // HODs often have a department saved without a school; derive the school
+  // so the department and programme pickers show up.
+  const initialSchool =
+    user.schoolId ||
+    departments.find((d) => d.id === user.departmentId)?.schoolId ||
+    "none";
+  const isControlled = controlledOpen !== undefined;
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (value: boolean) => {
+    if (!isControlled) setInternalOpen(value);
+    onOpenChange?.(value);
+  };
   const [firstName, setFirstName] = useState<string>(user.firstName ?? "");
   const [lastName, setLastName] = useState<string>(user.lastName ?? "");
-  const [selectedRole, setSelectedRole] = useState<string>(user.role);
+  const [selectedRole, setSelectedRole] = useState<string>(initialRole ?? user.role);
   const [isPending, setIsPending] = useState(false);
-  const [selectedSchool, setSelectedSchool] = useState<string>(
-    user.schoolId || "none",
-  );
+  const [selectedSchool, setSelectedSchool] = useState<string>(initialSchool);
   const [selectedDepartment, setSelectedDepartment] = useState<string>(
     user.departmentId || "none",
   );
@@ -66,8 +84,8 @@ export function EditUserDialog({
     if (isOpen) {
       setFirstName(user.firstName ?? "");
       setLastName(user.lastName ?? "");
-      setSelectedRole(user.role);
-      setSelectedSchool(user.schoolId || "none");
+      setSelectedRole(initialRole ?? user.role);
+      setSelectedSchool(initialSchool);
       setSelectedDepartment(user.departmentId || "none");
       setSelectedProgrammes(user.programmeIds || []);
       setError("");
@@ -83,6 +101,16 @@ export function EditUserDialog({
     if (!firstName.trim() || !lastName.trim()) {
       setError("First and last name are required.");
       return;
+    }
+    if (selectedRole === "PROGRAMME_COORDINATOR") {
+      if (selectedDepartment === "none") {
+        setError("Choose the coordinator's department.");
+        return;
+      }
+      if (selectedProgrammes.length === 0) {
+        setError("Choose at least one programme for the coordinator.");
+        return;
+      }
     }
     setIsPending(true);
     setError("");
@@ -120,12 +148,14 @@ export function EditUserDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm" aria-label={`Edit ${user.firstName} ${user.lastName}`}>
-          <Edit2 />
-          <span className="hidden sm:inline">Edit</span>
-        </Button>
-      </DialogTrigger>
+      {!isControlled && (
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm" aria-label={`Edit ${user.firstName} ${user.lastName}`}>
+            <Edit2 />
+            <span className="hidden sm:inline">Edit</span>
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-[525px]">
         <DialogHeader>
           <DialogTitle>Edit user</DialogTitle>
@@ -239,10 +269,23 @@ export function EditUserDialog({
           )}
 
           {selectedRole === "PROGRAMME_COORDINATOR" &&
+            selectedDepartment === "none" && (
+              <p className="text-sm text-muted-foreground">
+                Choose the school and department, then pick the programmes this
+                coordinator will handle.
+              </p>
+            )}
+
+          {selectedRole === "PROGRAMME_COORDINATOR" &&
             selectedDepartment !== "none" && (
               <div className="space-y-2">
                 <Label>Assigned programmes</Label>
                 <div className="max-h-44 space-y-2 overflow-y-auto rounded-md border p-3">
+                  {filteredProgrammes.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      This department has no programmes yet.
+                    </p>
+                  )}
                   {filteredProgrammes.map((programme) => {
                     const checked = selectedProgrammes.includes(programme.id);
                     return (
