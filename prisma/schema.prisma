@@ -105,6 +105,14 @@ enum CourseOwnership {
   INSTITUTIONAL // University-wide GST courses
 }
 
+enum GraceStatus {
+  PENDING
+  CHECKING
+  COMPLIANT
+  NEEDS_REVISION
+  ERROR
+}
+
 // ============================================================================
 // ORGANIZATIONAL STRUCTURE
 // ============================================================================
@@ -421,8 +429,11 @@ model CourseDescription {
   courseContent    String? // Rich text content
   labWork              String? // Lab work description (if applicable)
   entrepreneurialAspect String? // Entrepreneurial/practical aspect of the course
-  gracePass        Boolean  @default(false)
-  graceResult      Json? // { scores: {G,R,A,C,E}, explanation, recommendation }
+  gracePass        Boolean     @default(false)
+  graceResult      Json? // { scores: {G,R,A,C,E}, explanation, recommendation, suggestedContent }
+  graceStatus      GraceStatus @default(PENDING)
+  graceContentHash String?
+  graceCheckedAt   DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -433,8 +444,32 @@ model CourseDescription {
   // Relations
   submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
   course     Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  graceAssessment GraceAssessment? @relation(fields: [graceContentHash], references: [contentHash], onDelete: SetNull)
 
+  @@index([submissionId, graceStatus])
+  @@index([graceContentHash])
   @@map("course_descriptions")
+}
+
+// Shared by every unchanged copy of the same Registry, CCMAS, GST, uploaded,
+// or manually entered course description.
+model GraceAssessment {
+  contentHash      String      @id
+  title            String
+  courseContent    String
+  learningOutcomes Json?
+  status           GraceStatus @default(PENDING)
+  result           Json?
+  error             String?
+  attempts          Int         @default(0)
+  checkedAt         DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  courseDescriptions CourseDescription[]
+
+  @@index([status, createdAt])
+  @@map("grace_assessments")
 }
 
 // ============================================================================
