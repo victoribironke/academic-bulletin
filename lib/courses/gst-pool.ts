@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { prepareCourseGraceState } from "@/lib/courses/grace-compliance";
 
 const EDITABLE_SUBMISSION_STATUSES = ["DRAFT", "CORRECTIONS_REQUIRED"] as const;
 
@@ -142,6 +143,11 @@ export async function preloadRegistryCoursesForSubmission(
         select: { id: true },
       });
       if (!description) {
+        const graceState = await prepareCourseGraceState(prisma, {
+          title: programmeLink?.titleOverride || master.title,
+          learningOutcomes,
+          courseContent,
+        });
         await prisma.courseDescription.create({
           data: {
             courseId: course.id,
@@ -151,6 +157,7 @@ export async function preloadRegistryCoursesForSubmission(
             labWork: master.labWork?.trim() || null,
             entrepreneurialAspect:
               master.entrepreneurialAspect?.trim() || null,
+            ...graceState,
           },
         });
       }
