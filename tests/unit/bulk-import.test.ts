@@ -301,4 +301,29 @@ describe("Registry bulk import validation", () => {
       "GST courses must use INSTITUTIONAL ownership.",
     );
   });
+
+  it("allows an existing Registry course to be refreshed and parses programme mappings", () => {
+    const [row] = validateMasterCourseImportRows(
+      [
+        {
+          "Course Code": "COS 101",
+          "Course Title": "Introduction to Computing Sciences",
+          Units: 3,
+          "Course Type": "CORE",
+          Ownership: "INSTITUTIONAL",
+          Level: 100,
+          Semester: 1,
+          "Programme Codes": "BSC-COS | BSC-SE",
+          "Source Programmes": "Computer Science | Software Engineering",
+        },
+      ],
+      { existingCodes: ["COS 101"], allowExisting: true },
+    );
+
+    expect(row.errors).toEqual([]);
+    expect(row.data).toMatchObject({
+      programmeCodes: ["BSC-COS", "BSC-SE"],
+      sourceProgrammes: ["Computer Science", "Software Engineering"],
+    });
+  });
 });
