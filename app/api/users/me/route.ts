@@ -40,6 +40,14 @@ export async function GET() {
         department: {
           select: { id: true, name: true, code: true },
         },
+        programmeAssignments: {
+          select: {
+            programme: {
+              select: { id: true, name: true, code: true },
+            },
+          },
+          orderBy: { programme: { name: "asc" } },
+        },
       },
     });
 
@@ -59,7 +67,16 @@ export async function GET() {
       );
     }
 
-    return NextResponse.json(user);
+    const { programmeAssignments, ...profile } = user;
+    return NextResponse.json({
+      ...profile,
+      programmeIds: programmeAssignments.map(
+        (assignment) => assignment.programme.id,
+      ),
+      programmes: programmeAssignments.map(
+        (assignment) => assignment.programme,
+      ),
+    });
   } catch (error) {
     console.error("Failed to fetch current user session:", error);
     return NextResponse.json(
