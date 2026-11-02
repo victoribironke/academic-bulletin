@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
+import { recordActivity } from "@/lib/activity-log";
+import { preloadRegistryCoursesForSubmission } from "@/lib/courses/gst-pool";
 
 // POST /api/submissions/initialize - Idempotent bulk creation of submissions
 export async function POST(request: NextRequest) {
@@ -55,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     // Create submissions sequentially or in parallel batches
     for (const programme of programmesToInit) {
-      await prisma.submission.create({
+      const submission = await prisma.submission.create({
         data: {
           title: `Academic Bulletin Submission - ${programme.name}`,
           programmeId: programme.id,
@@ -77,8 +79,18 @@ export async function POST(request: NextRequest) {
           },
         }
       });
+      await preloadRegistryCoursesForSubmission(submission.id);
       createdCount++;
     }
+
+    await recordActivity({
+      actorId: auth.user.id,
+      action: "SUBMISSIONS_INITIALIZED",
+      entityType: "REVIEW_CYCLE",
+      entityId: cycleId,
+      description: `Created ${createdCount} missing programme submission(s) for ${cycle.name}.`,
+      metadata: { createdCount },
+    });
 
     return NextResponse.json({ 
       message: "Initialization successful", 
