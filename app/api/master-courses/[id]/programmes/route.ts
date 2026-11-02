@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
+import { recordActivity } from "@/lib/activity-log";
+import { preloadRegistryCoursesForSubmission } from "@/lib/courses/gst-pool";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -126,6 +128,25 @@ export async function POST(request: Request, { params }: RouteParams) {
           isCore: Boolean(isCore),
         })),
       });
+      await recordActivity({
+        actorId: auth.user.id,
+        action: "REGISTRY_COURSE_LINKED",
+        entityType: "MASTER_COURSE",
+        entityId: id,
+        description: `Linked ${course.code} to ${newProgrammeIds.length} programme(s).`,
+        metadata: { programmeIds: newProgrammeIds, isCore: Boolean(isCore) },
+      });
+
+      const submissions = await prisma.submission.findMany({
+        where: {
+          programmeId: { in: newProgrammeIds },
+          status: { in: ["DRAFT", "CORRECTIONS_REQUIRED"] },
+        },
+        select: { id: true },
+      });
+      for (const submission of submissions) {
+        await preloadRegistryCoursesForSubmission(submission.id);
+      }
     }
 
     // Return updated course with all links
@@ -186,6 +207,15 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     if (deleted.count === 0) {
       return NextResponse.json({ error: "Link not found" }, { status: 404 });
     }
+
+    await recordActivity({
+      actorId: auth.user.id,
+      action: "REGISTRY_COURSE_UNLINKED",
+      entityType: "MASTER_COURSE",
+      entityId: id,
+      description: "Removed a Registry course from a programme.",
+      metadata: { programmeId },
+    });
 
     return NextResponse.json({ message: "Programme unlinked successfully" });
   } catch (error) {
