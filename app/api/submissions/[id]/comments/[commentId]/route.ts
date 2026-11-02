@@ -5,6 +5,7 @@ import {
   isAdministrator,
   requireApiUser,
 } from "@/lib/api-auth";
+import { recordActivity } from "@/lib/activity-log";
 
 interface RouteParams {
   params: Promise<{ id: string; commentId: string }>;
@@ -99,6 +100,25 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       where: { id: commentId, submissionId: id },
       select: { authorId: true },
     });
+
+    await recordActivity({
+      actorId: auth.user.id,
+      action:
+        status === "RESOLVED"
+          ? "COMMENT_RESOLVED"
+          : status === "OPEN"
+            ? "COMMENT_REOPENED"
+            : "COMMENT_UPDATED",
+      entityType: "SUBMISSION",
+      entityId: id,
+      description:
+        status === "RESOLVED"
+          ? "Resolved a submission comment."
+          : status === "OPEN"
+            ? "Reopened a submission comment."
+            : "Updated a submission comment.",
+      metadata: { commentId },
+    });
     if (!existing) {
       return NextResponse.json({ error: "Comment not found" }, { status: 404 });
     }
@@ -109,8 +129,19 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    await prisma.comment.delete({
-      where: { id: commentId },
+    await prisma.$transaction(async (tx) => {
+      await tx.comment.delete({ where: { id: commentId } });
+      await recordActivity(
+        {
+          actorId: auth.user.id,
+          action: "COMMENT_DELETED",
+          entityType: "SUBMISSION",
+          entityId: id,
+          description: "Deleted a submission comment.",
+          metadata: { commentId },
+        },
+        tx,
+      );
     });
 
     return NextResponse.json({ success: true });
