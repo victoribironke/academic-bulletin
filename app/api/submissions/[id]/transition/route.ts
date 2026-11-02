@@ -12,6 +12,7 @@ import {
   getCourseGraceBlockers,
   hasCourseGraceBlockers,
 } from "@/lib/courses/grace-compliance";
+import { TOTAL_PHASES } from "@/lib/submissions/phases";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -134,7 +135,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           status: newStatus,
           ...(action === "SUBMIT" && { submittedAt: new Date() }),
           ...(action === "APPROVE" &&
-            newPhase === 11 && { approvedAt: new Date() }),
+            newPhase === TOTAL_PHASES && { approvedAt: new Date() }),
         },
         include: {
           programme: {
