@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { canViewSubmission, requireApiUser } from "@/lib/api-auth";
+import { recordActivity } from "@/lib/activity-log";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -88,25 +89,43 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const comment = await prisma.comment.create({
-      data: {
-        content: content.trim(),
-        section: typeof section === "string" ? section.trim() : null,
-        type: type || "SUGGESTION",
-        phase: submission.currentPhase,
-        submissionId: id,
-        authorId: auth.user.id,
-      },
-      include: {
-        author: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            role: true,
+    const comment = await prisma.$transaction(async (tx) => {
+      const created = await tx.comment.create({
+        data: {
+          content: content.trim(),
+          section: typeof section === "string" ? section.trim() : null,
+          type: type || "SUGGESTION",
+          phase: submission.currentPhase,
+          submissionId: id,
+          authorId: auth.user.id,
+        },
+        include: {
+          author: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              role: true,
+            },
           },
         },
-      },
+      });
+      await recordActivity(
+        {
+          actorId: auth.user.id,
+          action: "COMMENT_ADDED",
+          entityType: "SUBMISSION",
+          entityId: id,
+          description: `Added a ${String(type || "SUGGESTION").toLowerCase()} to a submission.`,
+          metadata: {
+            commentId: created.id,
+            phase: submission.currentPhase,
+            ...(section && { section }),
+          },
+        },
+        tx,
+      );
+      return created;
     });
 
     return NextResponse.json(comment, { status: 201 });
