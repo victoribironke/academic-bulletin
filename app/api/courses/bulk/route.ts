@@ -6,6 +6,7 @@ import {
   courseDuplicateKeys,
   validateCourseImportRows,
 } from "@/lib/imports/courses";
+import { recordActivity } from "@/lib/activity-log";
 
 const MAX_IMPORT_ROWS = 500;
 
@@ -98,6 +99,17 @@ export async function POST(request: Request) {
           },
         });
       }
+      await recordActivity(
+        {
+          actorId: user!.id,
+          action: "COURSES_BULK_IMPORTED",
+          entityType: "SUBMISSION",
+          entityId: submissionId,
+          description: `Imported ${validated.length} courses from a spreadsheet.`,
+          metadata: { imported: validated.length },
+        },
+        transaction,
+      );
     });
 
     return NextResponse.json({ imported: validated.length }, { status: 201 });
