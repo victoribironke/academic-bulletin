@@ -7,8 +7,12 @@ import {
   validateCourseImportRows,
 } from "@/lib/imports/courses";
 import { recordActivity } from "@/lib/activity-log";
+import { prepareCourseGraceState } from "@/lib/courses/grace-compliance";
 
 const MAX_IMPORT_ROWS = 500;
+
+// Large imports can outlast the default function time limit.
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
@@ -75,6 +79,13 @@ export async function POST(request: Request) {
           row.courseContent ||
           row.labWork ||
           row.entrepreneurialAspect;
+        const graceState = hasDescription
+          ? await prepareCourseGraceState(transaction, {
+              title: row.title,
+              learningOutcomes: row.learningOutcomes,
+              courseContent: row.courseContent,
+            })
+          : null;
         await transaction.course.create({
           data: {
             submissionId,
@@ -93,6 +104,7 @@ export async function POST(request: Request) {
                     courseContent: row.courseContent || null,
                     labWork: row.labWork || null,
                     entrepreneurialAspect: row.entrepreneurialAspect || null,
+                    ...graceState!,
                   },
                 }
               : undefined,
@@ -110,9 +122,20 @@ export async function POST(request: Request) {
         },
         transaction,
       );
+    }, {
+      // Up to 500 rows, each with a course, a description and a GRACE record,
+      // takes longer than Prisma's 5-second default.
+      maxWait: 10_000,
+      timeout: 60_000,
     });
 
-    return NextResponse.json({ imported: validated.length }, { status: 201 });
+    return NextResponse.json(
+      {
+        imported: validated.length,
+        graceQueued: validated.filter((row) => row.data?.courseContent).length,
+      },
+      { status: 201 },
+    );
   } catch (error) {
     console.error("Failed to bulk import courses:", error);
     return NextResponse.json({ error: "Failed to import courses" }, { status: 500 });
