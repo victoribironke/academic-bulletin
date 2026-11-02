@@ -116,6 +116,9 @@ export default function StaffPage() {
 
   const canManage = hasPermission("manage:staff");
   const canView = hasPermission("view:staff");
+  const isDepartmentEditor = ["HOD", "PROGRAMME_COORDINATOR"].includes(
+    currentUser?.role || "",
+  );
 
   const fetchData = () => setReloadKey((k) => k + 1);
 
@@ -147,8 +150,8 @@ export default function StaffPage() {
   const filteredStaff = staff.filter((s) => {
     // Role scoping
     if (
-      currentUser?.role === "HOD" &&
-      currentUser.departmentId &&
+      isDepartmentEditor &&
+      currentUser?.departmentId &&
       s.departmentId !== currentUser.departmentId
     )
       return false;
@@ -389,8 +392,8 @@ export default function StaffPage() {
   if (!canView && !canManage) return null;
 
   const importDepartmentId =
-    currentUser?.role === "HOD"
-      ? currentUser.departmentId || ""
+    isDepartmentEditor
+      ? currentUser?.departmentId || ""
       : deptFilter !== "ALL"
         ? deptFilter
         : "";
@@ -408,7 +411,7 @@ export default function StaffPage() {
       <PageHeader
         title="Staff Directory"
         description={
-          currentUser?.role === "HOD"
+          isDepartmentEditor
             ? "Staff in your department. Everyone added here can be selected in your bulletin."
             : "Academic and non-academic staff across departments."
         }
@@ -445,7 +448,7 @@ export default function StaffPage() {
                 <SelectItem value="NON_ACADEMIC">Non-academic</SelectItem>
               </SelectContent>
             </Select>
-            {currentUser?.role !== "HOD" && (
+            {!isDepartmentEditor && (
               <Select value={deptFilter} onValueChange={setDeptFilter}>
                 <SelectTrigger className="w-full bg-card sm:w-56 [&>span]:truncate" aria-label="Department">
                   <SelectValue placeholder="All departments" />
@@ -580,7 +583,7 @@ export default function StaffPage() {
                     setFormData({ ...formData, department: v })
                   }
                   required
-                  disabled={currentUser?.role === "HOD"}
+                  disabled={isDepartmentEditor}
                 >
                   <SelectTrigger className="truncate">
                     <SelectValue placeholder="Select Department" />
