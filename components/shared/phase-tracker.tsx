@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { PHASES, TOTAL_PHASES } from "@/lib/submissions/phases";
 
 /**
- * Shows where a submission is in the 11 review phases.
+ * Shows where a submission is in the 10 review phases.
  * Full stepper on wide screens; a compact bar with the current phase on small ones.
  */
 export function PhaseTracker({
