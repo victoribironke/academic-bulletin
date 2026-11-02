@@ -34,6 +34,10 @@ import {
 import { Loader2, Save, BookOpen, Import, History, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { BulkImportDialog } from "@/components/imports/bulk-import-dialog";
+import { TableToolbar } from "@/components/shared/table-toolbar";
+import { TablePagination } from "@/components/shared/table-pagination";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import type { PageResult } from "@/lib/pagination";
 import {
   COURSE_TEMPLATE_COLUMNS,
   COURSE_TEMPLATE_EXAMPLES,
@@ -155,10 +159,16 @@ export function CourseTable({
   // Import from registry state
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [masterCourses, setMasterCourses] = useState<MasterCourse[]>([]);
+  // Selected Registry courses, kept across pages and searches.
   const [selectedMasterCourses, setSelectedMasterCourses] = useState<
-    Set<string>
-  >(new Set());
+    Map<string, MasterCourse>
+  >(new Map());
   const [isLoadingMasterCourses, setIsLoadingMasterCourses] = useState(false);
+  const [registrySearch, setRegistrySearch] = useState("");
+  const [registryLevel, setRegistryLevel] = useState("all");
+  const [registryPage, setRegistryPage] = useState(1);
+  const [registryTotal, setRegistryTotal] = useState(0);
+  const debouncedRegistrySearch = useDebouncedValue(registrySearch.trim(), 300);
   const [allMasterCourses, setAllMasterCourses] = useState<MasterCourse[]>([]);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
 
@@ -203,7 +213,7 @@ export function CourseTable({
       setOriginalCourseIds(ids);
 
       const allMasterRes = await fetch(
-        `/api/master-courses?departmentId=${departmentId}`,
+        `/api/master-courses?departmentId=${departmentId}&fields=summary`,
       );
       if (allMasterRes.ok) {
         setAllMasterCourses(await allMasterRes.json());
@@ -283,48 +293,60 @@ export function CourseTable({
     isNew: true,
   });
 
-  const fetchMasterCourses = useCallback(async () => {
-    setIsLoadingMasterCourses(true);
-    try {
-      const res = await fetch(
-        `/api/master-courses?discoverable=true&departmentId=${departmentId}`,
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setMasterCourses(data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch master courses:", error);
-    } finally {
-      setIsLoadingMasterCourses(false);
-    }
-  }, [departmentId]);
+  // One page of the Registry picker at a time; search runs on the server.
+  useEffect(() => {
+    if (!importDialogOpen || !departmentId) return;
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      discoverable: "true",
+      departmentId,
+      page: String(registryPage),
+    });
+    if (debouncedRegistrySearch) params.set("q", debouncedRegistrySearch);
+    if (registryLevel !== "all") params.set("level", registryLevel);
+
+    fetch(`/api/master-courses?${params}`, { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: PageResult<MasterCourse> | null) => {
+        if (!data) return;
+        setMasterCourses(data.items);
+        setRegistryTotal(data.total);
+      })
+      .catch((error) => {
+        if (error?.name !== "AbortError") console.error("Failed to fetch master courses:", error);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoadingMasterCourses(false);
+      });
+    return () => controller.abort();
+  }, [importDialogOpen, departmentId, registryPage, debouncedRegistrySearch, registryLevel]);
 
   // Open import dialog and load courses
-  const openImportDialog = async () => {
+  const openImportDialog = () => {
+    setIsLoadingMasterCourses(true);
+    setSelectedMasterCourses(new Map());
+    setRegistrySearch("");
+    setRegistryLevel("all");
+    setRegistryPage(1);
     setImportDialogOpen(true);
-    setSelectedMasterCourses(new Set());
-    await fetchMasterCourses();
   };
 
   // Toggle master course selection
-  const toggleMasterCourseSelection = (courseId: string) => {
+  const toggleMasterCourseSelection = (course: MasterCourse) => {
     setSelectedMasterCourses((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(courseId)) {
-        newSet.delete(courseId);
+      const next = new Map(prev);
+      if (next.has(course.id)) {
+        next.delete(course.id);
       } else {
-        newSet.add(courseId);
+        next.set(course.id, course);
       }
-      return newSet;
+      return next;
     });
   };
 
   // Import selected master courses
   const importSelectedCourses = () => {
-    const selectedCourses = masterCourses.filter((mc) =>
-      selectedMasterCourses.has(mc.id),
-    );
+    const selectedCourses = [...selectedMasterCourses.values()];
 
     // Get existing course codes to avoid duplicates
     const existingCodes = new Set<string>();
@@ -351,23 +373,34 @@ export function CourseTable({
 
     setCoursesByLevel(newCoursesByLevel);
     setImportDialogOpen(false);
-    setSelectedMasterCourses(new Set());
+    setSelectedMasterCourses(new Map());
     setIsDirty(true);
   };
 
-  // Select all / clear all for registry import
+  const existingCourseCodes = useMemo(() => {
+    const codes = new Set<string>();
+    LEVELS.forEach((level) => {
+      (coursesByLevel[level] || []).forEach((c) => codes.add(c.code));
+    });
+    return codes;
+  }, [LEVELS, coursesByLevel]);
+  const selectablePageCourses = masterCourses.filter(
+    (mc) => !existingCourseCodes.has(mc.code),
+  );
+  const pageFullySelected =
+    selectablePageCourses.length > 0 &&
+    selectablePageCourses.every((mc) => selectedMasterCourses.has(mc.id));
+
+  // Select or clear every course on the current page.
   const toggleSelectAll = () => {
-    if (selectedMasterCourses.size === masterCourses.length) {
-      setSelectedMasterCourses(new Set());
-    } else {
-      const existingCodes = new Set<string>();
-      LEVELS.forEach((level) => {
-        (coursesByLevel[level] || []).forEach((c) => existingCodes.add(c.code));
+    setSelectedMasterCourses((prev) => {
+      const next = new Map(prev);
+      selectablePageCourses.forEach((mc) => {
+        if (pageFullySelected) next.delete(mc.id);
+        else next.set(mc.id, mc);
       });
-      setSelectedMasterCourses(
-        new Set(masterCourses.filter((mc) => !existingCodes.has(mc.code)).map((mc) => mc.id)),
-      );
-    }
+      return next;
+    });
   };
 
   // Bulletin import functions
@@ -848,14 +881,47 @@ export function CourseTable({
             </AlertDescription>
           </Alert>
 
+          <TableToolbar
+            className="mx-1"
+            search={registrySearch}
+            onSearchChange={(value) => {
+              setRegistrySearch(value);
+              setRegistryPage(1);
+            }}
+            searchPlaceholder="Search code or title"
+            filters={
+              <Select
+                value={registryLevel}
+                onValueChange={(value) => {
+                  setRegistryLevel(value);
+                  setRegistryPage(1);
+                }}
+              >
+                <SelectTrigger className="w-full bg-card sm:w-36" aria-label="Level">
+                  <SelectValue placeholder="All levels" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All levels</SelectItem>
+                  {LEVELS.map((level) => (
+                    <SelectItem key={level} value={String(level)}>
+                      {level} level
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            }
+          />
+
           <div className="flex-1 min-h-0 overflow-hidden">
-            {isLoadingMasterCourses ? (
+            {isLoadingMasterCourses && masterCourses.length === 0 ? (
               <div className="flex items-center justify-center h-48">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : masterCourses.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                No discoverable courses found in the registry.
+                {registrySearch || registryLevel !== "all"
+                  ? "No Registry courses match this search."
+                  : "No discoverable courses found in the registry."}
                 <br />
                 <span className="text-sm">
                   Courses must be marked as discoverable to appear here.
@@ -868,18 +934,8 @@ export function CourseTable({
                     <TableRow>
                       <TableHead className="w-12">
                         <Checkbox
-                          checked={
-                            masterCourses.length > 0 &&
-                            selectedMasterCourses.size > 0 &&
-                            selectedMasterCourses.size ===
-                            masterCourses.filter((mc) => {
-                              const codes = new Set<string>();
-                              LEVELS.forEach((l) =>
-                                (coursesByLevel[l] || []).forEach((c) => codes.add(c.code)),
-                              );
-                              return !codes.has(mc.code);
-                            }).length
-                          }
+                          aria-label="Select every course on this page"
+                          checked={pageFullySelected}
                           onCheckedChange={toggleSelectAll}
                         />
                       </TableHead>
@@ -894,14 +950,7 @@ export function CourseTable({
                   </TableHeader>
                   <TableBody>
                     {masterCourses.map((mc) => {
-                      // Check if already added
-                      const existingCodes = new Set<string>();
-                      LEVELS.forEach((level) => {
-                        (coursesByLevel[level] || []).forEach((c) => {
-                          existingCodes.add(c.code);
-                        });
-                      });
-                      const isAlreadyAdded = existingCodes.has(mc.code);
+                      const isAlreadyAdded = existingCourseCodes.has(mc.code);
 
                       return (
                         <TableRow
@@ -912,7 +961,7 @@ export function CourseTable({
                             <Checkbox
                               checked={selectedMasterCourses.has(mc.id)}
                               onCheckedChange={() =>
-                                toggleMasterCourseSelection(mc.id)
+                                toggleMasterCourseSelection(mc)
                               }
                               disabled={isAlreadyAdded}
                             />
@@ -955,6 +1004,15 @@ export function CourseTable({
               </ScrollArea>
             )}
           </div>
+
+          <TablePagination
+            className="mx-1 shrink-0"
+            page={registryPage}
+            pageSize={25}
+            total={registryTotal}
+            onPageChange={setRegistryPage}
+            noun="courses"
+          />
 
           <DialogFooter className="shrink-0 border-t pt-4">
             <div className="flex items-center justify-between w-full">
