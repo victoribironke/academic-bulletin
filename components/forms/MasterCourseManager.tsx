@@ -1262,6 +1262,10 @@ export function MasterCourseManager({
             }
             toast.success(
               `${data.imported} new course(s), ${data.updated} updated, and ${data.linked} programme link(s) processed.`,
+              {
+                description:
+                  "Descriptions preloaded into active bulletins will be checked automatically for GRACE compliance.",
+              },
             );
             await fetchData();
           }}
