@@ -24,11 +24,29 @@ export async function GET() {
         department: {
           select: { id: true, name: true, code: true },
         },
+        programmeAssignments: {
+          select: {
+            programme: {
+              select: { id: true, name: true, code: true, departmentId: true },
+            },
+          },
+          orderBy: { programme: { name: "asc" } },
+        },
       },
       orderBy: [{ role: "asc" }, { lastName: "asc" }],
     });
 
-    return NextResponse.json(users);
+    return NextResponse.json(
+      users.map(({ programmeAssignments, ...user }) => ({
+        ...user,
+        programmeIds: programmeAssignments.map(
+          (assignment) => assignment.programme.id,
+        ),
+        programmes: programmeAssignments.map(
+          (assignment) => assignment.programme,
+        ),
+      })),
+    );
   } catch (error) {
     console.error("Failed to fetch users:", error);
     return NextResponse.json(
