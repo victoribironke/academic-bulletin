@@ -11,7 +11,7 @@
  */
 import prisma from "@/lib/prisma";
 import { getSiteUrl } from "@/lib/supabase/config";
-import { PHASE_NAMES } from "@/lib/submissions/phases";
+import { PHASE_NAMES, TOTAL_PHASES } from "@/lib/submissions/phases";
 import { isEmailConfigured, sendEmail } from "./resend";
 
 function escapeHtml(value: string): string {
@@ -293,7 +293,8 @@ export async function sendDailyDigests(now = new Date()): Promise<DigestResult> 
           },
         ];
       }
-      const finalApproval = t.action === "APPROVE" && t.toPhase === 11;
+      const finalApproval =
+        t.action === "APPROVE" && t.toPhase === TOTAL_PHASES;
       const item: DigestItem = {
         title: t.submission.programme.name,
         lines: [
