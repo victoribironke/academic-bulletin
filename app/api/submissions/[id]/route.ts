@@ -104,7 +104,19 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, content, status } = body;
+    const { title, content } = body;
+
+    // Status only changes through the workflow (transition route), which
+    // runs the GRACE and review checks. Never accept it here.
+    if (body.status !== undefined) {
+      return NextResponse.json(
+        {
+          error:
+            "The submission status can only be changed through the workflow actions.",
+        },
+        { status: 400 },
+      );
+    }
 
     // Server-side ownership check
     const user = await getApiUser();
@@ -121,9 +133,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       where: { id },
       data: {
         ...(title && { title }),
-        ...(status && { status }),
-        ...(status === "IN_REVIEW" && { submittedAt: new Date() }),
-        ...(status === "APPROVED" && { approvedAt: new Date() }),
       },
     });
 
@@ -223,18 +232,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     await recordActivity({
       actorId: user!.id,
-      action: status ? "SUBMISSION_STATUS_UPDATED" : "SUBMISSION_SAVED",
+      action: "SUBMISSION_SAVED",
       entityType: "SUBMISSION",
       entityId: id,
-      description: status
-        ? `Updated the submission status to ${String(status).toLowerCase().replaceAll("_", " ")}.`
-        : "Saved changes to the bulletin submission.",
-      metadata: {
-        updatedContent: Boolean(content),
-        ...(status && { status }),
-      },
+      description: "Saved changes to the bulletin submission.",
+      metadata: { updatedContent: Boolean(content) },
       // Autosave fires every few seconds; log one entry per editing session.
-      ...(!status && { coalesceWithinMinutes: AUTOSAVE_COALESCE_MINUTES }),
+      coalesceWithinMinutes: AUTOSAVE_COALESCE_MINUTES,
     });
 
     // Re-fetch with full data
