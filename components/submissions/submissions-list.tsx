@@ -25,6 +25,10 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { Progress } from "@/components/ui/progress";
 import { TableCard, TableToolbar } from "@/components/shared/table-toolbar";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/shared/states";
+import {
+  TablePagination,
+  useClientPagination,
+} from "@/components/shared/table-pagination";
 import { PHASE_NAMES, STATUS_LABELS } from "@/lib/submissions/phases";
 import { cn } from "@/lib/utils";
 import type { SubmissionProgress } from "@/lib/submissions/progress";
@@ -174,6 +178,10 @@ export function SubmissionsList({
         Number(a.programme.department.id === highlightDepartmentId),
     );
   }, [submissions, search, highlightDepartmentId]);
+  const pagination = useClientPagination(
+    visible,
+    `${search}|${filterStatus}|${filterPhase}|${filterCycle}|${schoolId ?? ""}`,
+  );
 
   const filtersActive =
     filterStatus !== "all" || filterPhase !== "all" || search.trim() !== "";
@@ -253,6 +261,7 @@ export function SubmissionsList({
           }
         />
       ) : (
+        <>
         <TableCard>
           <Table>
             <TableHeader>
@@ -269,7 +278,7 @@ export function SubmissionsList({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visible.map((submission) => {
+              {pagination.pageItems.map((submission) => {
                 const isOwn =
                   !!highlightDepartmentId &&
                   submission.programme.department.id === highlightDepartmentId;
@@ -357,6 +366,14 @@ export function SubmissionsList({
             </TableBody>
           </Table>
         </TableCard>
+        <TablePagination
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          total={pagination.total}
+          onPageChange={pagination.setPage}
+          noun="submissions"
+        />
+        </>
       )}
     </div>
   );
