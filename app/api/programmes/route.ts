@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
+import { recordActivity } from "@/lib/activity-log";
 
 // GET /api/programmes - List all programmes (with optional department/school filter)
 export async function GET(request: NextRequest) {
@@ -14,6 +15,9 @@ export async function GET(request: NextRequest) {
 
     const programmes = await prisma.programme.findMany({
       where: {
+        ...(auth.user.role === "PROGRAMME_COORDINATOR" && {
+          id: { in: auth.user.programmeIds },
+        }),
         ...(departmentId && { departmentId }),
         ...(schoolId && { department: { schoolId } }),
       },
@@ -87,6 +91,14 @@ export async function POST(request: NextRequest) {
           },
         },
       },
+    });
+    await recordActivity({
+      actorId: auth.user.id,
+      action: "PROGRAMME_CREATED",
+      entityType: "PROGRAMME",
+      entityId: programme.id,
+      description: `Created the ${programme.name} programme.`,
+      metadata: { departmentId },
     });
 
     return NextResponse.json(programme, { status: 201 });
