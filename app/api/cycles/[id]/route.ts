@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
+import { recordActivity } from "@/lib/activity-log";
 
 export async function PUT(
   request: Request,
@@ -43,6 +44,18 @@ export async function PUT(
     const cycle = await prisma.reviewCycle.update({
       where: { id },
       data: dataToUpdate,
+    });
+    await recordActivity({
+      actorId: auth.user.id,
+      action:
+        isActive === false
+          ? "REVIEW_CYCLE_CLOSED"
+          : isActive === true
+            ? "REVIEW_CYCLE_OPENED"
+            : "REVIEW_CYCLE_UPDATED",
+      entityType: "REVIEW_CYCLE",
+      entityId: id,
+      description: `Updated the ${cycle.name} review cycle.`,
     });
 
     return NextResponse.json(cycle);
@@ -120,8 +133,18 @@ export async function DELETE(
       );
     }
 
-    await prisma.reviewCycle.delete({
-      where: { id },
+    await prisma.$transaction(async (tx) => {
+      await recordActivity(
+        {
+          actorId: auth.user.id,
+          action: "REVIEW_CYCLE_DELETED",
+          entityType: "REVIEW_CYCLE",
+          entityId: id,
+          description: `Deleted the ${existing.name} review cycle.`,
+        },
+        tx,
+      );
+      await tx.reviewCycle.delete({ where: { id } });
     });
 
     return NextResponse.json({ success: true });
