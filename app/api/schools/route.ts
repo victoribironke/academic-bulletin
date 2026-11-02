@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
+import { recordActivity } from "@/lib/activity-log";
 
 // GET /api/schools - List all schools
 export async function GET() {
@@ -52,6 +53,13 @@ export async function POST(request: NextRequest) {
         code: sanitize(code).toUpperCase(),
         description: description ? sanitize(description) : description,
       },
+    });
+    await recordActivity({
+      actorId: auth.user.id,
+      action: "SCHOOL_CREATED",
+      entityType: "SCHOOL",
+      entityId: school.id,
+      description: `Created the ${school.name} school.`,
     });
 
     return NextResponse.json(school, { status: 201 });
