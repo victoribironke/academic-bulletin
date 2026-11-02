@@ -4,6 +4,10 @@ import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableCard, TableToolbar } from "@/components/shared/table-toolbar";
 import { EmptyState, TableSkeleton } from "@/components/shared/states";
+import {
+  TablePagination,
+  useClientPagination,
+} from "@/components/shared/table-pagination";
 import { usePermission, useUser } from "@/contexts/user-context";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -280,6 +284,10 @@ export default function StaffPage() {
 
   const filtersActive =
     searchTerm.trim() !== "" || typeFilter !== "ALL" || deptFilter !== "ALL";
+  const pagination = useClientPagination(
+    filteredStaff,
+    `${searchTerm}|${typeFilter}|${deptFilter}`,
+  );
 
   const tableContent =
     filteredStaff.length === 0 ? (
@@ -311,7 +319,7 @@ export default function StaffPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredStaff.map((s) => (
+            {pagination.pageItems.map((s) => (
               <TableRow key={s.id}>
                 <TableCell>
                   <div className="flex items-center gap-3">
@@ -384,6 +392,16 @@ export default function StaffPage() {
         </Table>
       </TableCard>
     );
+  const tableFooter =
+    filteredStaff.length > 0 ? (
+      <TablePagination
+        page={pagination.page}
+        pageSize={pagination.pageSize}
+        total={pagination.total}
+        onPageChange={pagination.setPage}
+        noun="staff"
+      />
+    ) : null;
 
   if (userLoading || (isLoading && staff.length === 0)) {
     return <TableSkeleton columns={4} />;
@@ -467,9 +485,6 @@ export default function StaffPage() {
         }
         actions={
           <>
-            <span className="text-sm text-muted-foreground">
-              {filteredStaff.length} staff
-            </span>
             <Button
               variant="ghost"
               size="icon"
@@ -484,6 +499,7 @@ export default function StaffPage() {
       />
 
       {tableContent}
+      {tableFooter}
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
