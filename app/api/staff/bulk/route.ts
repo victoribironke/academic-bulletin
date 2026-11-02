@@ -13,12 +13,18 @@ import {
   validateStaffImportRows,
 } from "@/lib/imports/staff";
 import { toTitleCase } from "@/lib/validation/name-format";
+import { recordActivity } from "@/lib/activity-log";
 
 const MAX_IMPORT_ROWS = 500;
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireApiUser(["HOD", "ADMIN", "SUPER_ADMIN"]);
+    const auth = await requireApiUser([
+      "PROGRAMME_COORDINATOR",
+      "HOD",
+      "ADMIN",
+      "SUPER_ADMIN",
+    ]);
     if (!auth.ok) return auth.response;
 
     const body = await request.json();
@@ -72,6 +78,15 @@ export async function POST(request: Request) {
         email: data!.email || null,
         type: data!.type as StaffType,
       })),
+    });
+
+    await recordActivity({
+      actorId: auth.user.id,
+      action: "STAFF_BULK_IMPORTED",
+      entityType: "DEPARTMENT",
+      entityId: departmentId,
+      description: `Imported ${result.count} staff records from a spreadsheet.`,
+      metadata: { imported: result.count },
     });
 
     return NextResponse.json({ imported: result.count }, { status: 201 });
