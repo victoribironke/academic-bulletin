@@ -56,6 +56,7 @@ import { DELETE as deleteUser, PATCH as updateUser } from "@/app/api/users/[id]/
 import { adminCreateUser } from "@/app/actions/admin";
 import { GET as listCourses } from "@/app/api/courses/route";
 import { POST as transitionSubmission } from "@/app/api/submissions/[id]/transition/route";
+import { PUT as updateSubmission } from "@/app/api/submissions/[id]/route";
 import { POST as createComment } from "@/app/api/submissions/[id]/comments/route";
 import { POST as checkGrace } from "@/app/api/grace-check/route";
 import { GET as listMasterCourses } from "@/app/api/master-courses/route";
@@ -73,6 +74,7 @@ import { POST as bulkImportMasterCourses } from "@/app/api/master-courses/bulk/r
 import { GET as listSubmissions } from "@/app/api/submissions/route";
 import { GET as listActivities } from "@/app/api/activity-log/route";
 import { GET as getDashboardStats } from "@/app/api/dashboard/stats/route";
+import { courseGraceContentHash } from "@/lib/courses/grace-compliance";
 
 const ids = {
   schoolA: "test-school-a",
@@ -94,6 +96,7 @@ const ids = {
 async function clearFixtures() {
   await prisma.activityLog.deleteMany({});
   await prisma.courseDescription.deleteMany({});
+  await prisma.graceAssessment.deleteMany({});
   await prisma.course.deleteMany({});
   await prisma.comment.deleteMany({});
   await prisma.phaseTransition.deleteMany({});
@@ -736,16 +739,38 @@ describe("route authorization", () => {
         submissionId: ids.submission,
       },
     });
+    const learningOutcomes = ["Test an outcome"];
+    const courseContent = "Detailed course content";
+    const contentHash = courseGraceContentHash({
+      title: course.title,
+      learningOutcomes,
+      courseContent,
+    })!;
+    const result = { passed: true, scores: { G: 4 } };
+    await prisma.graceAssessment.create({
+      data: {
+        contentHash,
+        title: course.title,
+        learningOutcomes,
+        courseContent,
+        status: "COMPLIANT",
+        result,
+        checkedAt: new Date(),
+      },
+    });
     await prisma.courseDescription.create({
       data: {
         submissionId: ids.submission,
         courseId: course.id,
-        learningOutcomes: ["Test an outcome"],
-        courseContent: "Detailed course content",
+        learningOutcomes,
+        courseContent,
         labWork: "Practical work",
         entrepreneurialAspect: "Commercial application",
         gracePass: true,
-        graceResult: { passed: true, scores: { G: 4 } },
+        graceResult: result,
+        graceStatus: "COMPLIANT",
+        graceContentHash: contentHash,
+        graceCheckedAt: new Date(),
       },
     });
 
@@ -760,6 +785,7 @@ describe("route authorization", () => {
       entrepreneurialAspect: "Commercial application",
       gracePass: true,
       graceResult: { passed: true, scores: { G: 4 } },
+      graceStatus: "COMPLIANT",
     });
   });
 
@@ -802,6 +828,139 @@ describe("route authorization", () => {
       where: { id: ids.submission },
       data: { status: "DRAFT", currentPhase: 1 },
     });
+  });
+
+  it("blocks submission until every current course description is compliant", async () => {
+    const cycleId = "grace-gate-cycle";
+    const submissionId = "grace-gate-submission";
+    const courseContent = Array.from(
+      { length: 150 },
+      (_, index) => `course${index + 1}`,
+    ).join(" ");
+    const learningOutcomes = ["Apply the course knowledge responsibly"];
+
+    await prisma.reviewCycle.create({
+      data: { id: cycleId, name: "GRACE Gate Cycle", createdById: ids.super },
+    });
+    await prisma.submission.create({
+      data: {
+        id: submissionId,
+        title: "GRACE Gate Submission",
+        programmeId: ids.programmeA,
+        createdById: ids.hod,
+        cycleId,
+      },
+    });
+    const course = await prisma.course.create({
+      data: {
+        code: "GRC 101",
+        title: "GRACE Gate Course",
+        units: 2,
+        semester: 1,
+        level: 100,
+        submissionId,
+      },
+    });
+    const contentHash = courseGraceContentHash({
+      title: course.title,
+      learningOutcomes,
+      courseContent,
+    })!;
+    await prisma.graceAssessment.create({
+      data: {
+        contentHash,
+        title: course.title,
+        courseContent,
+        learningOutcomes,
+      },
+    });
+    await prisma.courseDescription.create({
+      data: {
+        courseId: course.id,
+        submissionId,
+        courseContent,
+        learningOutcomes,
+        graceContentHash: contentHash,
+      },
+    });
+
+    authState.userId = ids.hod;
+    const submit = () =>
+      transitionSubmission(
+        new NextRequest(
+          `http://localhost/api/submissions/${submissionId}/transition`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "SUBMIT" }),
+          },
+        ),
+        { params: Promise.resolve({ id: submissionId }) },
+      );
+
+    try {
+      const pending = await submit();
+      expect(pending.status).toBe(409);
+      expect(await pending.json()).toMatchObject({
+        code: "GRACE_COMPLIANCE_REQUIRED",
+        blockers: { pending: ["GRC 101"] },
+      });
+
+      // Saving the bulletin can't be used to skip the workflow and GRACE.
+      for (const status of ["IN_REVIEW", "APPROVED"]) {
+        const bypass = await updateSubmission(
+          new NextRequest(`http://localhost/api/submissions/${submissionId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status }),
+          }),
+          { params: Promise.resolve({ id: submissionId }) },
+        );
+        expect(bypass.status).toBe(400);
+      }
+      expect(
+        await prisma.submission.findUniqueOrThrow({
+          where: { id: submissionId },
+          select: { status: true },
+        }),
+      ).toEqual({ status: "DRAFT" });
+
+      const result = { passed: true, scores: { G: 3, R: 3, A: 3, C: 3, E: 3 } };
+      await prisma.$transaction([
+        prisma.graceAssessment.update({
+          where: { contentHash },
+          data: { status: "COMPLIANT", result, checkedAt: new Date() },
+        }),
+        prisma.courseDescription.update({
+          where: { courseId: course.id },
+          data: {
+            graceStatus: "COMPLIANT",
+            gracePass: true,
+            graceResult: result,
+            graceCheckedAt: new Date(),
+          },
+        }),
+      ]);
+      await prisma.courseDescription.update({
+        where: { courseId: course.id },
+        data: { courseContent: `${courseContent} changed` },
+      });
+
+      const changed = await submit();
+      expect(changed.status).toBe(409);
+      expect(await changed.json()).toMatchObject({
+        blockers: { changed: ["GRC 101"] },
+      });
+
+      await prisma.courseDescription.update({
+        where: { courseId: course.id },
+        data: { courseContent },
+      });
+      expect((await submit()).status).toBe(200);
+    } finally {
+      await prisma.submission.deleteMany({ where: { id: submissionId } });
+      await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+    }
   });
 
   it("blocks transition attempts outside the user's academic unit", async () => {
@@ -1193,21 +1352,27 @@ describe("route authorization", () => {
       }),
     );
     expect(response.status).toBe(201);
-    expect(
-      await prisma.course.findUnique({
-        where: {
-          code_submissionId: { code: "BLK 201", submissionId: ids.submission },
-        },
-        include: { description: true },
-      }),
-    ).toMatchObject({
+    const importedCourse = await prisma.course.findUniqueOrThrow({
+      where: {
+        code_submissionId: { code: "BLK 201", submissionId: ids.submission },
+      },
+      include: { description: true },
+    });
+    expect(importedCourse).toMatchObject({
       description: {
         learningOutcomes: ["Validate imported course data"],
         courseContent: "Detailed imported content",
         labWork: "Import exercises",
         entrepreneurialAspect: "Prepare a reusable template",
+        graceStatus: "PENDING",
+        gracePass: false,
       },
     });
+    expect(
+      await prisma.graceAssessment.count({
+        where: { courseDescriptions: { some: { courseId: importedCourse.id } } },
+      }),
+    ).toBeGreaterThan(0);
   });
 
   it("allows only administrators to bulk upload Registry courses", async () => {
@@ -1317,7 +1482,7 @@ describe("route authorization", () => {
     });
   });
 
-  it("does not persist a failed GRACE service call as a compliance result", async () => {
+  it("never marks a failed GRACE service call as compliant", async () => {
     authState.userId = ids.hod;
     const course = await prisma.course.create({
       data: {
@@ -1331,6 +1496,29 @@ describe("route authorization", () => {
     });
     const previousKey = process.env.ANTHROPIC_API_KEY;
     process.env.ANTHROPIC_API_KEY = "";
+    const content = Array.from({ length: 150 }, () => "word").join(" ");
+    const contentHash = courseGraceContentHash({
+      title: course.title,
+      learningOutcomes: [],
+      courseContent: content,
+    })!;
+    await prisma.graceAssessment.create({
+      data: {
+        contentHash,
+        title: course.title,
+        learningOutcomes: [],
+        courseContent: content,
+      },
+    });
+    await prisma.courseDescription.create({
+      data: {
+        courseId: course.id,
+        submissionId: ids.submission,
+        learningOutcomes: [],
+        courseContent: content,
+        graceContentHash: contentHash,
+      },
+    });
 
     let response!: Response;
     try {
@@ -1341,8 +1529,6 @@ describe("route authorization", () => {
           body: JSON.stringify({
             type: "course",
             courseId: course.id,
-            title: course.title,
-            content: Array.from({ length: 150 }, () => "word").join(" "),
           }),
         }),
       );
@@ -1355,9 +1541,13 @@ describe("route authorization", () => {
     expect(
       await prisma.courseDescription.findUnique({
         where: { courseId: course.id },
-        select: { submissionId: true, gracePass: true },
+        select: { submissionId: true, gracePass: true, graceStatus: true },
       }),
-    ).toBeNull();
+    ).toMatchObject({
+      submissionId: ids.submission,
+      gracePass: false,
+      graceStatus: "ERROR",
+    });
   });
 });
 
