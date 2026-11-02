@@ -23,15 +23,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, CircleCheck } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export function CreateUserDialog({
   schools,
   departments,
+  programmes,
   isSuperAdmin = false,
   onSuccess,
 }: {
   schools: { id: string; name: string }[];
   departments: { id: string; name: string; schoolId: string }[];
+  programmes: { id: string; name: string; code: string; departmentId: string }[];
   isSuperAdmin?: boolean;
   onSuccess?: () => void;
 }) {
@@ -40,6 +43,7 @@ export function CreateUserDialog({
   const [selectedDepartment, setSelectedDepartment] =
     useState<string>("none");
   const [selectedRole, setSelectedRole] = useState<string>("HOD");
+  const [selectedProgrammes, setSelectedProgrammes] = useState<string[]>([]);
   const [addedEmail, setAddedEmail] = useState<string | null>(null);
   const [emailSent, setEmailSent] = useState(false);
   const [state, formAction, isPending] = useActionState(
@@ -68,12 +72,17 @@ export function CreateUserDialog({
       setSelectedSchool("none");
       setSelectedDepartment("none");
       setSelectedRole("HOD");
+      setSelectedProgrammes([]);
     }
   };
 
   const filteredDepartments =
     selectedSchool !== "none"
       ? departments.filter((d) => d.schoolId === selectedSchool)
+      : [];
+  const filteredProgrammes =
+    selectedDepartment !== "none"
+      ? programmes.filter((programme) => programme.departmentId === selectedDepartment)
       : [];
 
   return (
@@ -85,7 +94,7 @@ export function CreateUserDialog({
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[525px]">
         {addedEmail ? (
           <div className="space-y-4">
             <DialogHeader>
@@ -146,12 +155,16 @@ export function CreateUserDialog({
                     setSelectedRole(role);
                     setSelectedSchool("none");
                     setSelectedDepartment("none");
+                    setSelectedProgrammes([]);
                   }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a role" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="PROGRAMME_COORDINATOR">
+                      Programme Coordinator
+                    </SelectItem>
                     <SelectItem value="HOD">Head of Department (HOD)</SelectItem>
                     <SelectItem value="DEAN">Dean</SelectItem>
                     <SelectItem value="ADMIN">Academic Planning Admin</SelectItem>
@@ -164,7 +177,9 @@ export function CreateUserDialog({
                 </Select>
               </div>
 
-              {(selectedRole === "HOD" || selectedRole === "DEAN") && (
+              {(["PROGRAMME_COORDINATOR", "HOD", "DEAN"].includes(
+                selectedRole,
+              )) && (
               <div className="space-y-2">
                 <Label htmlFor="schoolId">School</Label>
                 <Select
@@ -173,6 +188,7 @@ export function CreateUserDialog({
                   onValueChange={(schoolId) => {
                     setSelectedSchool(schoolId);
                     setSelectedDepartment("none");
+                    setSelectedProgrammes([]);
                   }}
                 >
                   <SelectTrigger>
@@ -190,13 +206,17 @@ export function CreateUserDialog({
               </div>
               )}
 
-              {selectedRole === "HOD" && selectedSchool !== "none" && (
+              {["PROGRAMME_COORDINATOR", "HOD"].includes(selectedRole) &&
+                selectedSchool !== "none" && (
                 <div className="space-y-2">
                   <Label htmlFor="departmentId">Department</Label>
                   <Select
                     name="departmentId"
                     value={selectedDepartment}
-                    onValueChange={setSelectedDepartment}
+                    onValueChange={(departmentId) => {
+                      setSelectedDepartment(departmentId);
+                      setSelectedProgrammes([]);
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select a department" />
@@ -212,6 +232,54 @@ export function CreateUserDialog({
                   </Select>
                 </div>
               )}
+
+              {selectedRole === "PROGRAMME_COORDINATOR" &&
+                selectedDepartment !== "none" && (
+                  <div className="space-y-2">
+                    <Label>Assigned programmes</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Select every programme this person may edit.
+                    </p>
+                    <div className="max-h-44 space-y-2 overflow-y-auto rounded-md border p-3">
+                      {filteredProgrammes.map((programme) => {
+                        const checked = selectedProgrammes.includes(programme.id);
+                        return (
+                          <label
+                            key={programme.id}
+                            className="flex cursor-pointer items-center gap-2 text-sm"
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(value) =>
+                                setSelectedProgrammes((current) =>
+                                  value
+                                    ? [...current, programme.id]
+                                    : current.filter((id) => id !== programme.id),
+                                )
+                              }
+                            />
+                            <span>
+                              {programme.name} ({programme.code})
+                            </span>
+                          </label>
+                        );
+                      })}
+                      {filteredProgrammes.length === 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          No programmes exist in this department yet.
+                        </p>
+                      )}
+                    </div>
+                    {selectedProgrammes.map((programmeId) => (
+                      <input
+                        key={programmeId}
+                        type="hidden"
+                        name="programmeIds"
+                        value={programmeId}
+                      />
+                    ))}
+                  </div>
+                )}
 
               {state && "error" in state && state.error && (
                 <div className="text-sm font-medium text-destructive">
