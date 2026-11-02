@@ -859,6 +859,9 @@ export default function SubmissionDetailPage({
         fetchSubmission();
       } else {
         const data = await response.json().catch(() => ({}));
+        if (Array.isArray(data.issues) && data.issues.length > 0) {
+          setSubmitBlockers(data.issues);
+        }
         toast.error(data.error || "Failed to complete action");
       }
     } catch (err) {
