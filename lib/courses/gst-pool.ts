@@ -2,7 +2,7 @@ import prisma from "@/lib/prisma";
 
 const EDITABLE_SUBMISSION_STATUSES = ["DRAFT", "CORRECTIONS_REQUIRED"] as const;
 
-export type GstPreloadResult = {
+export type RegistryPreloadResult = {
   submissionId: string;
   available: number;
   added: number;
@@ -10,13 +10,14 @@ export type GstPreloadResult = {
 };
 
 /**
- * Makes every discoverable university-wide GST course available in one
- * programme submission. Existing local edits are preserved; missing courses
- * receive the Registry values as their starting point.
+ * Makes every discoverable Registry course assigned to a programme, plus all
+ * university-wide GST courses, available in one submission. Existing local
+ * edits are preserved; missing courses receive the Registry values as their
+ * starting point.
  */
-export async function preloadGstCoursesForSubmission(
+export async function preloadRegistryCoursesForSubmission(
   submissionId: string,
-): Promise<GstPreloadResult> {
+): Promise<RegistryPreloadResult> {
   const submission = await prisma.submission.findUnique({
     where: { id: submissionId },
     select: { id: true, programmeId: true, status: true },
@@ -31,24 +32,45 @@ export async function preloadGstCoursesForSubmission(
     return { submissionId, available: 0, added: 0, linked: 0 };
   }
 
-  const gstCourses = await prisma.masterCourse.findMany({
+  const registryCourses = await prisma.masterCourse.findMany({
     where: {
-      ownership: "INSTITUTIONAL",
-      type: { in: ["GST_NUC", "GST_BU"] },
       discoverable: true,
+      OR: [
+        {
+          ownership: "INSTITUTIONAL",
+          type: { in: ["GST_NUC", "GST_BU"] },
+        },
+        {
+          programmeLinks: {
+            some: { programmeId: submission.programmeId },
+          },
+        },
+      ],
     },
     include: {
       prerequisites: { select: { code: true } },
+      programmeLinks: {
+        where: { programmeId: submission.programmeId },
+        select: {
+          isCore: true,
+          titleOverride: true,
+          unitsOverride: true,
+          typeOverride: true,
+          semesterOverride: true,
+          learningOutcomesOverride: true,
+          courseContentOverride: true,
+        },
+      },
     },
     orderBy: [{ level: "asc" }, { semester: "asc" }, { code: "asc" }],
   });
 
-  if (gstCourses.length === 0) {
+  if (registryCourses.length === 0) {
     return { submissionId, available: 0, added: 0, linked: 0 };
   }
 
   await prisma.programmeCourse.createMany({
-    data: gstCourses.map((course) => ({
+    data: registryCourses.map((course) => ({
       programmeId: submission.programmeId,
       courseId: course.id,
       isCore: true,
@@ -64,7 +86,9 @@ export async function preloadGstCoursesForSubmission(
   let added = 0;
   let linked = 0;
 
-  for (const master of gstCourses) {
+  for (const master of registryCourses) {
+    const programmeLink = master.programmeLinks[0];
+    const effectiveType = programmeLink?.typeOverride ?? master.type;
     const wasPresent = existingCodes.has(master.code);
     const course = await prisma.course.upsert({
       where: {
@@ -74,10 +98,13 @@ export async function preloadGstCoursesForSubmission(
         submissionId,
         masterCourseId: master.id,
         code: master.code,
-        title: master.title,
-        units: master.units,
-        status: "CORE",
-        semester: master.semester,
+        title: programmeLink?.titleOverride || master.title,
+        units: programmeLink?.unitsOverride ?? master.units,
+        status:
+          effectiveType === "ELECTIVE" || programmeLink?.isCore === false
+            ? "ELECTIVE"
+            : "CORE",
+        semester: programmeLink?.semesterOverride ?? master.semester,
         level: master.level,
         prerequisites:
           master.prerequisites.map((item) => item.code).join(", ") || null,
@@ -92,13 +119,18 @@ export async function preloadGstCoursesForSubmission(
     // Seed the shared Registry description only when a programme has not
     // already supplied its own details. HoDs retain editorial control over
     // the preloaded copy in their submission.
-    const learningOutcomes = Array.isArray(master.learningOutcomes)
-      ? master.learningOutcomes.filter(
+    const effectiveLearningOutcomes =
+      programmeLink?.learningOutcomesOverride ?? master.learningOutcomes;
+    const learningOutcomes = Array.isArray(effectiveLearningOutcomes)
+      ? effectiveLearningOutcomes.filter(
           (item): item is string => typeof item === "string" && item.trim() !== "",
         )
       : [];
     const courseContent =
-      master.courseContent?.trim() || master.description?.trim() || "";
+      programmeLink?.courseContentOverride?.trim() ||
+      master.courseContent?.trim() ||
+      master.description?.trim() ||
+      "";
     const hasCentralDetails =
       learningOutcomes.length > 0 ||
       courseContent ||
@@ -127,8 +159,12 @@ export async function preloadGstCoursesForSubmission(
 
   return {
     submissionId,
-    available: gstCourses.length,
+    available: registryCourses.length,
     added,
     linked,
   };
 }
+
+// Backwards-compatible name used by existing routes. The broader function now
+// includes programme-linked CCMAS/Registry courses as well as university-wide GST.
+export const preloadGstCoursesForSubmission = preloadRegistryCoursesForSubmission;
