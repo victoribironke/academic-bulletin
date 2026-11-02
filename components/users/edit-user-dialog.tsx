@@ -21,27 +21,38 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Edit2 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export function EditUserDialog({
   user,
   schools,
   departments,
+  programmes,
+  canChangeRole = false,
+  allowSuperAdmin = false,
   onSuccess,
 }: {
   user: any;
   schools: any[];
   departments: any[];
+  programmes: any[];
+  canChangeRole?: boolean;
+  allowSuperAdmin?: boolean;
   onSuccess: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [firstName, setFirstName] = useState<string>(user.firstName ?? "");
   const [lastName, setLastName] = useState<string>(user.lastName ?? "");
+  const [selectedRole, setSelectedRole] = useState<string>(user.role);
   const [isPending, setIsPending] = useState(false);
   const [selectedSchool, setSelectedSchool] = useState<string>(
     user.schoolId || "none",
   );
   const [selectedDepartment, setSelectedDepartment] = useState<string>(
     user.departmentId || "none",
+  );
+  const [selectedProgrammes, setSelectedProgrammes] = useState<string[]>(
+    user.programmeIds || [],
   );
   const [error, setError] = useState("");
 
@@ -55,12 +66,18 @@ export function EditUserDialog({
     if (isOpen) {
       setFirstName(user.firstName ?? "");
       setLastName(user.lastName ?? "");
+      setSelectedRole(user.role);
       setSelectedSchool(user.schoolId || "none");
       setSelectedDepartment(user.departmentId || "none");
+      setSelectedProgrammes(user.programmeIds || []);
       setError("");
     }
     setOpen(isOpen);
   };
+
+  const filteredProgrammes = programmes.filter(
+    (programme) => programme.departmentId === selectedDepartment,
+  );
 
   const handleSave = async () => {
     if (!firstName.trim() || !lastName.trim()) {
@@ -76,9 +93,13 @@ export function EditUserDialog({
         body: JSON.stringify({
           ...(firstName.trim() !== user.firstName && { firstName: firstName.trim() }),
           ...(lastName.trim() !== user.lastName && { lastName: lastName.trim() }),
+          ...(selectedRole !== user.role && { role: selectedRole }),
           schoolId: selectedSchool === "none" ? null : selectedSchool,
           departmentId:
             selectedDepartment === "none" ? null : selectedDepartment,
+          ...(selectedRole === "PROGRAMME_COORDINATOR" && {
+            programmeIds: selectedProgrammes,
+          }),
         }),
       });
 
@@ -105,12 +126,12 @@ export function EditUserDialog({
           <span className="hidden sm:inline">Edit</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[525px]">
         <DialogHeader>
           <DialogTitle>Edit user</DialogTitle>
           <DialogDescription>
-            Update {user.firstName} {user.lastName}&apos;s name and where they
-            belong. Their sign-in email ({user.email}) can&apos;t be changed.
+            Update {user.firstName} {user.lastName}&apos;s role and assigned unit.
+            Their sign-in email ({user.email}) can&apos;t be changed.
           </DialogDescription>
         </DialogHeader>
 
@@ -138,6 +159,36 @@ export function EditUserDialog({
             </div>
           </div>
 
+          {canChangeRole && (
+            <div className="space-y-2">
+              <Label htmlFor={`role-${user.id}`}>Role</Label>
+              <Select
+                value={selectedRole}
+                onValueChange={(role) => {
+                  setSelectedRole(role);
+                  if (role !== "PROGRAMME_COORDINATOR") {
+                    setSelectedProgrammes([]);
+                  }
+                }}
+              >
+                <SelectTrigger id={`role-${user.id}`} className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PROGRAMME_COORDINATOR">
+                    Programme Coordinator
+                  </SelectItem>
+                  <SelectItem value="HOD">Head of Department</SelectItem>
+                  <SelectItem value="DEAN">Dean</SelectItem>
+                  <SelectItem value="ADMIN">Academic Planning</SelectItem>
+                  {allowSuperAdmin && (
+                    <SelectItem value="SUPER_ADMIN">Super Administrator</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="schoolId">School (Optional)</Label>
             <Select
@@ -145,6 +196,7 @@ export function EditUserDialog({
               onValueChange={(val) => {
                 setSelectedSchool(val);
                 setSelectedDepartment("none");
+                setSelectedProgrammes([]);
               }}
             >
               <SelectTrigger id="schoolId" className="w-full">
@@ -166,7 +218,10 @@ export function EditUserDialog({
               <Label htmlFor="departmentId">Department (Optional)</Label>
               <Select
                 value={selectedDepartment}
-                onValueChange={setSelectedDepartment}
+                onValueChange={(departmentId) => {
+                  setSelectedDepartment(departmentId);
+                  setSelectedProgrammes([]);
+                }}
               >
                 <SelectTrigger id="departmentId" className="w-full">
                   <SelectValue placeholder="Select a department" />
@@ -182,6 +237,38 @@ export function EditUserDialog({
               </Select>
             </div>
           )}
+
+          {selectedRole === "PROGRAMME_COORDINATOR" &&
+            selectedDepartment !== "none" && (
+              <div className="space-y-2">
+                <Label>Assigned programmes</Label>
+                <div className="max-h-44 space-y-2 overflow-y-auto rounded-md border p-3">
+                  {filteredProgrammes.map((programme) => {
+                    const checked = selectedProgrammes.includes(programme.id);
+                    return (
+                      <label
+                        key={programme.id}
+                        className="flex cursor-pointer items-center gap-2 text-sm"
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(value) =>
+                            setSelectedProgrammes((current) =>
+                              value
+                                ? [...current, programme.id]
+                                : current.filter((id) => id !== programme.id),
+                            )
+                          }
+                        />
+                        <span>
+                          {programme.name} ({programme.code})
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
           {error && (
             <div className="text-sm font-medium text-destructive">{error}</div>
