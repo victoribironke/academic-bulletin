@@ -7,6 +7,11 @@ import {
 } from "@/lib/api-auth";
 import { resolveWorkflowTransition } from "@/lib/submissions/workflow";
 import { recordActivity } from "@/lib/activity-log";
+import {
+  describeCourseGraceBlockers,
+  getCourseGraceBlockers,
+  hasCourseGraceBlockers,
+} from "@/lib/courses/grace-compliance";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -83,6 +88,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
     const newPhase = resolved.phase;
     const newStatus = resolved.status;
+
+    if (action === "SUBMIT") {
+      const blockers = await getCourseGraceBlockers(id);
+      if (hasCourseGraceBlockers(blockers)) {
+        return NextResponse.json(
+          {
+            error:
+              "Every course description must pass GRACE before this bulletin can be submitted.",
+            code: "GRACE_COMPLIANCE_REQUIRED",
+            issues: describeCourseGraceBlockers(blockers),
+            blockers,
+          },
+          { status: 409 },
+        );
+      }
+    }
 
     // Create transition record and update submission in a transaction
     const { transition, updated } = await prisma.$transaction(async (tx) => {
