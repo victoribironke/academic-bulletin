@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { toTitleCase, isValidName } from "@/lib/validation/name-format";
 import { canAccessDepartment, requireApiUser } from "@/lib/api-auth";
+import { recordActivity } from "@/lib/activity-log";
 
 const VALID_TITLES = ["MR", "MRS", "MS", "DR", "PROF", "ENGR", "BARR", "REV", "PASTOR"];
 const VALID_GENDERS = ["MALE", "FEMALE"];
@@ -74,7 +75,12 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const auth = await requireApiUser(["HOD", "ADMIN", "SUPER_ADMIN"]);
+    const auth = await requireApiUser([
+      "PROGRAMME_COORDINATOR",
+      "HOD",
+      "ADMIN",
+      "SUPER_ADMIN",
+    ]);
     if (!auth.ok) return auth.response;
 
     const body = await request.json();
@@ -215,6 +221,18 @@ export async function PATCH(
       },
     });
 
+    await recordActivity({
+      actorId: auth.user.id,
+      action: "STAFF_UPDATED",
+      entityType: "STAFF",
+      entityId: id,
+      description: `Updated ${staff.firstName} ${staff.surname}'s staff record.`,
+      metadata: {
+        departmentId: staff.department.id,
+        fields: Object.keys(updateData),
+      },
+    });
+
     return NextResponse.json(staff);
   } catch (error) {
     console.error("Failed to update staff:", error);
@@ -232,7 +250,12 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const auth = await requireApiUser(["HOD", "ADMIN", "SUPER_ADMIN"]);
+    const auth = await requireApiUser([
+      "PROGRAMME_COORDINATOR",
+      "HOD",
+      "ADMIN",
+      "SUPER_ADMIN",
+    ]);
     if (!auth.ok) return auth.response;
 
     // Check if staff exists
@@ -247,7 +270,20 @@ export async function DELETE(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    await prisma.staff.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      await recordActivity(
+        {
+          actorId: auth.user.id,
+          action: "STAFF_DELETED",
+          entityType: "STAFF",
+          entityId: id,
+          description: `Deleted ${existing.firstName} ${existing.surname}'s staff record.`,
+          metadata: { departmentId: existing.departmentId },
+        },
+        tx,
+      );
+      await tx.staff.delete({ where: { id } });
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
