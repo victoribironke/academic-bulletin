@@ -26,6 +26,10 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableCard, TableToolbar } from "@/components/shared/table-toolbar";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/shared/states";
+import {
+  TablePagination,
+  useClientPagination,
+} from "@/components/shared/table-pagination";
 import { CreateUserDialog } from "@/components/users/create-user-dialog";
 import { EditUserDialog } from "@/components/users/edit-user-dialog";
 import { cn } from "@/lib/utils";
@@ -173,6 +177,10 @@ export default function UsersPage() {
         .includes(q);
     });
   }, [users, search, filterRole, filterStatus]);
+  const pagination = useClientPagination(
+    visible,
+    `${search}|${filterRole}|${filterStatus}`,
+  );
 
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
@@ -338,6 +346,7 @@ export default function UsersPage() {
           }
         />
       ) : (
+        <>
         <TableCard>
           <Table>
             <TableHeader>
@@ -352,7 +361,7 @@ export default function UsersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visible.map((user) => {
+              {pagination.pageItems.map((user) => {
                 const canChangeRole =
                   canManage &&
                   !!currentUser &&
@@ -493,6 +502,14 @@ export default function UsersPage() {
             </TableBody>
           </Table>
         </TableCard>
+        <TablePagination
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          total={pagination.total}
+          onPageChange={pagination.setPage}
+          noun="users"
+        />
+        </>
       )}
     </div>
   );
