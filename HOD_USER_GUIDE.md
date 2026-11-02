@@ -126,7 +126,7 @@ Once all sections are complete and validated:
    - The Programme Duration has not been selected.
    - The Philosophy has not passed GRACE compliance.
    - Any course descriptions have failed GRACE compliance.
-3. If all validations pass, the submission moves to **Phase 2: Departmental Review** and its status changes from "Draft" to "In Review."
+3. If all validations pass, **Phase 1: Preparation & Departmental Review** changes from "Draft" to "In Review." Once that combined stage is approved, the bulletin moves to School Approval.
 
 > **Only HODs and Super Admins can officially submit** a bulletin for review. Programme Coordinators can edit drafts, but cannot submit them.
 
@@ -140,26 +140,25 @@ Each submission displays:
 
 - **Programme Name** — The programme the submission belongs to.
 - **Review Cycle** — Which cycle it belongs to.
-- **Phase** — The current review phase (Phases 1–11).
+- **Phase** — The current review phase (Phases 1–10).
 - **Status** — Draft, In Review, Approved, or Rejected.
 - **Comments** — Number of reviewer comments.
 - **Last Updated** — When it was last modified.
 
 ### Review Phases
 
-| Phase | Name                     | Description                              |
-| ----- | ------------------------ | ---------------------------------------- |
-| 1     | Preparation              | Initial draft creation by the department |
-| 2     | Departmental Review      | Internal departmental review             |
-| 3     | School Approval          | Dean-level approval                      |
-| 4     | Academic Planning Review | Central academic planning review         |
-| 5     | Corrections              | Corrections based on review feedback     |
-| 6     | Final Consolidation      | Final consolidation of all changes       |
-| 7     | Senate Approval          | University Senate approval               |
-| 8     | Editing                  | Professional editing                     |
-| 9     | Typesetting              | Layout and typesetting                   |
-| 10    | Distribution             | Distribution preparation                 |
-| 11    | Post-Release             | Post-publication tracking                |
+| Phase | Name                              | Description                                      |
+| ----- | --------------------------------- | ------------------------------------------------ |
+| 1     | Preparation & Departmental Review | Draft preparation and internal departmental review |
+| 2     | School Approval                   | Dean-level approval                              |
+| 3     | Academic Planning Review          | Central academic planning review                 |
+| 4     | Corrections                       | Corrections based on review feedback             |
+| 5     | Final Consolidation               | Final consolidation of all changes               |
+| 6     | Senate Approval                   | University Senate approval                       |
+| 7     | Editing                           | Professional editing                             |
+| 8     | Typesetting                       | Layout and typesetting                           |
+| 9     | Distribution                      | Distribution preparation                         |
+| 10    | Post-Release                      | Post-publication tracking                        |
 
 ---
 
