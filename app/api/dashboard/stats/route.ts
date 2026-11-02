@@ -2,6 +2,7 @@ import { PHASE_SHORT_NAMES } from "@/lib/submissions/phases";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
+import type { Prisma } from "@prisma/client";
 
 // GET /api/dashboard/stats - Get dashboard statistics
 export async function GET(request: Request) {
@@ -9,7 +10,10 @@ export async function GET(request: Request) {
     const auth = await requireApiUser();
     if (!auth.ok) return auth.response;
     if (
-      (auth.user.role === "HOD" && !auth.user.departmentId) ||
+      (["HOD", "PROGRAMME_COORDINATOR"].includes(auth.user.role) &&
+        !auth.user.departmentId) ||
+      (auth.user.role === "PROGRAMME_COORDINATOR" &&
+        auth.user.programmeIds.length === 0) ||
       (auth.user.role === "DEAN" && !auth.user.schoolId)
     ) {
       return NextResponse.json(
@@ -28,8 +32,10 @@ export async function GET(request: Request) {
         ? auth.user.schoolId
         : searchParams.get("schoolId");
 
-    const whereClause: any = {};
-    if (departmentId) {
+    const whereClause: Prisma.SubmissionWhereInput = {};
+    if (auth.user.role === "PROGRAMME_COORDINATOR") {
+      whereClause.programmeId = { in: auth.user.programmeIds };
+    } else if (departmentId) {
       whereClause.programme = { departmentId };
     } else if (schoolId) {
       whereClause.programme = { department: { schoolId } };
@@ -108,7 +114,7 @@ export async function GET(request: Request) {
 
     // What this person needs to act on next.
     const actionStatuses =
-      auth.user.role === "HOD"
+      ["HOD", "PROGRAMME_COORDINATOR"].includes(auth.user.role)
         ? (["CORRECTIONS_REQUIRED", "DRAFT"] as const)
         : (["IN_REVIEW"] as const);
     const actionWhere = {
