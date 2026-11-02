@@ -6,6 +6,7 @@ import {
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
 import { resolveWorkflowTransition } from "@/lib/submissions/workflow";
+import { recordActivity } from "@/lib/activity-log";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -45,7 +46,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
     } else if (action === "RETURN") {
-      if (!["HOD", "ADMIN", "SUPER_ADMIN"].includes(user.role)) {
+      if (
+        !["PROGRAMME_COORDINATOR", "HOD", "ADMIN", "SUPER_ADMIN"].includes(
+          user.role,
+        )
+      ) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
     }
@@ -80,8 +85,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const newStatus = resolved.status;
 
     // Create transition record and update submission in a transaction
-    const [transition, updated] = await prisma.$transaction([
-      prisma.phaseTransition.create({
+    const { transition, updated } = await prisma.$transaction(async (tx) => {
+      const transition = await tx.phaseTransition.create({
         data: {
           submissionId: id,
           fromPhase,
@@ -100,8 +105,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             },
           },
         },
-      }),
-      prisma.submission.update({
+      });
+      const updated = await tx.submission.update({
         where: { id },
         data: {
           currentPhase: newPhase,
@@ -115,8 +120,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             select: { id: true, name: true, code: true },
           },
         },
-      }),
-    ]);
+      });
+      await recordActivity(
+        {
+          actorId: user.id,
+          action: `SUBMISSION_${action}`,
+          entityType: "SUBMISSION",
+          entityId: id,
+          description: `${action.charAt(0)}${action.slice(1).toLowerCase()} action recorded for ${updated.programme.name}.`,
+          metadata: {
+            fromPhase,
+            toPhase: newPhase,
+            status: newStatus,
+            ...(remarks?.trim() && { remarks: remarks.trim() }),
+          },
+        },
+        tx,
+      );
+      return { transition, updated };
+    });
 
     // People are emailed about this in the next daily summary
     // (see sendDailyDigests in lib/email/notifications.ts).
