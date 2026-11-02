@@ -6,6 +6,7 @@ import {
   toTitleCase,
 } from "@/lib/validation/name-format";
 import { canAccessDepartment, requireApiUser } from "@/lib/api-auth";
+import { recordActivity } from "@/lib/activity-log";
 
 // Valid enum values for validation
 const VALID_TITLES = [
@@ -39,7 +40,10 @@ export async function GET(request: Request) {
   try {
     const auth = await requireApiUser();
     if (!auth.ok) return auth.response;
-    if (auth.user.role === "HOD" && !auth.user.departmentId) {
+    if (
+      ["HOD", "PROGRAMME_COORDINATOR"].includes(auth.user.role) &&
+      !auth.user.departmentId
+    ) {
       return NextResponse.json(
         { error: "Your account is not assigned to a department." },
         { status: 403 },
@@ -48,7 +52,7 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const departmentId =
-      auth.user.role === "HOD"
+      ["HOD", "PROGRAMME_COORDINATOR"].includes(auth.user.role)
         ? auth.user.departmentId
         : searchParams.get("departmentId");
     const type = searchParams.get("type");
@@ -112,7 +116,12 @@ export async function GET(request: Request) {
 // POST /api/staff - Create a new staff member
 export async function POST(request: Request) {
   try {
-    const auth = await requireApiUser(["HOD", "ADMIN", "SUPER_ADMIN"]);
+    const auth = await requireApiUser([
+      "PROGRAMME_COORDINATOR",
+      "HOD",
+      "ADMIN",
+      "SUPER_ADMIN",
+    ]);
     if (!auth.ok) return auth.response;
 
     const body = await request.json();
@@ -258,6 +267,15 @@ export async function POST(request: Request) {
           },
         },
       },
+    });
+
+    await recordActivity({
+      actorId: auth.user.id,
+      action: "STAFF_CREATED",
+      entityType: "STAFF",
+      entityId: staff.id,
+      description: `Added ${staff.firstName} ${staff.surname} to the ${staff.department.name} staff directory.`,
+      metadata: { departmentId, staffType: staff.type },
     });
 
     return NextResponse.json(
