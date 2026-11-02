@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
+import { recordActivity } from "@/lib/activity-log";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -62,6 +63,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         ...(description !== undefined && { description }),
       },
     });
+    await recordActivity({
+      actorId: auth.user.id,
+      action: "SCHOOL_UPDATED",
+      entityType: "SCHOOL",
+      entityId: id,
+      description: `Updated the ${school.name} school.`,
+    });
 
     return NextResponse.json(school);
   } catch (error: unknown) {
@@ -97,8 +105,18 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
 
-    await prisma.school.delete({
-      where: { id },
+    await prisma.$transaction(async (tx) => {
+      await recordActivity(
+        {
+          actorId: auth.user.id,
+          action: "SCHOOL_DELETED",
+          entityType: "SCHOOL",
+          entityId: id,
+          description: "Deleted a school and its dependent records.",
+        },
+        tx,
+      );
+      await tx.school.delete({ where: { id } });
     });
 
     return NextResponse.json({ success: true });
