@@ -17,11 +17,21 @@ export async function GET() {
         isActive: true,
         schoolId: true,
         departmentId: true,
+        programmeAssignments: {
+          select: { programmeId: true },
+        },
       },
       orderBy: { createdAt: "asc" },
     });
 
-    return NextResponse.json(users);
+    return NextResponse.json(
+      users.map(({ programmeAssignments, ...user }) => ({
+        ...user,
+        programmeIds: programmeAssignments.map(
+          (assignment) => assignment.programmeId,
+        ),
+      })),
+    );
   } catch (error) {
     console.error("Failed to fetch users:", error);
     return NextResponse.json(
