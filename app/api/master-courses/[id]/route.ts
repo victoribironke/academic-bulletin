@@ -7,6 +7,7 @@ import {
 } from "@/lib/validation/name-format";
 import { requireApiUser } from "@/lib/api-auth";
 import { propagateMasterCourseChanges } from "@/lib/courses/propagation";
+import { recordActivity } from "@/lib/activity-log";
 
 // Valid enum values
 const VALID_COURSE_TYPES = [
@@ -18,7 +19,7 @@ const VALID_COURSE_TYPES = [
   "GST_BU",
 ];
 const VALID_OWNERSHIP = ["DEPARTMENT", "SCHOOL", "INSTITUTIONAL"];
-const VALID_LEVELS = [100, 200, 300, 400, 500];
+const VALID_LEVELS = [100, 200, 300, 400, 500, 600];
 const VALID_SEMESTERS = [1, 2];
 
 // GET /api/master-courses/[id] - Get a single master course
@@ -268,6 +269,18 @@ export async function PATCH(
           : undefined,
     });
 
+    await recordActivity({
+      actorId: auth.user.id,
+      action: "REGISTRY_COURSE_UPDATED",
+      entityType: "MASTER_COURSE",
+      entityId: id,
+      description: `Updated Registry course ${course.code} - ${course.title}.`,
+      metadata: {
+        fields: Object.keys(updateData),
+        propagatedToSubmissions: propagationResult.updatedCount,
+      },
+    });
+
     return NextResponse.json({
       course,
       propagation: propagationResult,
@@ -318,7 +331,19 @@ export async function DELETE(
       );
     }
 
-    await prisma.masterCourse.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      await recordActivity(
+        {
+          actorId: auth.user.id,
+          action: "REGISTRY_COURSE_DELETED",
+          entityType: "MASTER_COURSE",
+          entityId: id,
+          description: `Deleted Registry course ${existing.code} - ${existing.title}.`,
+        },
+        tx,
+      );
+      await tx.masterCourse.delete({ where: { id } });
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
