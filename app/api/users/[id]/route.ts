@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireApiUser } from "@/lib/api-auth";
+import { recordActivity } from "@/lib/activity-log";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -32,6 +33,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         department: {
           select: { id: true, name: true, code: true },
         },
+        programmeAssignments: {
+          select: {
+            programme: {
+              select: { id: true, name: true, code: true, departmentId: true },
+            },
+          },
+          orderBy: { programme: { name: "asc" } },
+        },
       },
     });
 
@@ -39,7 +48,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    return NextResponse.json(user);
+    const { programmeAssignments, ...profile } = user;
+    return NextResponse.json({
+      ...profile,
+      programmeIds: programmeAssignments.map(
+        (assignment) => assignment.programme.id,
+      ),
+      programmes: programmeAssignments.map(
+        (assignment) => assignment.programme,
+      ),
+    });
   } catch (error) {
     console.error("Failed to fetch user:", error);
     return NextResponse.json(
@@ -51,10 +69,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 // Role tier hierarchy: higher number = higher privilege
 const ROLE_TIERS: Record<string, number> = {
-  HOD: 1,
-  DEAN: 2,
-  ADMIN: 3,
-  SUPER_ADMIN: 4,
+  PROGRAMME_COORDINATOR: 1,
+  HOD: 2,
+  DEAN: 3,
+  ADMIN: 4,
+  SUPER_ADMIN: 5,
 };
 
 function getRoleTier(role: string): number {
@@ -66,7 +85,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { role, isActive, schoolId, departmentId } = body;
+    const { role, isActive, schoolId, departmentId, programmeIds } = body;
 
     // Names: trimmed only, so spellings like "McDonald" or "O'Neil" are kept.
     const names: { firstName?: string; lastName?: string } = {};
@@ -85,7 +104,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       role === undefined &&
       isActive === undefined &&
       schoolId === undefined &&
-      departmentId === undefined;
+      departmentId === undefined &&
+      programmeIds === undefined;
 
     if (role !== undefined && !(role in ROLE_TIERS)) {
       return NextResponse.json(
@@ -96,6 +116,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (isActive !== undefined && typeof isActive !== "boolean") {
       return NextResponse.json(
         { error: "isActive must be a boolean." },
+        { status: 400 },
+      );
+    }
+    if (
+      programmeIds !== undefined &&
+      (!Array.isArray(programmeIds) ||
+        programmeIds.some((id) => typeof id !== "string"))
+    ) {
+      return NextResponse.json(
+        { error: "programmeIds must be a list of programme IDs." },
         { status: 400 },
       );
     }
@@ -195,9 +225,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const nextDepartmentId =
       departmentId !== undefined ? departmentId : targetUser.departmentId;
 
-    if (nextRole === "HOD" && !nextDepartmentId) {
+    if (["PROGRAMME_COORDINATOR", "HOD"].includes(nextRole) && !nextDepartmentId) {
       return NextResponse.json(
-        { error: "A Head of Department must be assigned to a department." },
+        {
+          error:
+            nextRole === "PROGRAMME_COORDINATOR"
+              ? "A Programme Coordinator must be assigned to a department."
+              : "A Head of Department must be assigned to a department.",
+        },
         { status: 400 },
       );
     }
@@ -217,6 +252,44 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           {
             error:
               "The selected department does not belong to the selected school.",
+          },
+          { status: 400 },
+        );
+      }
+    }
+
+    const nextProgrammeIds =
+      nextRole === "PROGRAMME_COORDINATOR"
+        ? Array.from(
+            new Set(
+              (programmeIds ??
+                (
+                  await prisma.userProgramme.findMany({
+                    where: { userId: id },
+                    select: { programmeId: true },
+                  })
+                ).map((assignment) => assignment.programmeId)) as string[],
+            ),
+          )
+        : [];
+    if (nextRole === "PROGRAMME_COORDINATOR") {
+      if (nextProgrammeIds.length === 0) {
+        return NextResponse.json(
+          { error: "Assign at least one programme to this coordinator." },
+          { status: 400 },
+        );
+      }
+      const matchingProgrammes = await prisma.programme.count({
+        where: {
+          id: { in: nextProgrammeIds },
+          departmentId: nextDepartmentId!,
+        },
+      });
+      if (matchingProgrammes !== nextProgrammeIds.length) {
+        return NextResponse.json(
+          {
+            error:
+              "Every selected programme must belong to the selected department.",
           },
           { status: 400 },
         );
@@ -252,31 +325,88 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    const user = await prisma.user.update({
-      where: { id },
-      data: {
-        ...(role !== undefined && { role }),
-        ...(isActive !== undefined && { isActive }),
-        ...(schoolId !== undefined && { schoolId }),
-        ...(departmentId !== undefined && { departmentId }),
-        ...names,
-      },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        isActive: true,
-        schoolId: true,
-        departmentId: true,
-        school: {
-          select: { id: true, name: true, code: true },
+    const user = await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id },
+        data: {
+          ...(role !== undefined && { role }),
+          ...(isActive !== undefined && { isActive }),
+          ...(schoolId !== undefined && { schoolId }),
+          ...(departmentId !== undefined && { departmentId }),
+          ...names,
         },
-        department: {
-          select: { id: true, name: true, code: true },
+      });
+
+      if (
+        role !== undefined ||
+        programmeIds !== undefined ||
+        departmentId !== undefined
+      ) {
+        await tx.userProgramme.deleteMany({ where: { userId: id } });
+        if (nextRole === "PROGRAMME_COORDINATOR") {
+          await tx.userProgramme.createMany({
+            data: nextProgrammeIds.map((programmeId) => ({
+              userId: id,
+              programmeId,
+            })),
+          });
+        }
+      }
+
+      const action =
+        isActive === false
+          ? "USER_DEACTIVATED"
+          : isActive === true
+            ? "USER_ACTIVATED"
+            : "USER_UPDATED";
+      await recordActivity(
+        {
+          actorId: requestingUser.id,
+          action,
+          entityType: "USER",
+          entityId: id,
+          description: `${requestingUser.firstName} ${requestingUser.lastName} updated ${targetUser.firstName} ${targetUser.lastName}'s account.`,
+          metadata: {
+            role: nextRole,
+            isActive: isActive ?? targetUser.isActive,
+            programmeIds: nextProgrammeIds,
+          },
         },
-      },
+        tx,
+      );
+
+      return tx.user.findUniqueOrThrow({
+        where: { id },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          isActive: true,
+          schoolId: true,
+          departmentId: true,
+          school: {
+            select: { id: true, name: true, code: true },
+          },
+          department: {
+            select: { id: true, name: true, code: true },
+          },
+          programmeAssignments: {
+            select: {
+              programme: {
+                select: {
+                  id: true,
+                  name: true,
+                  code: true,
+                  departmentId: true,
+                },
+              },
+            },
+            orderBy: { programme: { name: "asc" } },
+          },
+        },
+      });
     });
 
     // Keep the sign-in account's display name in step (not critical).
@@ -290,7 +420,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    return NextResponse.json(user);
+    const { programmeAssignments, ...profile } = user;
+    return NextResponse.json({
+      ...profile,
+      programmeIds: programmeAssignments.map(
+        (assignment) => assignment.programme.id,
+      ),
+      programmes: programmeAssignments.map(
+        (assignment) => assignment.programme,
+      ),
+    });
   } catch (error: unknown) {
     console.error("Failed to update user:", error);
 
@@ -337,6 +476,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
             phaseTransitions: true,
             comments: true,
             reviewCycles: true,
+            activities: true,
           },
         },
       },
@@ -356,7 +496,19 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    await prisma.user.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      await recordActivity(
+        {
+          actorId: auth.user.id,
+          action: "USER_DELETED",
+          entityType: "USER",
+          entityId: id,
+          description: "Permanently deleted an unused user account.",
+        },
+        tx,
+      );
+      await tx.user.delete({ where: { id } });
+    });
 
     // Remove the sign-in account too. If this fails the person still can't
     // get in, because sign-in requires a matching user record.
