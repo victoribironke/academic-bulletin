@@ -4,6 +4,7 @@ import { requireApiUser } from "@/lib/api-auth";
 import { preloadGstCoursesForSubmission } from "@/lib/courses/gst-pool";
 import { calculateSubmissionProgress } from "@/lib/submissions/progress";
 import { recordActivity } from "@/lib/activity-log";
+import { TOTAL_PHASES } from "@/lib/submissions/phases";
 
 const SUBMISSION_STATUSES = [
   "DRAFT",
@@ -56,7 +57,9 @@ export async function GET(request: NextRequest) {
     const phaseNumber = phase ? Number(phase) : null;
     if (
       phaseNumber !== null &&
-      (!Number.isInteger(phaseNumber) || phaseNumber < 1 || phaseNumber > 11)
+      (!Number.isInteger(phaseNumber) ||
+        phaseNumber < 1 ||
+        phaseNumber > TOTAL_PHASES)
     ) {
       return NextResponse.json({ error: "Invalid phase filter." }, { status: 400 });
     }
