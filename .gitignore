@@ -55,6 +55,8 @@ prisma/migrations/*
 !prisma/migrations/20261030120000_add_phase_transition_notified_at/migration.sql
 !prisma/migrations/20261102153000_enforce_course_grace_compliance/
 !prisma/migrations/20261102153000_enforce_course_grace_compliance/migration.sql
+!prisma/migrations/20261102180000_merge_preparation_department_review/
+!prisma/migrations/20261102180000_merge_preparation_department_review/migration.sql
 
 # local
 *.log
