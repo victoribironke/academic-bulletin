@@ -471,31 +471,32 @@ export default function SubmissionDetailPage({
   const [imageVerificationFeedback, setImageVerificationFeedback] =
     useState<ImageVerificationFeedback | null>(null);
 
-  const isOwnDepartment =
+  const isAssignedSubmission =
     !currentUser ||
-    currentUser.role !== "HOD" ||
-    (submission?.programme.department.id === currentUser.departmentId);
+    (currentUser.role === "HOD" &&
+      submission?.programme.department.id === currentUser.departmentId) ||
+    (currentUser.role === "PROGRAMME_COORDINATOR" &&
+      !!submission?.programme.id &&
+      currentUser.programmeIds.includes(submission.programme.id)) ||
+    !["HOD", "PROGRAMME_COORDINATOR"].includes(currentUser.role);
 
-  const submissionsBackHref =
-    currentUser?.role === "HOD"
-      ? isOwnDepartment
-        ? "/submissions/me"
-        : "/submissions/browse"
-      : "/submissions";
+  const submissionsBackHref = "/submissions";
 
   const canEdit =
     hasPermission("edit:submission") &&
     ["DRAFT", "CORRECTIONS_REQUIRED"].includes(submission?.status || "") &&
-    isOwnDepartment;
+    isAssignedSubmission;
   const canComment =
     hasPermission("comment:submission") || hasPermission("review:submission");
   const canReview = hasPermission("review:submission");
   const canApprove = hasPermission("approve:submission");
   const canSubmit =
     currentUser &&
-    ["HOD", "SUPER_ADMIN"].includes(currentUser.role) &&
+    ["PROGRAMME_COORDINATOR", "HOD", "SUPER_ADMIN"].includes(
+      currentUser.role,
+    ) &&
     ["DRAFT", "CORRECTIONS_REQUIRED"].includes(submission?.status || "") &&
-    isOwnDepartment;
+    isAssignedSubmission;
 
   // Puts freshly loaded submission data (or a local unsaved draft) into the form.
   const applySubmissionData = useCallback((data: Submission) => {
@@ -1078,7 +1079,7 @@ export default function SubmissionDetailPage({
           <>
             {submission.programme.department.name} ·{" "}
             {submission.programme.department.school.name}
-            {currentUser?.role === "HOD" && isOwnDepartment && (
+            {currentUser?.role === "HOD" && isAssignedSubmission && (
               <>
                 {" · "}
                 <Link href="/submissions/browse" className="text-primary hover:underline">
@@ -1125,12 +1126,13 @@ export default function SubmissionDetailPage({
         </Alert>
       )}
 
-      {/* Read-only banner for HODs viewing other departments' submissions */}
-      {currentUser?.role === "HOD" && !isOwnDepartment && (
+      {/* Read-only banner for departmental users outside their assignment. */}
+      {["HOD", "PROGRAMME_COORDINATOR"].includes(currentUser?.role || "") &&
+        !isAssignedSubmission && (
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            You are viewing a submission from another department. This view is read-only.
+            This submission is outside your assigned department or programme. This view is read-only.
           </AlertDescription>
         </Alert>
       )}
@@ -1629,7 +1631,7 @@ export default function SubmissionDetailPage({
                       departmentId={submission.programme.department.id}
                       disabled={!canEdit}
                       readOnlyReason={
-                        !isOwnDepartment
+                        !isAssignedSubmission
                           ? "You can only edit staff in your own department."
                           : !["DRAFT", "CORRECTIONS_REQUIRED"].includes(
                                 submission.status,
