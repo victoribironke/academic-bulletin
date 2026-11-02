@@ -133,7 +133,7 @@ export function HelpButton() {
           <section className="space-y-2">
             <h3 className="font-semibold text-base">Review And Release Stages</h3>
             <p className="text-muted-foreground">
-              Typical stages are preparation, departmental review, school
+              Typical stages are departmental preparation and review, school
               approval, planning checks, corrections, and final publication
               handoff. Status badges on submissions show the current phase.
             </p>
