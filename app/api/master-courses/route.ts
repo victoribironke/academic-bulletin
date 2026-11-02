@@ -7,6 +7,8 @@ import {
 } from "@/lib/validation/name-format";
 import { requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
+import { pageResult, parsePagination } from "@/lib/pagination";
+import type { Prisma } from "@prisma/client";
 
 // Valid enum values
 const VALID_COURSE_TYPES = [
@@ -35,6 +37,11 @@ export async function GET(request: Request) {
     const level = searchParams.get("level");
     const semester = searchParams.get("semester");
     const discoverable = searchParams.get("discoverable");
+    const query = searchParams.get("q")?.trim();
+    // `page` asks for one page of full rows; `fields=summary` asks for every
+    // course with only the fields the course-code picker needs.
+    const paginated = searchParams.has("page");
+    const summaryOnly = searchParams.get("fields") === "summary";
 
     if (["HOD", "PROGRAMME_COORDINATOR"].includes(auth.user.role)) {
       if (!auth.user.departmentId) {
@@ -101,8 +108,44 @@ export async function GET(request: Request) {
       if (VALID_SEMESTERS.includes(semNum)) where.semester = semNum;
     }
 
+    if (query) {
+      const search: Prisma.MasterCourseWhereInput = {
+        OR: [
+          { code: { contains: query, mode: "insensitive" } },
+          { title: { contains: query, mode: "insensitive" } },
+        ],
+      };
+      where.AND = [search];
+    }
+
+    const orderBy: Prisma.MasterCourseOrderByWithRelationInput[] = [
+      { level: "asc" },
+      { semester: "asc" },
+      { code: "asc" },
+    ];
+
+    if (summaryOnly) {
+      const courses = await prisma.masterCourse.findMany({
+        where,
+        select: {
+          id: true,
+          code: true,
+          title: true,
+          units: true,
+          type: true,
+          level: true,
+          semester: true,
+        },
+        orderBy,
+      });
+      return NextResponse.json(courses);
+    }
+
+    const { page, pageSize, skip, take } = parsePagination(searchParams);
+
     const courses = await prisma.masterCourse.findMany({
       where,
+      ...(paginated && { skip, take }),
       include: {
         ownerDepartment: {
           select: {
@@ -152,9 +195,13 @@ export async function GET(request: Request) {
           },
         },
       },
-      orderBy: [{ level: "asc" }, { semester: "asc" }, { code: "asc" }],
+      orderBy,
     });
 
+    if (paginated) {
+      const total = await prisma.masterCourse.count({ where });
+      return NextResponse.json(pageResult(courses, total, page, pageSize));
+    }
     return NextResponse.json(courses);
   } catch (error) {
     console.error("Failed to fetch master courses:", error);
