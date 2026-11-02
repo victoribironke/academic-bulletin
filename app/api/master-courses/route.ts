@@ -6,6 +6,7 @@ import {
   isValidCourseCode,
 } from "@/lib/validation/name-format";
 import { requireApiUser } from "@/lib/api-auth";
+import { recordActivity } from "@/lib/activity-log";
 
 // Valid enum values
 const VALID_COURSE_TYPES = [
@@ -17,7 +18,7 @@ const VALID_COURSE_TYPES = [
   "GST_BU",
 ];
 const VALID_OWNERSHIP = ["DEPARTMENT", "SCHOOL", "INSTITUTIONAL"];
-const VALID_LEVELS = [100, 200, 300, 400, 500];
+const VALID_LEVELS = [100, 200, 300, 400, 500, 600];
 const VALID_SEMESTERS = [1, 2];
 
 // GET /api/master-courses - Get all master courses with filters
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
     const semester = searchParams.get("semester");
     const discoverable = searchParams.get("discoverable");
 
-    if (auth.user.role === "HOD") {
+    if (["HOD", "PROGRAMME_COORDINATOR"].includes(auth.user.role)) {
       if (!auth.user.departmentId) {
         return NextResponse.json(
           { error: "Your account is not assigned to a department." },
@@ -272,10 +273,6 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    // For INSTITUTIONAL, we force ownerDeptId to null
-    // For INSTITUTIONAL, we force ownerDeptId to null
-    // For INSTITUTIONAL, we force ownerDeptId to null
-
     if (resolvedOwnership === "SCHOOL" && !finalSchoolId) {
       // Try to resolve school from dept if missing
       if (finalDeptId) {
@@ -370,6 +367,15 @@ export async function POST(request: Request) {
           },
         },
       },
+    });
+
+    await recordActivity({
+      actorId: auth.user.id,
+      action: "REGISTRY_COURSE_CREATED",
+      entityType: "MASTER_COURSE",
+      entityId: course.id,
+      description: `Created Registry course ${course.code} - ${course.title}.`,
+      metadata: { type: course.type, ownership: course.ownership },
     });
 
     return NextResponse.json(course, { status: 201 });
