@@ -18,6 +18,7 @@
     "db:push": "cross-env NODE_OPTIONS=--dns-result-order=ipv4first prisma db push",
     "db:seed": "bun run prisma/seed.ts",
     "db:seed-units": "bun run scripts/seed-platform.ts",
+    "db:sync-ccmas": "bun run scripts/sync-ccmas.ts",
     "db:studio": "prisma studio"
   },
   "prisma": {},
