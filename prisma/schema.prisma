@@ -306,7 +306,7 @@ model ReviewCycle {
 model Submission {
   id           String           @id @default(cuid())
   title        String
-  currentPhase Int              @default(1) // Phase 1-11
+  currentPhase Int              @default(1) // Phase 1-10
   status       SubmissionStatus @default(DRAFT)
   submittedAt  DateTime?
   approvedAt   DateTime?
