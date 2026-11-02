@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendDailyDigests } from "@/lib/email/notifications";
+import { processPendingGraceAssessments } from "@/lib/courses/grace-compliance";
 
 // Sending one summary email per recipient can take a little while.
 export const maxDuration = 60;
+
+// Leaves room for the digest emails and one last batch of GRACE checks.
+const GRACE_TIME_BUDGET_MS = 30_000;
 
 /**
  * GET /api/cron/daily
@@ -43,9 +47,30 @@ export async function GET(request: NextRequest) {
     console.error("Daily digest failed:", error);
   }
 
-  const ok = keepAlive.ok && digest.ok === true;
+  // Work through the GRACE backlog in batches: bulletins that can still be
+  // submitted first, then everything else, stopping well before the time limit.
+  let grace: Record<string, unknown> = { ok: false };
+  try {
+    const deadline = Date.now() + GRACE_TIME_BUDGET_MS;
+    let processed = 0;
+    for (const activeOnly of [true, false]) {
+      while (Date.now() < deadline) {
+        const batch = await processPendingGraceAssessments({
+          limit: 10,
+          activeOnly,
+        });
+        processed += batch.processed;
+        if (batch.processed === 0) break;
+      }
+    }
+    grace = { ok: true, processed };
+  } catch (error) {
+    console.error("Queued GRACE processing failed:", error);
+  }
+
+  const ok = keepAlive.ok && digest.ok === true && grace.ok === true;
   return NextResponse.json(
-    { ok, keepAlive, digest, at: new Date().toISOString() },
+    { ok, keepAlive, digest, grace, at: new Date().toISOString() },
     { status: ok ? 200 : 500 },
   );
 }
