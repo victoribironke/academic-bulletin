@@ -6,6 +6,7 @@ import {
   requireApiUser,
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
+import { AUTOSAVE_COALESCE_MINUTES, recordActivity } from "@/lib/activity-log";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -220,6 +221,22 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       });
     }
 
+    await recordActivity({
+      actorId: user!.id,
+      action: status ? "SUBMISSION_STATUS_UPDATED" : "SUBMISSION_SAVED",
+      entityType: "SUBMISSION",
+      entityId: id,
+      description: status
+        ? `Updated the submission status to ${String(status).toLowerCase().replaceAll("_", " ")}.`
+        : "Saved changes to the bulletin submission.",
+      metadata: {
+        updatedContent: Boolean(content),
+        ...(status && { status }),
+      },
+      // Autosave fires every few seconds; log one entry per editing session.
+      ...(!status && { coalesceWithinMinutes: AUTOSAVE_COALESCE_MINUTES }),
+    });
+
     // Re-fetch with full data
     const updated = await prisma.submission.findUnique({
       where: { id },
@@ -267,8 +284,18 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    await prisma.submission.delete({
-      where: { id },
+    await prisma.$transaction(async (tx) => {
+      await recordActivity(
+        {
+          actorId: user.id,
+          action: "SUBMISSION_DELETED",
+          entityType: "SUBMISSION",
+          entityId: id,
+          description: "Deleted a bulletin submission.",
+        },
+        tx,
+      );
+      await tx.submission.delete({ where: { id } });
     });
 
     return NextResponse.json({ success: true });
