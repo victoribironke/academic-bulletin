@@ -10,6 +10,7 @@ const baseUser = {
   isActive: true,
   schoolId: "school-1",
   departmentId: "department-1",
+  programmeIds: [],
 };
 
 describe("role permissions", () => {
@@ -28,5 +29,16 @@ describe("role permissions", () => {
     const admin = { ...baseUser, role: "ADMIN" as const };
     expect(hasPermission(admin, "manage:users")).toBe(true);
     expect(hasPermission(admin, "edit:submission")).toBe(false);
+  });
+
+  it("lets programme coordinators edit assigned work without administrative access", () => {
+    const coordinator = {
+      ...baseUser,
+      role: "PROGRAMME_COORDINATOR" as const,
+      programmeIds: ["programme-1"],
+    };
+    expect(hasPermission(coordinator, "edit:submission")).toBe(true);
+    expect(hasPermission(coordinator, "manage:users")).toBe(false);
+    expect(hasPermission(coordinator, "view:audit")).toBe(false);
   });
 });
