@@ -16,6 +16,7 @@ datasource db {
 // ============================================================================
 
 enum UserRole {
+  PROGRAMME_COORDINATOR
   HOD
   DEAN
   ADMIN
@@ -163,6 +164,7 @@ model Programme {
   department       Department        @relation(fields: [departmentId], references: [id], onDelete: Cascade)
   submissions      Submission[]
   programmeCourses ProgrammeCourse[] // Courses linked to this programme
+  userAssignments  UserProgramme[]
 
   @@unique([name, departmentId])
   @@map("programmes")
@@ -198,8 +200,48 @@ model User {
   comments         Comment[]
   // Cycles created by this admin
   reviewCycles     ReviewCycle[]
+  programmeAssignments UserProgramme[]
+  activities       ActivityLog[]
 
   @@map("users")
+}
+
+// Programme coordinators may be assigned to one or more programmes while
+// keeping a single system role. HODs continue to cover their whole department.
+model UserProgramme {
+  id          String   @id @default(cuid())
+  userId      String
+  programmeId String
+  createdAt   DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  programme Programme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, programmeId])
+  @@index([programmeId])
+  @@map("user_programmes")
+}
+
+// Append-only record of important actions. This is intentionally separate
+// from workflow transitions so Academic Planning can audit administrative,
+// content, staff, course, and account activity in one place.
+model ActivityLog {
+  id          String   @id @default(cuid())
+  action      String
+  entityType  String
+  entityId    String?
+  description String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  actorId     String?
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@map("activity_logs")
 }
 
 // ============================================================================
@@ -465,6 +507,9 @@ model MasterCourse {
   courseContent         String? // Central starting course description/content
   labWork               String?
   entrepreneurialAspect String?
+  curriculumSource      String? // e.g. CCMAS 2023 or university-developed
+  sourceReference       String? // Official document title, URL, or version
+  sourceProgrammes      Json? // Programme names used in the source catalogue
   discoverable Boolean @default(true)
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
@@ -495,10 +540,18 @@ model MasterCourse {
 // ============================================================================
 
 model ProgrammeCourse {
-  id        String   @id @default(cuid())
-  isCore    Boolean  @default(true) // Core for THIS specific programme
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                       String      @id @default(cuid())
+  isCore                   Boolean     @default(true) // Core for THIS specific programme
+  titleOverride            String?
+  unitsOverride            Int?
+  typeOverride             CourseType?
+  semesterOverride         Int?
+  learningOutcomesOverride Json?
+  courseContentOverride    String?
+  sourceProgrammeName      String?
+  sourceReference          String?
+  createdAt                DateTime    @default(now())
+  updatedAt                DateTime    @updatedAt
 
   // Foreign Keys
   programmeId String
