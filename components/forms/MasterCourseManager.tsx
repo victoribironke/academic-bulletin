@@ -43,12 +43,14 @@ import {
 } from "lucide-react";
 import { TableCard, TableToolbar } from "@/components/shared/table-toolbar";
 import { EmptyState, TableSkeleton } from "@/components/shared/states";
+import { TablePagination } from "@/components/shared/table-pagination";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import type { PageResult } from "@/lib/pagination";
 import { toast } from "sonner";
 import { BulkImportDialog } from "@/components/imports/bulk-import-dialog";
 import {
   MASTER_COURSE_TEMPLATE_COLUMNS,
   MASTER_COURSE_TEMPLATE_EXAMPLES,
-  courseDuplicateKeys,
   validateMasterCourseImportRows,
   type MasterCourseImportData,
 } from "@/lib/imports/courses";
@@ -148,6 +150,10 @@ export function MasterCourseManager({
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [filterLevel, setFilterLevel] = useState("all");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [isFetchingPage, setIsFetchingPage] = useState(false);
+  const debouncedSearch = useDebouncedValue(search.trim(), 300);
 
   const canManageRegistry =
     currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
@@ -217,40 +223,63 @@ export function MasterCourseManager({
   });
 
   const [reloadKey, setReloadKey] = useState(0);
-  const fetchData = useCallback(() => setReloadKey((k) => k + 1), []);
+  const fetchData = useCallback(() => {
+    setIsFetchingPage(true);
+    setReloadKey((k) => k + 1);
+  }, []);
+  const goToPage = (next: number) => {
+    setIsFetchingPage(true);
+    setPage(next);
+  };
 
+  // Departments and programmes for the forms; loaded once.
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      fetch(
-        departmentId
-          ? `/api/master-courses?departmentId=${departmentId}`
-          : "/api/master-courses",
-      ),
-      fetch("/api/departments"),
-      fetch("/api/programmes"),
-    ])
-      .then(([coursesRes, deptsRes, progsRes]) =>
+    Promise.all([fetch("/api/departments"), fetch("/api/programmes")])
+      .then(([deptsRes, progsRes]) =>
         Promise.all([
-          coursesRes.ok ? coursesRes.json() : null,
           deptsRes.ok ? deptsRes.json() : null,
           progsRes.ok ? progsRes.json() : null,
         ]),
       )
-      .then(([coursesData, deptsData, progsData]) => {
+      .then(([deptsData, progsData]) => {
         if (cancelled) return;
-        if (coursesData) setCourses(coursesData);
         if (deptsData) setDepartments(deptsData);
         if (progsData) setProgrammes(progsData);
       })
-      .catch((error) => console.error("Failed to fetch data:", error))
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
+      .catch((error) => console.error("Failed to fetch data:", error));
     return () => {
       cancelled = true;
     };
-  }, [departmentId, reloadKey]);
+  }, []);
+
+  // One page of courses at a time; search and filters run on the server.
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams({ page: String(page) });
+    if (departmentId) params.set("departmentId", departmentId);
+    if (debouncedSearch) params.set("q", debouncedSearch);
+    if (filterType !== "all") params.set("type", filterType);
+    if (filterLevel !== "all") params.set("level", filterLevel);
+
+    fetch(`/api/master-courses?${params}`, { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: PageResult<MasterCourse> | null) => {
+        if (!data) return;
+        setCourses(data.items);
+        setTotal(data.total);
+      })
+      .catch((error) => {
+        if (error?.name !== "AbortError") console.error("Failed to fetch courses:", error);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsLoading(false);
+          setIsFetchingPage(false);
+        }
+      });
+    return () => controller.abort();
+  }, [departmentId, page, debouncedSearch, filterType, filterLevel, reloadKey]);
 
   const handleCreateCourse = async () => {
     setIsCreating(true);
@@ -262,8 +291,8 @@ export function MasterCourseManager({
       });
 
       if (res.ok) {
-        const created = await res.json();
-        setCourses((prev) => [...prev, created]);
+        await res.json();
+        fetchData();
         setIsDialogOpen(false);
         setNewCourse({
           code: "",
@@ -465,7 +494,7 @@ export function MasterCourseManager({
       });
 
       if (res.ok) {
-        setCourses((prev) => prev.filter((c) => c.id !== courseId));
+        fetchData();
         if (selectedCourse?.id === courseId) {
           setLinkDialogOpen(false);
           setSelectedCourse(null);
@@ -567,15 +596,8 @@ export function MasterCourseManager({
     );
   };
 
-  const visibleCourses = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return courses.filter((course) => {
-      if (filterType !== "all" && course.type !== filterType) return false;
-      if (filterLevel !== "all" && String(course.level) !== filterLevel) return false;
-      if (!q) return true;
-      return `${course.code} ${course.title}`.toLowerCase().includes(q);
-    });
-  }, [courses, search, filterType, filterLevel]);
+  // The server already applied search, filters and paging.
+  const visibleCourses = courses;
 
   const hasCourseActions = canManageRegistry || currentUser?.role === "HOD";
 
@@ -688,11 +710,20 @@ export function MasterCourseManager({
     <div className="space-y-4">
       <TableToolbar
         search={search}
-        onSearchChange={setSearch}
+        onSearchChange={(value) => {
+          setSearch(value);
+          goToPage(1);
+        }}
         searchPlaceholder="Search code or title"
         filters={
           <>
-            <Select value={filterType} onValueChange={setFilterType}>
+            <Select
+              value={filterType}
+              onValueChange={(value) => {
+                setFilterType(value);
+                goToPage(1);
+              }}
+            >
               <SelectTrigger className="w-full bg-card sm:w-40" aria-label="Course type">
                 <SelectValue placeholder="All types" />
               </SelectTrigger>
@@ -705,7 +736,13 @@ export function MasterCourseManager({
                 ))}
               </SelectContent>
             </Select>
-            <Select value={filterLevel} onValueChange={setFilterLevel}>
+            <Select
+              value={filterLevel}
+              onValueChange={(value) => {
+                setFilterLevel(value);
+                goToPage(1);
+              }}
+            >
               <SelectTrigger className="w-full bg-card sm:w-36" aria-label="Level">
                 <SelectValue placeholder="All levels" />
               </SelectTrigger>
@@ -959,7 +996,18 @@ export function MasterCourseManager({
           }
         />
       ) : (
-        <TableCard>{coursesTable}</TableCard>
+        <>
+          <TableCard className={isFetchingPage ? "opacity-60 transition-opacity" : undefined}>
+            {coursesTable}
+          </TableCard>
+          <TablePagination
+            page={page}
+            pageSize={25}
+            total={total}
+            onPageChange={goToPage}
+            noun="courses"
+          />
+        </>
       )}
 
         {/* Shared GST details editor. Hosting HoDs can maintain the learning
@@ -1194,13 +1242,11 @@ export function MasterCourseManager({
             { label: "Level", value: (row) => row.level },
           ]}
           validateRows={(rows) =>
+            // Checks the file itself here; the server compares it with
+            // the whole Registry when it is uploaded.
             validateMasterCourseImportRows(rows, {
-              existingCodes: courses.map(
-                (course) => courseDuplicateKeys(course).code,
-              ),
-              existingTitles: courses.map(
-                (course) => courseDuplicateKeys(course).title,
-              ),
+              existingCodes: [],
+              existingTitles: [],
               allowExisting: true,
             })
           }
