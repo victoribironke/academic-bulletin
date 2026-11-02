@@ -7,6 +7,7 @@
 
 import prisma from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
+import { prepareCourseGraceState } from "@/lib/courses/grace-compliance";
 
 // Types for propagation
 interface PropagationResult {
@@ -68,7 +69,7 @@ export async function propagateMasterCourseChanges(
     if (update.level !== undefined) updateData.level = update.level;
     if (update.semester !== undefined) updateData.semester = update.semester;
 
-    const descriptionUpdate: Prisma.CourseDescriptionUpdateInput = {};
+    const descriptionUpdate: Prisma.CourseDescriptionUncheckedUpdateInput = {};
     if (update.learningOutcomes !== undefined) {
       descriptionUpdate.learningOutcomes = update.learningOutcomes;
     }
@@ -122,6 +123,21 @@ export async function propagateMasterCourseChanges(
 
       if (Object.keys(descriptionUpdate).length > 0) {
         for (const course of draftCourses) {
+          const currentDescription = await prisma.courseDescription.findUnique({
+            where: { courseId: course.id },
+            select: { learningOutcomes: true, courseContent: true },
+          });
+          const nextLearningOutcomes =
+            update.learningOutcomes ?? currentDescription?.learningOutcomes ?? [];
+          const nextCourseContent =
+            update.courseContent !== undefined
+              ? update.courseContent
+              : currentDescription?.courseContent;
+          const graceState = await prepareCourseGraceState(prisma, {
+            title: update.title ?? course.title,
+            learningOutcomes: nextLearningOutcomes,
+            courseContent: nextCourseContent,
+          });
           await prisma.courseDescription.upsert({
             where: { courseId: course.id },
             create: {
@@ -131,9 +147,9 @@ export async function propagateMasterCourseChanges(
               courseContent: update.courseContent || null,
               labWork: update.labWork || null,
               entrepreneurialAspect: update.entrepreneurialAspect || null,
-              gracePass: false,
+              ...graceState,
             },
-            update: { ...descriptionUpdate, gracePass: false },
+            update: { ...descriptionUpdate, ...graceState },
           });
         }
       }
