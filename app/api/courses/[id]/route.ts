@@ -12,6 +12,7 @@ import {
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
 import { AUTOSAVE_COALESCE_MINUTES, recordActivity } from "@/lib/activity-log";
+import { synchronizeCourseGraceAssessment } from "@/lib/courses/grace-compliance";
 
 // GET /api/courses/[id] - Get single course with description
 export async function GET(
@@ -147,6 +148,10 @@ export async function PATCH(
         },
       },
     });
+
+    if (title !== undefined && course.description) {
+      await synchronizeCourseGraceAssessment(course.id);
+    }
 
     await recordActivity({
       actorId: user!.id,
