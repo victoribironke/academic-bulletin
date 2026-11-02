@@ -62,10 +62,10 @@ describe("submission workflow", () => {
     expect(
       resolveWorkflowTransition({
         action: "APPROVE",
-        currentPhase: 10,
+        currentPhase: 9,
         currentStatus: "IN_REVIEW",
       }),
-    ).toEqual({ ok: true, phase: 11, status: "APPROVED" });
+    ).toEqual({ ok: true, phase: 10, status: "APPROVED" });
 
     expect(
       resolveWorkflowTransition({
