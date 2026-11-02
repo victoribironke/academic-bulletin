@@ -68,7 +68,10 @@ import {
   Camera,
   Trash2,
 } from "lucide-react";
-import { PHASE_NAMES as phaseNames } from "@/lib/submissions/phases";
+import {
+  PHASE_NAMES as phaseNames,
+  TOTAL_PHASES,
+} from "@/lib/submissions/phases";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { PhaseTracker } from "@/components/shared/phase-tracker";
@@ -2201,7 +2204,7 @@ export default function SubmissionDetailPage({
             </DialogTitle>
             <DialogDescription>
               {reviewAction === "APPROVE"
-                ? submission.currentPhase >= 10
+                ? submission.currentPhase >= TOTAL_PHASES - 1
                   ? "This gives the bulletin its final approval. The department will be emailed."
                   : `The bulletin moves on to phase ${submission.currentPhase + 1}: ${phaseNames[submission.currentPhase + 1]}.`
                 : reviewAction === "REJECT"
