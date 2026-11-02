@@ -1,4 +1,4 @@
-import { PHASE_SHORT_NAMES } from "@/lib/submissions/phases";
+import { PHASE_SHORT_NAMES, TOTAL_PHASES } from "@/lib/submissions/phases";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
@@ -148,7 +148,7 @@ export async function GET(request: Request) {
     // Format phase distribution for charts
     const phaseNames = PHASE_SHORT_NAMES;
 
-    const phaseData = Array.from({ length: 11 }, (_, i) => {
+    const phaseData = Array.from({ length: TOTAL_PHASES }, (_, i) => {
       const phase = i + 1;
       const found = phaseDistribution.find((p) => p.currentPhase === phase);
       return {
