@@ -49,13 +49,19 @@ prisma/migrations/*
 !prisma/migrations/20261012170000_add_corrections_required_status/migration.sql
 !prisma/migrations/20261029130000_add_master_course_learning_details/
 !prisma/migrations/20261029130000_add_master_course_learning_details/migration.sql
+!prisma/migrations/20261102100000_add_activity_logs_and_programme_coordinators/
+!prisma/migrations/20261102100000_add_activity_logs_and_programme_coordinators/migration.sql
+!prisma/migrations/20261030120000_add_phase_transition_notified_at/
+!prisma/migrations/20261030120000_add_phase_transition_notified_at/migration.sql
 
 # local
 *.log
 *.db
+__pycache__/
 
 updates-2-feb-2026.md
 !.env.example
 
 # local test database (scripts/test-with-postgres.mjs)
 /.test-postgres/
+/tmp/
