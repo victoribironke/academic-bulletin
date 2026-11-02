@@ -221,7 +221,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const nextRole = role ?? targetUser.role;
-    const nextSchoolId = schoolId !== undefined ? schoolId : targetUser.schoolId;
+    let nextSchoolId = schoolId !== undefined ? schoolId : targetUser.schoolId;
     const nextDepartmentId =
       departmentId !== undefined ? departmentId : targetUser.departmentId;
 
@@ -247,6 +247,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         where: { id: nextDepartmentId },
         select: { schoolId: true },
       });
+      // When no school was sent, the department decides it. Older accounts
+      // often have a department saved without a school.
+      if (department && schoolId === undefined) {
+        nextSchoolId = department.schoolId;
+      }
       if (!department || department.schoolId !== nextSchoolId) {
         return NextResponse.json(
           {
@@ -331,7 +336,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         data: {
           ...(role !== undefined && { role }),
           ...(isActive !== undefined && { isActive }),
-          ...(schoolId !== undefined && { schoolId }),
+          ...(nextSchoolId !== targetUser.schoolId && { schoolId: nextSchoolId }),
           ...(departmentId !== undefined && { departmentId }),
           ...names,
         },
