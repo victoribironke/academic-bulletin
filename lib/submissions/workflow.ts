@@ -1,4 +1,5 @@
 import type { SubmissionStatus } from "@prisma/client";
+import { TOTAL_PHASES } from "@/lib/submissions/phases";
 
 export type SubmissionAction = "SUBMIT" | "APPROVE" | "REJECT" | "RETURN";
 
@@ -14,7 +15,11 @@ export function resolveWorkflowTransition(input: {
 }): WorkflowTransition {
   const { action, currentPhase, currentStatus, remarks } = input;
 
-  if (!Number.isInteger(currentPhase) || currentPhase < 1 || currentPhase > 11) {
+  if (
+    !Number.isInteger(currentPhase) ||
+    currentPhase < 1 ||
+    currentPhase > TOTAL_PHASES
+  ) {
     return { ok: false, statusCode: 409, message: "Invalid current phase." };
   }
 
@@ -55,11 +60,11 @@ export function resolveWorkflowTransition(input: {
   }
 
   if (action === "APPROVE") {
-    const phase = Math.min(currentPhase + 1, 11);
+    const phase = Math.min(currentPhase + 1, TOTAL_PHASES);
     return {
       ok: true,
       phase,
-      status: phase === 11 ? "APPROVED" : "IN_REVIEW",
+      status: phase === TOTAL_PHASES ? "APPROVED" : "IN_REVIEW",
     };
   }
 
