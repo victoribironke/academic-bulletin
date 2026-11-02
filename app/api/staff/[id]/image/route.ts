@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkProfessionalImageFile } from "@/lib/grace";
 import { canAccessDepartment, requireApiUser } from "@/lib/api-auth";
+import { recordActivity } from "@/lib/activity-log";
 
 // Vercel rejects request bodies over 4.5MB, so cap uploads at 4MB.
 const MAX_FILE_SIZE = 4 * 1024 * 1024;
@@ -20,7 +21,12 @@ interface RouteParams {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
-    const auth = await requireApiUser(["HOD", "ADMIN", "SUPER_ADMIN"]);
+    const auth = await requireApiUser([
+      "PROGRAMME_COORDINATOR",
+      "HOD",
+      "ADMIN",
+      "SUPER_ADMIN",
+    ]);
     if (!auth.ok) return auth.response;
 
     const staff = await prisma.staff.findUnique({
@@ -111,6 +117,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     });
 
+    await recordActivity({
+      actorId: auth.user.id,
+      action: "STAFF_PHOTO_UPLOADED",
+      entityType: "STAFF",
+      entityId: id,
+      description: `Uploaded a verified photo for ${staff.firstName} ${staff.surname}.`,
+      metadata: { departmentId: staff.departmentId },
+    });
+
     return NextResponse.json({
       imageUrl: urlData.publicUrl,
       fileId: filePath,
@@ -128,7 +143,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
-    const auth = await requireApiUser(["HOD", "ADMIN", "SUPER_ADMIN"]);
+    const auth = await requireApiUser([
+      "PROGRAMME_COORDINATOR",
+      "HOD",
+      "ADMIN",
+      "SUPER_ADMIN",
+    ]);
     if (!auth.ok) return auth.response;
 
     const staff = await prisma.staff.findUnique({
@@ -148,9 +168,19 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       await supabase.storage.from(BUCKET_NAME).remove([staff.imageDriveFileId]);
     }
 
-    await prisma.staff.update({
+    const updated = await prisma.staff.update({
       where: { id },
       data: { imageUrl: null, imageDriveFileId: null },
+      select: { firstName: true, surname: true, departmentId: true },
+    });
+
+    await recordActivity({
+      actorId: auth.user.id,
+      action: "STAFF_PHOTO_REMOVED",
+      entityType: "STAFF",
+      entityId: id,
+      description: `Removed the photo for ${updated.firstName} ${updated.surname}.`,
+      metadata: { departmentId: updated.departmentId },
     });
 
     return NextResponse.json({ success: true });
