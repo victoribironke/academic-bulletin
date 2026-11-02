@@ -240,10 +240,11 @@ export default function DashboardPage() {
 
   const role = currentUser.role;
   const isAdmin = role === "ADMIN" || role === "SUPER_ADMIN";
-  const isHod = role === "HOD";
+  const isDepartmental =
+    role === "HOD" || role === "PROGRAMME_COORDINATOR";
   const scope =
     currentUser.department?.name ?? currentUser.school?.name ?? "All schools";
-  const submissionsHref = isHod ? "/submissions/me" : "/submissions";
+  const submissionsHref = "/submissions";
 
   const statusData = [
     { name: "Draft", value: stats.submissions.draft, color: STATUS_COLORS.draft },
@@ -258,7 +259,9 @@ export default function DashboardPage() {
   ];
   const hasSubmissions = stats.submissions.total > 0;
 
-  const actionTitle = isHod ? "Needs your attention" : "Waiting for review";
+  const actionTitle = isDepartmental
+    ? "Needs your attention"
+    : "Waiting for review";
 
   return (
     <div className="space-y-6">
@@ -272,11 +275,11 @@ export default function DashboardPage() {
         }
         actions={
           <>
-            {isHod && (
+            {isDepartmental && (
               <Button asChild variant="outline">
-                <Link href="/submissions/me">
+                <Link href="/submissions">
                   <FileText />
-                  My submission
+                  My submissions
                 </Link>
               </Button>
             )}
@@ -349,7 +352,13 @@ export default function DashboardPage() {
         <StatCard
           title="Total submissions"
           value={stats.submissions.total}
-          hint={isHod ? "In your department" : "Across your scope"}
+          hint={
+            role === "HOD"
+              ? "In your department"
+              : role === "PROGRAMME_COORDINATOR"
+                ? "In your assigned programmes"
+                : "Across your scope"
+          }
           icon={FileText}
           href={submissionsHref}
         />
