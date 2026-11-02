@@ -6,6 +6,7 @@ import {
   requireApiUser,
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
+import { AUTOSAVE_COALESCE_MINUTES, recordActivity } from "@/lib/activity-log";
 
 // GET /api/courses/[id]/description - Get course description
 export async function GET(
@@ -116,6 +117,17 @@ export async function PUT(
           },
         },
       },
+    });
+
+    await recordActivity({
+      actorId: user!.id,
+      action: "COURSE_DETAILS_UPDATED",
+      entityType: "SUBMISSION",
+      entityId: course.submissionId,
+      description: `Updated the learning outcomes and course content for ${description.course.code}.`,
+      metadata: { courseId: id, gracePass: gracePass ?? null },
+      // Autosave fires every few seconds; log one entry per editing session.
+      coalesceWithinMinutes: AUTOSAVE_COALESCE_MINUTES,
     });
 
     return NextResponse.json(description);
