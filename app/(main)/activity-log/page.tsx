@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, ScrollText } from "lucide-react";
+import { ChevronLeft, ChevronRight, ScrollText, X } from "lucide-react";
 import { usePermission, useUser } from "@/contexts/user-context";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/shared/states";
 import { TableCard, TableToolbar } from "@/components/shared/table-toolbar";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -57,6 +58,25 @@ type ActivityResponse = {
   };
 };
 
+const timeFormat = new Intl.DateTimeFormat("en-NG", { timeStyle: "short" });
+const dayFormat = new Intl.DateTimeFormat("en-NG", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
+
+function dayKey(value: string) {
+  const date = new Date(value);
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function todayInput() {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
 function readable(value: string) {
   return value
     .toLowerCase()
@@ -76,6 +96,8 @@ export default function ActivityLogPage() {
   const [action, setAction] = useState("all");
   const [entityType, setEntityType] = useState("all");
   const [actorId, setActorId] = useState("all");
+  // "YYYY-MM-DD" from the date input, or "" for every day.
+  const [date, setDate] = useState("");
   const [page, setPage] = useState(1);
 
   const canView = hasPermission("view:audit");
@@ -91,6 +113,16 @@ export default function ActivityLogPage() {
     if (action !== "all") params.set("action", action);
     if (entityType !== "all") params.set("entityType", entityType);
     if (actorId !== "all") params.set("actorId", actorId);
+    if (date) {
+      // Midnight to midnight in the viewer's own time zone.
+      const start = new Date(`${date}T00:00:00`);
+      if (!Number.isNaN(start.getTime())) {
+        const end = new Date(start);
+        end.setDate(end.getDate() + 1);
+        params.set("from", start.toISOString());
+        params.set("to", end.toISOString());
+      }
+    }
 
     const controller = new AbortController();
     const timeout = window.setTimeout(() => {
@@ -112,15 +144,16 @@ export default function ActivityLogPage() {
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [action, actorId, canView, entityType, page, query, reloadKey]);
+  }, [action, actorId, canView, date, entityType, page, query, reloadKey]);
 
   const hasFilters = useMemo(
     () =>
       query.trim() !== "" ||
       action !== "all" ||
       entityType !== "all" ||
-      actorId !== "all",
-    [action, actorId, entityType, query],
+      actorId !== "all" ||
+      date !== "",
+    [action, actorId, date, entityType, query],
   );
 
   if (!userLoading && currentUser && !canView) return null;
@@ -198,6 +231,32 @@ export default function ActivityLogPage() {
                 ))}
               </SelectContent>
             </Select>
+            <div className="flex items-center gap-1">
+              <Input
+                type="date"
+                value={date}
+                max={todayInput()}
+                onChange={(event) => {
+                  setDate(event.target.value);
+                  setPage(1);
+                }}
+                className="w-full bg-card sm:w-40"
+                aria-label="Date"
+              />
+              {date && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setDate("");
+                    setPage(1);
+                  }}
+                  aria-label="Clear date"
+                >
+                  <X />
+                </Button>
+              )}
+            </div>
           </>
         }
       />
@@ -222,51 +281,68 @@ export default function ActivityLogPage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50 hover:bg-muted/50">
-                  <TableHead className="w-44">Date and time</TableHead>
+                  <TableHead className="w-24">Time</TableHead>
                   <TableHead className="w-52">Person</TableHead>
                   <TableHead>Activity</TableHead>
                   <TableHead className="hidden lg:table-cell">Record</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.items.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="align-top text-sm text-muted-foreground">
-                      {new Intl.DateTimeFormat("en-NG", {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      }).format(new Date(item.createdAt))}
-                    </TableCell>
-                    <TableCell className="align-top">
-                      {item.actor ? (
-                        <div>
-                          <p className="text-sm font-medium">
-                            {item.actor.firstName} {item.actor.lastName}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {item.actor.email}
-                          </p>
-                        </div>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">System</span>
+                {data.items.map((item, index) => {
+                  // A heading row starts each day, so the Time column can
+                  // stay short.
+                  const newDay =
+                    index === 0 ||
+                    dayKey(item.createdAt) !==
+                      dayKey(data.items[index - 1].createdAt);
+                  return (
+                    <Fragment key={item.id}>
+                      {newDay && (
+                        <TableRow className="bg-muted/30 hover:bg-muted/30">
+                          <TableCell
+                            colSpan={4}
+                            className="py-2 text-xs font-medium text-muted-foreground"
+                          >
+                            {dayFormat.format(new Date(item.createdAt))}
+                          </TableCell>
+                        </TableRow>
                       )}
-                    </TableCell>
-                    <TableCell className="align-top">
-                      <p className="text-sm">{item.description}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {readable(item.action)}
-                      </p>
-                    </TableCell>
-                    <TableCell className="hidden align-top text-sm text-muted-foreground lg:table-cell">
-                      {readable(item.entityType)}
-                      {item.entityId && (
-                        <span className="block max-w-48 truncate font-mono text-xs">
-                          {item.entityId}
-                        </span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      <TableRow>
+                        <TableCell className="align-top text-sm whitespace-nowrap text-muted-foreground">
+                          {timeFormat.format(new Date(item.createdAt))}
+                        </TableCell>
+                        <TableCell className="align-top">
+                          {item.actor ? (
+                            <div>
+                              <p className="text-sm font-medium">
+                                {item.actor.firstName} {item.actor.lastName}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {item.actor.email}
+                              </p>
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">System</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="align-top">
+                          <p className="text-sm">{item.description}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {readable(item.action)}
+                          </p>
+                        </TableCell>
+                        <TableCell className="hidden align-top text-sm text-muted-foreground lg:table-cell">
+                          {readable(item.entityType)}
+                          {item.entityId && (
+                            <span className="block max-w-48 truncate font-mono text-xs">
+                              {item.entityId}
+                            </span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    </Fragment>
+                  );
+                })}
               </TableBody>
             </Table>
           </TableCard>
