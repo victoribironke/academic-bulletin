@@ -10,6 +10,7 @@ export interface User {
   isActive: boolean;
   schoolId: string | null;
   departmentId: string | null;
+  programmeIds: string[];
   /** Included by /api/users/me. */
   school?: { id: string; name: string; code: string } | null;
   department?: { id: string; name: string; code: string } | null;
@@ -35,10 +36,20 @@ export type Permission =
   | "view:staff"
   | "manage:staff"
   | "manage:cycles"
+  | "view:audit"
   | "admin:all";
 
 // Role-based permission mapping
 const rolePermissions: Record<UserRole, Permission[]> = {
+  PROGRAMME_COORDINATOR: [
+    "view:dashboard",
+    "view:submissions",
+    "edit:submission",
+    "comment:submission",
+    "review:submission",
+    "view:staff",
+    "manage:staff",
+  ],
   HOD: [
     "view:dashboard",
     "view:submissions",
@@ -75,6 +86,7 @@ const rolePermissions: Record<UserRole, Permission[]> = {
     "view:staff",
     "manage:staff",
     "manage:cycles",
+    "view:audit",
   ],
   SUPER_ADMIN: [
     // Super Admin has all permissions
@@ -96,6 +108,7 @@ const rolePermissions: Record<UserRole, Permission[]> = {
     "view:staff",
     "manage:staff",
     "manage:cycles",
+    "view:audit",
     "admin:all",
   ],
 };
@@ -127,6 +140,7 @@ export function hasAnyPermission(
  */
 export function getRoleDisplayName(role: UserRole): string {
   const names: Record<UserRole, string> = {
+    PROGRAMME_COORDINATOR: "Programme Coordinator",
     HOD: "Head of Department",
     DEAN: "Dean",
     ADMIN: "Academic Planning Admin",
