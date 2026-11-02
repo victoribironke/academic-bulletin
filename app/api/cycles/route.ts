@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
+import { recordActivity } from "@/lib/activity-log";
 
 export async function GET() {
   try {
@@ -58,6 +59,13 @@ export async function POST(request: Request) {
         createdById: auth.user.id,
         isActive: true,
       },
+    });
+    await recordActivity({
+      actorId: auth.user.id,
+      action: "REVIEW_CYCLE_CREATED",
+      entityType: "REVIEW_CYCLE",
+      entityId: newCycle.id,
+      description: `Created and activated the ${newCycle.name} review cycle.`,
     });
 
     return NextResponse.json(newCycle, { status: 201 });
