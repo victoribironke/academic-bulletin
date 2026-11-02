@@ -658,6 +658,11 @@ export function CourseTable({
       } else {
         setIsDirty(false);
         if (!silent) toast.success("All courses saved successfully");
+        window.dispatchEvent(
+          new CustomEvent("bulletin:courses-changed", {
+            detail: { submissionId },
+          }),
+        );
 
         // Patch local state: assign server IDs to newly created courses, clear isNew flags
         if (createdMap.size > 0) {
@@ -1077,8 +1082,18 @@ export function CourseTable({
           if (!response.ok) {
             throw new Error(data.error || "Failed to import courses.");
           }
-          toast.success(`${data.imported} course(s) imported successfully.`);
+          toast.success(`${data.imported} course(s) imported successfully.`, {
+            description:
+              data.graceQueued > 0
+                ? `${data.graceQueued} course description(s) were queued for automatic GRACE checks.`
+                : undefined,
+          });
           await fetchData();
+          window.dispatchEvent(
+            new CustomEvent("bulletin:courses-changed", {
+              detail: { submissionId },
+            }),
+          );
         }}
       />
 
