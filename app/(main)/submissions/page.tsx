@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, Sparkles } from "lucide-react";
 import { usePermission, useUser } from "@/contexts/user-context";
@@ -12,21 +11,17 @@ import { TableSkeleton } from "@/components/shared/states";
 import { SubmissionsList } from "@/components/submissions/submissions-list";
 
 export default function SubmissionsPage() {
-  const router = useRouter();
   const { hasPermission } = usePermission();
   const { currentUser, isLoading: userLoading } = useUser();
   const [cycleId, setCycleId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [initializing, setInitializing] = useState(false);
 
-  const isHod = currentUser?.role === "HOD";
+  const isDepartmentalUser =
+    currentUser?.role === "HOD" ||
+    currentUser?.role === "PROGRAMME_COORDINATOR";
   const isAdmin =
     currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
-
-  // HODs work on a single submission; send them to it.
-  useEffect(() => {
-    if (!userLoading && isHod) router.replace("/submissions/me");
-  }, [userLoading, isHod, router]);
 
   const handleInitialize = async () => {
     if (!cycleId) return;
@@ -62,7 +57,11 @@ export default function SubmissionsPage() {
     <div>
       <PageHeader
         title="Submissions"
-        description="Bulletin submissions from every programme. Open one to review it."
+        description={
+          isDepartmentalUser
+            ? "Bulletin submissions you are assigned to. Open one to continue the work."
+            : "Bulletin submissions from every programme. Open one to review it."
+        }
         actions={
           <>
             {isAdmin && cycleId && (
@@ -83,7 +82,7 @@ export default function SubmissionsPage() {
         }
       />
 
-      {userLoading || !currentUser || isHod ? (
+      {userLoading || !currentUser ? (
         <TableSkeleton columns={6} />
       ) : (
         <SubmissionsList
