@@ -7,6 +7,10 @@ import {
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
 import { AUTOSAVE_COALESCE_MINUTES, recordActivity } from "@/lib/activity-log";
+import {
+  normalizeLearningOutcomes,
+  prepareCourseGraceState,
+} from "@/lib/courses/grace-compliance";
 
 // GET /api/courses/[id]/description - Get course description
 export async function GET(
@@ -62,19 +66,13 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const {
-      learningOutcomes,
-      courseContent,
-      labWork,
-      entrepreneurialAspect,
-      gracePass,
-      graceResult,
-    } = body;
+    const { learningOutcomes, courseContent, labWork, entrepreneurialAspect } =
+      body;
 
     // Check if course exists
     const course = await prisma.course.findUnique({
       where: { id },
-      select: { id: true, submissionId: true },
+      select: { id: true, title: true, submissionId: true },
     });
 
     if (!course) {
@@ -90,44 +88,57 @@ export async function PUT(
       );
     }
 
-    const data = {
-      learningOutcomes: learningOutcomes || null,
-      courseContent: courseContent || null,
-      labWork: labWork || null,
-      entrepreneurialAspect: entrepreneurialAspect || null,
-      ...(gracePass !== undefined && { gracePass }),
-      ...(graceResult !== undefined && { graceResult }),
-    };
-
-    // Upsert description
-    const description = await prisma.courseDescription.upsert({
-      where: { courseId: id },
-      update: data,
-      create: {
-        courseId: id,
-        submissionId: course.submissionId,
-        ...data,
-      },
-      include: {
-        course: {
-          select: {
-            id: true,
-            code: true,
-            title: true,
+    const outcomes = normalizeLearningOutcomes(learningOutcomes);
+    const content = typeof courseContent === "string" ? courseContent.trim() : "";
+    const description = await prisma.$transaction(async (tx) => {
+      const graceState = await prepareCourseGraceState(tx, {
+        title: course.title,
+        learningOutcomes: outcomes,
+        courseContent: content,
+      });
+      const saved = await tx.courseDescription.upsert({
+        where: { courseId: id },
+        update: {
+          learningOutcomes: outcomes,
+          courseContent: content || null,
+          labWork: typeof labWork === "string" ? labWork.trim() || null : null,
+          entrepreneurialAspect:
+            typeof entrepreneurialAspect === "string"
+              ? entrepreneurialAspect.trim() || null
+              : null,
+          ...graceState,
+        },
+        create: {
+          courseId: id,
+          submissionId: course.submissionId,
+          learningOutcomes: outcomes,
+          courseContent: content || null,
+          labWork: typeof labWork === "string" ? labWork.trim() || null : null,
+          entrepreneurialAspect:
+            typeof entrepreneurialAspect === "string"
+              ? entrepreneurialAspect.trim() || null
+              : null,
+          ...graceState,
+        },
+        include: {
+          course: {
+            select: { id: true, code: true, title: true },
           },
         },
-      },
-    });
-
-    await recordActivity({
-      actorId: user!.id,
-      action: "COURSE_DETAILS_UPDATED",
-      entityType: "SUBMISSION",
-      entityId: course.submissionId,
-      description: `Updated the learning outcomes and course content for ${description.course.code}.`,
-      metadata: { courseId: id, gracePass: gracePass ?? null },
-      // Autosave fires every few seconds; log one entry per editing session.
-      coalesceWithinMinutes: AUTOSAVE_COALESCE_MINUTES,
+      });
+      await recordActivity(
+        {
+          actorId: user!.id,
+          action: "COURSE_DETAILS_UPDATED",
+          entityType: "SUBMISSION",
+          entityId: course.submissionId,
+          description: `Updated the learning outcomes and course content for ${saved.course.code}.`,
+          metadata: { courseId: id, graceStatus: saved.graceStatus },
+          coalesceWithinMinutes: AUTOSAVE_COALESCE_MINUTES,
+        },
+        tx,
+      );
+      return saved;
     });
 
     return NextResponse.json(description);
