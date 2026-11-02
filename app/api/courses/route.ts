@@ -12,6 +12,7 @@ import {
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
 import { preloadGstCoursesForSubmission } from "@/lib/courses/gst-pool";
+import { recordActivity } from "@/lib/activity-log";
 
 // GET /api/courses - Get courses for a submission
 export async function GET(request: Request) {
@@ -202,6 +203,15 @@ export async function POST(request: Request) {
           },
         },
       },
+    });
+
+    await recordActivity({
+      actorId: user!.id,
+      action: "COURSE_CREATED",
+      entityType: "SUBMISSION",
+      entityId: submissionId,
+      description: `Added ${course.code} - ${course.title} to a submission.`,
+      metadata: { courseId: course.id, code: course.code },
     });
 
     return NextResponse.json(course, { status: 201 });
