@@ -120,15 +120,15 @@ You can also manually save at any time by clicking the **"Save Draft"** button.
 
 Once all sections are complete and validated:
 
-1. Click the **"Submit for Review"** button at the top of the Submission Editor.
+1. Click the **"Submit to School"** button at the top of the Submission Editor.
 2. The system will run validation checks. You may see errors if:
    - The Philosophy is not within the 150–250 word limit.
    - The Programme Duration has not been selected.
    - The Philosophy has not passed GRACE compliance.
    - Any course descriptions have failed GRACE compliance.
-3. If all validations pass, **Phase 1: Preparation & Departmental Review** changes from "Draft" to "In Review." Once that combined stage is approved, the bulletin moves to School Approval.
+3. If all validations pass, the bulletin moves immediately to **Phase 2: School Approval** for the Dean. The Dean can return it with correction notes or approve and send it directly to Academic Planning.
 
-> **Only HODs and Super Admins can officially submit** a bulletin for review. Programme Coordinators can edit drafts, but cannot submit them.
+> **HODs and assigned Programme Coordinators can submit** their programme's bulletin to the School. Academic Planning does not need to approve this hand-off.
 
 ---
 
