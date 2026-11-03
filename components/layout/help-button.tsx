@@ -54,6 +54,11 @@ export function HelpButton() {
               <li>Save draft changes, then submit for the next review phase.</li>
               <li>Address comments, update content, and resubmit if returned.</li>
             </ol>
+            <p className="text-muted-foreground">
+              Department submissions go directly to School Approval. A Dean&apos;s
+              approval sends them directly to Academic Planning; Academic
+              Planning controls the later stages.
+            </p>
           </section>
 
           <section className="space-y-2">
@@ -90,7 +95,8 @@ export function HelpButton() {
               <li>Upload clear passport-style photos for required profiles.</li>
               <li>Fix any validation or compliance issues before submission.</li>
               <li>
-                Submit only when all mandatory fields are complete.
+                Use <strong>Submit to School</strong> only when all mandatory
+                fields are complete.
               </li>
             </ol>
           </section>
@@ -116,6 +122,10 @@ export function HelpButton() {
               </li>
               <li>Use comments for actionable, section-specific guidance.</li>
             </ul>
+            <p className="text-muted-foreground">
+              Deans approve the School stage and send it to Academic Planning.
+              Academic Planning reviewers act from their review stage onward.
+            </p>
           </section>
 
           <section className="space-y-2">
