@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkProfessionalImageFile } from "@/lib/grace";
 import { getApiUser, requireSubmissionWriteAccess } from "@/lib/api-auth";
+import {
+  optimizePortrait,
+  PortraitOptimizationError,
+} from "@/lib/images/optimize-portrait";
 
 // Vercel rejects request bodies over 4.5MB, so cap uploads at 4MB.
 const MAX_FILE_SIZE = 4 * 1024 * 1024;
@@ -69,16 +73,27 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const supabase = createAdminClient();
+    let optimized;
+    try {
+      optimized = await optimizePortrait(
+        Buffer.from(await file.arrayBuffer()),
+      );
+    } catch (error) {
+      const message =
+        error instanceof PortraitOptimizationError
+          ? error.message
+          : "The image could not be optimized.";
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
 
-    const ext = file.type.split("/")[1] || "jpg";
-    const filePath = `submissions/${id}/${role}-${Date.now()}.${ext}`;
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const supabase = createAdminClient();
+    const filePath = `submissions/${id}/${role}.${optimized.extension}`;
 
     const { error: uploadError } = await supabase.storage
       .from(BUCKET_NAME)
-      .upload(filePath, buffer, {
-        contentType: file.type,
+      .upload(filePath, optimized.buffer, {
+        contentType: optimized.contentType,
+        cacheControl: "3600",
         upsert: true,
       });
 
@@ -93,8 +108,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { data: urlData } = supabase.storage
       .from(BUCKET_NAME)
       .getPublicUrl(filePath);
+    const imageUrl = `${urlData.publicUrl}?v=${Date.now()}`;
 
-    return NextResponse.json({ imageUrl: urlData.publicUrl });
+    return NextResponse.json({
+      imageUrl,
+      optimization: {
+        originalBytes: optimized.originalBytes,
+        storedBytes: optimized.storedBytes,
+        width: optimized.width,
+        height: optimized.height,
+      },
+    });
   } catch (error) {
     console.error("Image upload failed:", error);
     return NextResponse.json(
