@@ -72,6 +72,10 @@ import {
   PHASE_NAMES as phaseNames,
   TOTAL_PHASES,
 } from "@/lib/submissions/phases";
+import {
+  canEditSubmissionAtStage,
+  getAllowedWorkflowActions,
+} from "@/lib/submissions/workflow";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { PhaseTracker } from "@/components/shared/phase-tracker";
@@ -485,21 +489,36 @@ export default function SubmissionDetailPage({
 
   const submissionsBackHref = "/submissions";
 
-  const canEdit =
-    hasPermission("edit:submission") &&
-    ["DRAFT", "CORRECTIONS_REQUIRED"].includes(submission?.status || "") &&
-    isAssignedSubmission;
+  const workflowActions =
+    currentUser && submission
+      ? getAllowedWorkflowActions({
+          role: currentUser.role,
+          currentPhase: submission.currentPhase,
+          currentStatus: submission.status,
+        })
+      : [];
+  const canEdit = Boolean(
+    currentUser &&
+      submission &&
+      canEditSubmissionAtStage({
+        role: currentUser.role,
+        currentPhase: submission.currentPhase,
+        currentStatus: submission.status,
+      }) &&
+      isAssignedSubmission,
+  );
   const canComment =
     hasPermission("comment:submission") || hasPermission("review:submission");
-  const canReview = hasPermission("review:submission");
-  const canApprove = hasPermission("approve:submission");
-  const canSubmit =
-    currentUser &&
-    ["PROGRAMME_COORDINATOR", "HOD", "SUPER_ADMIN"].includes(
-      currentUser.role,
-    ) &&
-    ["DRAFT", "CORRECTIONS_REQUIRED"].includes(submission?.status || "") &&
-    isAssignedSubmission;
+  const canSubmit = workflowActions.includes("SUBMIT") && isAssignedSubmission;
+  const canApprove = workflowActions.includes("APPROVE");
+  const canReturn = workflowActions.includes("RETURN");
+  const canReject = workflowActions.includes("REJECT");
+  const submitActionLabel =
+    submission?.currentPhase === 1
+      ? "Submit to School"
+      : submission?.currentPhase === 2
+        ? "Resubmit to Academic Planning"
+        : "Submit corrections";
 
   // Puts freshly loaded submission data (or a local unsaved draft) into the form.
   const applySubmissionData = useCallback((data: Submission) => {
@@ -851,8 +870,16 @@ export default function SubmissionDetailPage({
 
       if (response.ok) {
         const messages: Record<string, string> = {
-          SUBMIT: "Submission sent for review",
-          APPROVE: "Submission approved",
+          SUBMIT:
+            submission.currentPhase === 1
+              ? "Submission sent to the School"
+              : submission.currentPhase === 2
+                ? "Submission sent to Academic Planning"
+                : "Corrections submitted",
+          APPROVE:
+            submission.currentPhase === 2
+              ? "Submission sent to Academic Planning"
+              : "Submission approved",
           REJECT: "Sent back to the department for corrections",
           RETURN: "Returned to the previous phase for changes",
         };
@@ -1125,7 +1152,7 @@ export default function SubmissionDetailPage({
             )}
             {canSubmit && (
               <p className="mt-2 text-sm">
-                Make the changes, then use <strong>Submit for review</strong> to send it back.
+                Make the changes, then use <strong>{submitActionLabel}</strong> to send it onward.
               </p>
             )}
           </AlertDescription>
@@ -1202,7 +1229,7 @@ export default function SubmissionDetailPage({
                   onClick={() => handleTransition("SUBMIT")}
                 >
                   <Send className="mr-2 h-4 w-4" />
-                  Submit for review
+                  {submitActionLabel}
                 </Button>
               )}
               {/* Preview button - available to all viewers */}
@@ -1216,30 +1243,39 @@ export default function SubmissionDetailPage({
               />
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {canReview && submission.status === "IN_REVIEW" && (
+              {(canReturn || canReject || canApprove) &&
+                submission.status === "IN_REVIEW" && (
                 <>
-                  <Button variant="outline" onClick={() => openReview("RETURN")}>
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    Return to previous phase
-                  </Button>
+                  {canReturn && (
+                    <Button variant="outline" onClick={() => openReview("RETURN")}>
+                      <RotateCcw className="mr-2 h-4 w-4" />
+                      {submission.currentPhase === 2
+                        ? "Request departmental corrections"
+                        : submission.currentPhase === 3
+                          ? "Return to School"
+                          : "Return to previous phase"}
+                    </Button>
+                  )}
+                  {canReject && (
+                    <Button
+                      variant="outline"
+                      className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => openReview("REJECT")}
+                    >
+                      <XCircle className="mr-2 h-4 w-4" />
+                      Send to Department for corrections
+                    </Button>
+                  )}
                   {canApprove && (
-                    <>
-                      <Button
-                        variant="outline"
-                        className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => openReview("REJECT")}
-                      >
-                        <XCircle className="mr-2 h-4 w-4" />
-                        Request corrections
-                      </Button>
-                      <Button
-                        className="bg-emerald-600 text-white hover:bg-emerald-700"
-                        onClick={() => openReview("APPROVE")}
-                      >
-                        <CheckCircle className="mr-2 h-4 w-4" />
-                        Approve phase
-                      </Button>
-                    </>
+                    <Button
+                      className="bg-emerald-600 text-white hover:bg-emerald-700"
+                      onClick={() => openReview("APPROVE")}
+                    >
+                      <CheckCircle className="mr-2 h-4 w-4" />
+                      {submission.currentPhase === 2
+                        ? "Approve and send to Academic Planning"
+                        : "Approve phase"}
+                    </Button>
                   )}
                 </>
               )}
@@ -2197,10 +2233,16 @@ export default function SubmissionDetailPage({
           <DialogHeader>
             <DialogTitle>
               {reviewAction === "APPROVE"
-                ? `Approve phase ${submission.currentPhase}`
+                ? submission.currentPhase === 2
+                  ? "Approve and send to Academic Planning"
+                  : `Approve phase ${submission.currentPhase}`
                 : reviewAction === "REJECT"
-                  ? "Request corrections"
-                  : "Return to the previous phase"}
+                  ? "Send to Department for corrections"
+                  : submission.currentPhase === 2
+                    ? "Request departmental corrections"
+                    : submission.currentPhase === 3
+                      ? "Return to School"
+                      : "Return to the previous phase"}
             </DialogTitle>
             <DialogDescription>
               {reviewAction === "APPROVE"
@@ -2254,7 +2296,9 @@ export default function SubmissionDetailPage({
             >
               {isTransitioning && <Loader2 className="animate-spin" />}
               {reviewAction === "APPROVE"
-                ? "Approve"
+                ? submission.currentPhase === 2
+                  ? "Approve and send"
+                  : "Approve"
                 : reviewAction === "REJECT"
                   ? "Send back for corrections"
                   : "Return"}
