@@ -15,6 +15,7 @@ describe("photo upload guidance", () => {
     ).toBeTruthy();
     expect(screen.getByText(/at least 300 × 400 pixels/i)).toBeTruthy();
     expect(screen.getByText(/maximum file size: 4 mb/i)).toBeTruthy();
+    expect(screen.getByText(/resized, and compressed before storage/i)).toBeTruthy();
     expect(screen.getByText("Acceptable example")).toBeTruthy();
     expect(screen.getByText("Unacceptable examples")).toBeTruthy();
     expect(screen.getByText(/group photos, blurry or dark images/i)).toBeTruthy();
