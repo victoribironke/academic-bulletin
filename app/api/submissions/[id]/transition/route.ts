@@ -5,14 +5,16 @@ import {
   getApiUser,
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
-import { resolveWorkflowTransition } from "@/lib/submissions/workflow";
+import {
+  canPerformWorkflowAction,
+  resolveWorkflowTransition,
+} from "@/lib/submissions/workflow";
 import { recordActivity } from "@/lib/activity-log";
 import {
   describeCourseGraceBlockers,
   getCourseGraceBlockers,
   hasCourseGraceBlockers,
 } from "@/lib/courses/grace-compliance";
-import { TOTAL_PHASES } from "@/lib/submissions/phases";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -39,32 +41,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!(await canViewSubmission(user, id))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    if (action === "SUBMIT") {
-      const gate = await requireSubmissionWriteAccess(user, id);
-      if (!gate.ok) {
-        return NextResponse.json(
-          { error: gate.message },
-          { status: gate.status },
-        );
-      }
-    } else if (action === "APPROVE" || action === "REJECT") {
-      if (!["ADMIN", "SUPER_ADMIN"].includes(user.role)) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
-    } else if (action === "RETURN") {
-      if (
-        !["PROGRAMME_COORDINATOR", "HOD", "ADMIN", "SUPER_ADMIN"].includes(
-          user.role,
-        )
-      ) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
-    }
-
     // Get current submission
     const submission = await prisma.submission.findUnique({
       where: { id },
-      select: { currentPhase: true, status: true },
+      select: { currentPhase: true, status: true, submittedAt: true },
     });
 
     if (!submission) {
@@ -106,6 +86,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    if (
+      !canPerformWorkflowAction(
+        {
+          role: user.role,
+          currentPhase: submission.currentPhase,
+          currentStatus: submission.status,
+        },
+        action,
+      )
+    ) {
+      return NextResponse.json(
+        { error: "This action is not available to your role at the current phase." },
+        { status: 403 },
+      );
+    }
+
+    if (action === "SUBMIT") {
+      const gate = await requireSubmissionWriteAccess(user, id);
+      if (!gate.ok) {
+        return NextResponse.json(
+          { error: gate.message },
+          { status: gate.status },
+        );
+      }
+    }
+
     // Create transition record and update submission in a transaction
     const { transition, updated } = await prisma.$transaction(async (tx) => {
       const transition = await tx.phaseTransition.create({
@@ -133,9 +139,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         data: {
           currentPhase: newPhase,
           status: newStatus,
-          ...(action === "SUBMIT" && { submittedAt: new Date() }),
-          ...(action === "APPROVE" &&
-            newPhase === TOTAL_PHASES && { approvedAt: new Date() }),
+          ...(action === "SUBMIT" &&
+            !submission.submittedAt && { submittedAt: new Date() }),
+          ...(newStatus === "APPROVED" && { approvedAt: new Date() }),
         },
         include: {
           programme: {
