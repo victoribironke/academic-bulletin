@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
+import { canEditSubmissionAtStage } from "@/lib/submissions/workflow";
 import type { UserRole } from "@prisma/client";
 
 export interface ApiUser {
@@ -145,22 +146,19 @@ export async function canViewSubmission(
 
 /**
  * Check if the user can write to a submission (content, courses, images, submit draft).
- * HOD: own department only, editable statuses only.
- * Programme Coordinator: assigned programme(s) only, editable statuses only.
- * DEAN: same school, editable statuses only.
- * SUPER_ADMIN: unrestricted. ADMIN: no direct edits (review-only in product).
+ * Editing follows the workflow owner: department at phase 1, Dean at phase 2,
+ * and Academic Planning from phase 3 onward. Super Admin is the recovery
+ * override. Unit/programme scope is still enforced below.
  */
 export async function canWriteSubmission(
   user: ApiUser,
   submissionId: string,
 ): Promise<boolean> {
-  if (user.role === "SUPER_ADMIN") return true;
-  if (user.role === "ADMIN") return false;
-
   const submission = await prisma.submission.findUnique({
     where: { id: submissionId },
     select: {
       status: true,
+      currentPhase: true,
       programme: {
         select: {
           id: true,
@@ -170,12 +168,19 @@ export async function canWriteSubmission(
     },
   });
 
-  if (
-    !submission ||
-    !["DRAFT", "CORRECTIONS_REQUIRED"].includes(submission.status)
-  ) {
+  if (!submission) {
     return false;
   }
+
+  if (
+    !canEditSubmissionAtStage({
+      role: user.role,
+      currentPhase: submission.currentPhase,
+      currentStatus: submission.status,
+    })
+  ) return false;
+
+  if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
 
   if (user.role === "HOD") {
     return submission.programme.department.id === user.departmentId;
