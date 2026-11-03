@@ -4,6 +4,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { checkProfessionalImageFile } from "@/lib/grace";
 import { canAccessDepartment, requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
+import {
+  optimizePortrait,
+  PortraitOptimizationError,
+} from "@/lib/images/optimize-portrait";
 
 // Vercel rejects request bodies over 4.5MB, so cap uploads at 4MB.
 const MAX_FILE_SIZE = 4 * 1024 * 1024;
@@ -79,21 +83,27 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const supabase = createAdminClient();
-
-    // Delete previous image if exists
-    if (staff.imageDriveFileId) {
-      await supabase.storage.from(BUCKET_NAME).remove([staff.imageDriveFileId]);
+    let optimized;
+    try {
+      optimized = await optimizePortrait(
+        Buffer.from(await file.arrayBuffer()),
+      );
+    } catch (error) {
+      const message =
+        error instanceof PortraitOptimizationError
+          ? error.message
+          : "The image could not be optimized.";
+      return NextResponse.json({ error: message }, { status: 400 });
     }
 
-    const ext = file.type.split("/")[1] || "jpg";
-    const filePath = `${id}/${Date.now()}.${ext}`;
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const supabase = createAdminClient();
+    const filePath = `${id}/photo.${optimized.extension}`;
 
     const { error: uploadError } = await supabase.storage
       .from(BUCKET_NAME)
-      .upload(filePath, buffer, {
-        contentType: file.type,
+      .upload(filePath, optimized.buffer, {
+        contentType: optimized.contentType,
+        cacheControl: "3600",
         upsert: true,
       });
 
@@ -108,14 +118,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { data: urlData } = supabase.storage
       .from(BUCKET_NAME)
       .getPublicUrl(filePath);
+    const imageUrl = `${urlData.publicUrl}?v=${Date.now()}`;
 
     await prisma.staff.update({
       where: { id },
       data: {
-        imageUrl: urlData.publicUrl,
+        imageUrl,
         imageDriveFileId: filePath, // reusing column to store the storage path
       },
     });
+
+    // A legacy timestamped file can be removed only after the replacement and
+    // database update have both succeeded. Existing files are otherwise left alone.
+    if (staff.imageDriveFileId && staff.imageDriveFileId !== filePath) {
+      const { error: cleanupError } = await supabase.storage
+        .from(BUCKET_NAME)
+        .remove([staff.imageDriveFileId]);
+      if (cleanupError) {
+        console.error("Previous staff photo cleanup failed:", cleanupError);
+      }
+    }
 
     await recordActivity({
       actorId: auth.user.id,
@@ -123,12 +145,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       entityType: "STAFF",
       entityId: id,
       description: `Uploaded a verified photo for ${staff.firstName} ${staff.surname}.`,
-      metadata: { departmentId: staff.departmentId },
+      metadata: {
+        departmentId: staff.departmentId,
+        originalBytes: optimized.originalBytes,
+        storedBytes: optimized.storedBytes,
+        width: optimized.width,
+        height: optimized.height,
+      },
     });
 
     return NextResponse.json({
-      imageUrl: urlData.publicUrl,
+      imageUrl,
       fileId: filePath,
+      optimization: {
+        originalBytes: optimized.originalBytes,
+        storedBytes: optimized.storedBytes,
+        width: optimized.width,
+        height: optimized.height,
+      },
     });
   } catch (error) {
     console.error("Staff image upload failed:", error);
