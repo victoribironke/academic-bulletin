@@ -4,8 +4,9 @@
  * Workflow updates go out once a day as a summary (see sendDailyDigests),
  * not one email per action. That keeps the volume to at most one email per
  * person per day, well inside the Resend free plan (100 a day, 3,000 a month):
- *  - Admins / Super Admins: bulletins submitted for review since the last summary.
- *  - HODs: review decisions on their department's bulletins, with remarks.
+ *  - Deans: department submissions and School-stage corrections.
+ *  - Admins / Super Admins: submissions handed to Academic Planning.
+ *  - HODs/coordinators: review decisions on their bulletins, with remarks.
  *
  * New users get one "you've been added" email when an admin creates them.
  */
@@ -146,6 +147,7 @@ function formatDate(value: Date): string {
 
 export type DigestResult = {
   transitions: number;
+  deanEmails: number;
   adminEmails: number;
   hodEmails: number;
   failed: number;
@@ -157,7 +159,13 @@ export type DigestResult = {
  * once a day: activity is only ever included in one summary.
  */
 export async function sendDailyDigests(now = new Date()): Promise<DigestResult> {
-  const result: DigestResult = { transitions: 0, adminEmails: 0, hodEmails: 0, failed: 0 };
+  const result: DigestResult = {
+    transitions: 0,
+    deanEmails: 0,
+    adminEmails: 0,
+    hodEmails: 0,
+    failed: 0,
+  };
   if (!isEmailConfigured()) return result;
 
   const since = new Date(now.getTime() - DIGEST_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
@@ -181,7 +189,7 @@ export async function sendDailyDigests(now = new Date()): Promise<DigestResult> 
           programme: {
             select: {
               name: true,
-              department: { select: { id: true, name: true } },
+              department: { select: { id: true, name: true, schoolId: true } },
             },
           },
           createdBy: { select: { id: true, email: true, role: true, isActive: true } },
@@ -197,38 +205,112 @@ export async function sendDailyDigests(now = new Date()): Promise<DigestResult> 
   const actorName = (t: (typeof transitions)[number]) =>
     `${t.performedBy.firstName} ${t.performedBy.lastName}`;
 
-  // ── Admins: what was submitted for review ──
-  const submits = transitions.filter((t) => t.action === "SUBMIT");
-  if (submits.length > 0) {
+  // Deans: Department -> School hand-offs and work returned to the School.
+  const schoolActions = transitions.filter(
+    (t) =>
+      t.toPhase === 2 &&
+      (t.action === "SUBMIT" || t.action === "RETURN"),
+  );
+  if (schoolActions.length > 0) {
+    const schoolIds = [
+      ...new Set(
+        schoolActions.map((t) => t.submission.programme.department.schoolId),
+      ),
+    ];
+    const deans = await prisma.user.findMany({
+      where: { role: "DEAN", schoolId: { in: schoolIds }, isActive: true },
+      select: { id: true, email: true, schoolId: true },
+    });
+    const byDean = new Map<string, { email: string; items: DigestItem[] }>();
+
+    for (const t of schoolActions) {
+      const recipients = deans.filter(
+        (dean) =>
+          dean.schoolId === t.submission.programme.department.schoolId &&
+          dean.id !== t.performedById,
+      );
+      const returned = t.action === "RETURN";
+      const item: DigestItem = {
+        title: t.submission.programme.name,
+        lines: [
+          returned
+            ? `Returned to the School by ${actorName(t)} on ${formatDate(t.transitionedAt)}`
+            : `${t.submission.programme.department.name} · submitted by ${actorName(t)} on ${formatDate(t.transitionedAt)}`,
+        ],
+        remarks: t.remarks,
+        needsAction: true,
+        link: submissionLink(t.submission.id),
+      };
+      for (const dean of recipients) {
+        const entry = byDean.get(dean.id) ?? { email: dean.email, items: [] };
+        entry.items.push(item);
+        byDean.set(dean.id, entry);
+      }
+    }
+
+    for (const { email, items } of byDean.values()) {
+      const content = renderDigest({
+        heading: "Bulletins awaiting School review",
+        intro: "These bulletins now require action from the School:",
+        items,
+        link: `${site}/submissions`,
+        linkLabel: "Open School submissions",
+      });
+      const ok = await sendEmail({
+        to: [email],
+        subject: `Daily summary: ${items.length} item${items.length === 1 ? "" : "s"} for School review`,
+        ...content,
+      });
+      if (ok) result.deanEmails++;
+      else result.failed++;
+    }
+  }
+
+  // Academic Planning: School hand-offs and corrections returned to an
+  // Academic Planning-owned phase.
+  const academicPlanningActions = transitions.filter(
+    (t) =>
+      t.toPhase >= 3 &&
+      ((t.fromPhase === 2 && ["APPROVE", "SUBMIT"].includes(t.action)) ||
+        t.action === "RETURN" ||
+        t.action === "SUBMIT"),
+  );
+  if (academicPlanningActions.length > 0) {
     const [admins, waiting] = await Promise.all([
       prisma.user.findMany({
         where: { role: { in: ["ADMIN", "SUPER_ADMIN"] }, isActive: true },
-        select: { email: true },
+        select: { id: true, email: true },
       }),
-      prisma.submission.count({ where: { status: "IN_REVIEW" } }),
+      prisma.submission.count({
+        where: { status: "IN_REVIEW", currentPhase: { gte: 3 } },
+      }),
     ]);
 
-    const items: DigestItem[] = submits.map((t) => ({
-      title: t.submission.programme.name,
-      lines: [
-        `${t.submission.programme.department.name} · submitted by ${actorName(t)} on ${formatDate(t.transitionedAt)}`,
-      ],
-      link: submissionLink(t.submission.id),
-    }));
-    const count = submits.length;
-    const content = renderDigest({
-      heading: `${count} bulletin${count === 1 ? " was" : "s were"} submitted for review`,
-      intro: "These were submitted since the last summary:",
-      items,
-      footer: `${waiting} submission${waiting === 1 ? " is" : "s are"} waiting for review in total.`,
-      link: `${site}/submissions`,
-      linkLabel: "Open submissions",
-    });
-
     for (const admin of admins) {
+      const items: DigestItem[] = academicPlanningActions
+        .filter((t) => t.performedById !== admin.id)
+        .map((t) => ({
+          title: t.submission.programme.name,
+          lines: [
+            `${t.submission.programme.department.name} · sent by ${actorName(t)} on ${formatDate(t.transitionedAt)}`,
+            `Now at phase ${t.toPhase}: ${PHASE_NAMES[t.toPhase] ?? ""}`,
+          ],
+          remarks: t.remarks,
+          needsAction: true,
+          link: submissionLink(t.submission.id),
+        }));
+      if (items.length === 0) continue;
+      const content = renderDigest({
+        heading: "Bulletins awaiting Academic Planning",
+        intro: "These bulletins now require Academic Planning action:",
+        items,
+        footer: `${waiting} submission${waiting === 1 ? " is" : "s are"} currently with Academic Planning.`,
+        link: `${site}/submissions`,
+        linkLabel: "Open Academic Planning submissions",
+      });
       const ok = await sendEmail({
         to: [admin.email],
-        subject: `Daily summary: ${count} new submission${count === 1 ? "" : "s"} to review`,
+        subject: `Daily summary: ${items.length} item${items.length === 1 ? "" : "s"} for Academic Planning`,
         ...content,
       });
       if (ok) result.adminEmails++;
