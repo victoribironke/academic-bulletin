@@ -57,6 +57,8 @@ prisma/migrations/*
 !prisma/migrations/20261102153000_enforce_course_grace_compliance/migration.sql
 !prisma/migrations/20261102180000_merge_preparation_department_review/
 !prisma/migrations/20261102180000_merge_preparation_department_review/migration.sql
+!prisma/migrations/20261103173000_seamless_department_school_handoffs/
+!prisma/migrations/20261103173000_seamless_department_school_handoffs/migration.sql
 
 # local
 *.log
