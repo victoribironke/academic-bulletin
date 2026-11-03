@@ -830,6 +830,110 @@ describe("route authorization", () => {
     });
   });
 
+  it("hands work from Department to School to Academic Planning without duplicate approval", async () => {
+    const cycleId = "seamless-handoff-cycle";
+    const submissionId = "seamless-handoff-submission";
+    await prisma.reviewCycle.create({
+      data: { id: cycleId, name: "Seamless Handoff", createdById: ids.super },
+    });
+    await prisma.submission.create({
+      data: {
+        id: submissionId,
+        title: "Seamless Handoff Submission",
+        programmeId: ids.programmeA,
+        createdById: ids.hod,
+        cycleId,
+      },
+    });
+
+    const transition = (userId: string, action: string, remarks?: string) => {
+      authState.userId = userId;
+      return transitionSubmission(
+        new NextRequest(
+          `http://localhost/api/submissions/${submissionId}/transition`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action, remarks }),
+          },
+        ),
+        { params: Promise.resolve({ id: submissionId }) },
+      );
+    };
+
+    try {
+      const departmentSubmit = await transition(ids.hod, "SUBMIT");
+      expect(departmentSubmit.status).toBe(200);
+      expect((await departmentSubmit.json()).submission).toMatchObject({
+        currentPhase: 2,
+        status: "IN_REVIEW",
+      });
+
+      // Academic Planning is not an extra approval layer before the School.
+      expect((await transition(ids.admin, "APPROVE")).status).toBe(403);
+
+      const schoolApproval = await transition(ids.dean, "APPROVE");
+      expect(schoolApproval.status).toBe(200);
+      expect((await schoolApproval.json()).submission).toMatchObject({
+        currentPhase: 3,
+        status: "IN_REVIEW",
+      });
+
+      // Once it reaches Academic Planning, the Dean's stage is complete.
+      expect((await transition(ids.dean, "APPROVE")).status).toBe(403);
+
+      const returnedToSchool = await transition(
+        ids.admin,
+        "RETURN",
+        "Please confirm the School-level details.",
+      );
+      expect(returnedToSchool.status).toBe(200);
+      expect((await returnedToSchool.json()).submission).toMatchObject({
+        currentPhase: 2,
+        status: "CORRECTIONS_REQUIRED",
+      });
+      authState.userId = ids.hod;
+      expect(await canWriteSubmission((await getApiUser())!, submissionId)).toBe(
+        false,
+      );
+      authState.userId = ids.dean;
+      expect(await canWriteSubmission((await getApiUser())!, submissionId)).toBe(
+        true,
+      );
+
+      expect((await transition(ids.hod, "SUBMIT")).status).toBe(403);
+      const schoolResubmit = await transition(ids.dean, "SUBMIT");
+      expect(schoolResubmit.status).toBe(200);
+      expect((await schoolResubmit.json()).submission).toMatchObject({
+        currentPhase: 3,
+        status: "IN_REVIEW",
+      });
+
+      const academicPlanningApproval = await transition(ids.admin, "APPROVE");
+      expect(academicPlanningApproval.status).toBe(200);
+      expect((await academicPlanningApproval.json()).submission).toMatchObject({
+        currentPhase: 4,
+        status: "IN_REVIEW",
+      });
+
+      const returnedWithinAcademicPlanning = await transition(
+        ids.admin,
+        "RETURN",
+        "Update the consolidation notes.",
+      );
+      expect(returnedWithinAcademicPlanning.status).toBe(200);
+      authState.userId = ids.admin;
+      expect(await canWriteSubmission((await getApiUser())!, submissionId)).toBe(
+        true,
+      );
+      expect((await transition(ids.admin, "SUBMIT")).status).toBe(200);
+    } finally {
+      await prisma.activityLog.deleteMany({ where: { entityId: submissionId } });
+      await prisma.submission.deleteMany({ where: { id: submissionId } });
+      await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+    }
+  });
+
   it("blocks submission until every current course description is compliant", async () => {
     const cycleId = "grace-gate-cycle";
     const submissionId = "grace-gate-submission";
@@ -1565,19 +1669,27 @@ describe("daily summary emails", () => {
         {
           submissionId: ids.submission,
           fromPhase: 1,
-          toPhase: 1,
+          toPhase: 2,
           action: "SUBMIT",
           performedById: ids.hod,
           transitionedAt: submitted,
         },
         {
           submissionId: ids.submission,
-          fromPhase: 1,
+          fromPhase: 2,
           toPhase: 1,
-          action: "REJECT",
+          action: "RETURN",
           remarks: "Please expand the programme philosophy.",
-          performedById: ids.admin,
+          performedById: ids.dean,
           transitionedAt: new Date(submitted.getTime() + 60_000),
+        },
+        {
+          submissionId: ids.submission,
+          fromPhase: 2,
+          toPhase: 3,
+          action: "APPROVE",
+          performedById: ids.dean,
+          transitionedAt: new Date(submitted.getTime() + 120_000),
         },
       ],
     });
@@ -1594,10 +1706,21 @@ describe("daily summary emails", () => {
 
     try {
       const first = await sendDailyDigests();
-      expect(first).toMatchObject({ transitions: 2, failed: 0 });
+      expect(first).toMatchObject({ transitions: 3, failed: 0 });
 
-      // Every active admin gets one combined email about the submission.
-      const adminEmails = sent.filter((m) => m.subject.includes("to review"));
+      // The Department hand-off goes to the active Dean for that School.
+      const deanEmails = sent.filter((m) => m.subject.includes("School review"));
+      expect(deanEmails.map((m) => m.to[0]).sort()).toEqual(
+        [
+          `${ids.dean}@example.edu`,
+          "invited.user@example.edu",
+        ].sort(),
+      );
+
+      // The Dean's approval goes to every active Academic Planning admin.
+      const adminEmails = sent.filter((m) =>
+        m.subject.includes("Academic Planning"),
+      );
       expect(adminEmails.map((m) => m.to[0]).sort()).toEqual(
         [`${ids.admin}@example.edu`, `${ids.super}@example.edu`].sort(),
       );
