@@ -26,7 +26,8 @@ export function PhotoUploadGuidance({ compact = false }: PhotoUploadGuidanceProp
       <div className="space-y-1">
         <h4 className="text-sm font-semibold">Photo requirements</h4>
         <p className="text-xs text-muted-foreground">
-          Photos are checked before upload. Use the guide below to avoid rejection.
+          Photos are checked, resized, and compressed before storage. Use the guide
+          below to avoid rejection.
         </p>
       </div>
 
