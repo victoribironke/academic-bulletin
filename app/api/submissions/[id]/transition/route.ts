@@ -54,6 +54,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // Refuse the wrong role or the wrong phase before anything else, so a
+    // caller who may not act here learns nothing about the record's state.
+    if (
+      !canPerformWorkflowAction(
+        {
+          role: user.role,
+          currentPhase: submission.currentPhase,
+          currentStatus: submission.status,
+        },
+        action,
+      )
+    ) {
+      return NextResponse.json(
+        { error: "This action is not available to your role at the current phase." },
+        { status: 403 },
+      );
+    }
+
     const fromPhase = submission.currentPhase;
     const resolved = resolveWorkflowTransition({
       action,
@@ -71,6 +89,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const newStatus = resolved.status;
 
     if (action === "SUBMIT") {
+      const gate = await requireSubmissionWriteAccess(user, id);
+      if (!gate.ok) {
+        return NextResponse.json(
+          { error: gate.message },
+          { status: gate.status },
+        );
+      }
+
       const blockers = await getCourseGraceBlockers(id);
       if (hasCourseGraceBlockers(blockers)) {
         return NextResponse.json(
@@ -82,32 +108,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             blockers,
           },
           { status: 409 },
-        );
-      }
-    }
-
-    if (
-      !canPerformWorkflowAction(
-        {
-          role: user.role,
-          currentPhase: submission.currentPhase,
-          currentStatus: submission.status,
-        },
-        action,
-      )
-    ) {
-      return NextResponse.json(
-        { error: "This action is not available to your role at the current phase." },
-        { status: 403 },
-      );
-    }
-
-    if (action === "SUBMIT") {
-      const gate = await requireSubmissionWriteAccess(user, id);
-      if (!gate.ok) {
-        return NextResponse.json(
-          { error: gate.message },
-          { status: gate.status },
         );
       }
     }
