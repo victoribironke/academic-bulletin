@@ -291,6 +291,19 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    // The workflow ledger is permanent, so a bulletin that has moved through
+    // any phase can't be deleted with it.
+    if ((await prisma.phaseTransition.count({ where: { submissionId: id } })) > 0) {
+      return NextResponse.json(
+        {
+          error:
+            "This bulletin has workflow history, so it can't be deleted.",
+          code: "HAS_WORKFLOW_HISTORY",
+        },
+        { status: 409 },
+      );
+    }
+
     await prisma.$transaction(async (tx) => {
       await recordActivity(
         {

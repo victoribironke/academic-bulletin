@@ -56,7 +56,11 @@ import { DELETE as deleteUser, PATCH as updateUser } from "@/app/api/users/[id]/
 import { adminCreateUser } from "@/app/actions/admin";
 import { GET as listCourses } from "@/app/api/courses/route";
 import { POST as transitionSubmission } from "@/app/api/submissions/[id]/transition/route";
-import { GET as getSubmission, PUT as updateSubmission } from "@/app/api/submissions/[id]/route";
+import {
+  DELETE as deleteSubmission,
+  GET as getSubmission,
+  PUT as updateSubmission,
+} from "@/app/api/submissions/[id]/route";
 import { GET as listComments, POST as createComment } from "@/app/api/submissions/[id]/comments/route";
 import { POST as checkGrace } from "@/app/api/grace-check/route";
 import { GET as listMasterCourses } from "@/app/api/master-courses/route";
@@ -77,6 +81,10 @@ import { GET as getDashboardStats } from "@/app/api/dashboard/stats/route";
 import { courseGraceContentHash } from "@/lib/courses/grace-compliance";
 import { philosophyGraceHash } from "@/lib/submissions/submit-readiness";
 import { DEFAULT_PHASE_OWNERS } from "@/lib/submissions/workflow";
+import { bulletinContentHash } from "@/lib/submissions/ledger";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { Client as PgClient } from "pg";
 
 const ids = {
   schoolA: "test-school-a",
@@ -1766,9 +1774,12 @@ describe("route authorization", () => {
 describe("daily summary emails", () => {
   it("sends one summary per person and never repeats activity", async () => {
     // Earlier tests leave transitions behind; treat them as already summarised.
-    await prisma.phaseTransition.updateMany({
-      where: { notifiedAt: null },
-      data: { notifiedAt: new Date() },
+    const earlier = await prisma.phaseTransition.findMany({
+      where: { notification: null },
+      select: { id: true },
+    });
+    await prisma.phaseTransitionNotification.createMany({
+      data: earlier.map((t) => ({ transitionId: t.id })),
     });
 
     const submitted = new Date(Date.now() - 60 * 60 * 1000);
@@ -1851,6 +1862,11 @@ describe("daily summary emails", () => {
       const second = await sendDailyDigests();
       expect(second.transitions).toBe(0);
       expect(sent).toHaveLength(0);
+
+      // What was sent is recorded beside the ledger; its rows are untouched.
+      expect(
+        await prisma.phaseTransition.count({ where: { notifiedAt: { not: null } } }),
+      ).toBe(0);
     } finally {
       fetchSpy.mockRestore();
       if (previousKey === undefined) delete process.env.RESEND_API_KEY;
@@ -2521,5 +2537,193 @@ describe("phase owners and separation of duties", () => {
     // Past their phase, the bulletin is back outside their reach.
     expect((await workflowFor(ids.dean)).status).toBe(403);
     expect((await act(ids.admin, "APPROVE")).status).toBe(200);
+  });
+});
+
+// The workflow ledger: one permanent row per state change, written with it.
+describe("workflow ledger", () => {
+  const cycleId = "ledger-cycle";
+  const submissionId = "ledger-submission";
+  const guardMigration = join(
+    process.cwd(),
+    "prisma/migrations/20261105140100_ledger_guards/migration.sql",
+  );
+  // Raw SQL on its own connection: the guard migration is several statements.
+  const sql = async (text: string) => {
+    const client = new PgClient({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
+    try {
+      await client.query(text);
+    } finally {
+      await client.end();
+    }
+  };
+  const removeGuards = () =>
+    sql(`
+      DROP TRIGGER IF EXISTS phase_transitions_append_only ON "phase_transitions";
+      DROP TRIGGER IF EXISTS submissions_state_requires_ledger ON "submissions";
+      DROP FUNCTION IF EXISTS phase_transitions_append_only();
+      DROP FUNCTION IF EXISTS submissions_state_requires_ledger();
+      DROP FUNCTION IF EXISTS ledger_maintenance_enabled();
+    `);
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.create({
+      data: { id: cycleId, name: "Ledger", createdById: ids.super },
+    });
+  });
+
+  beforeEach(async () => {
+    await prisma.submission.deleteMany({ where: { id: submissionId } });
+    await prisma.submission.create({
+      data: {
+        id: submissionId,
+        title: "Ledger Bulletin",
+        programmeId: ids.programmeA,
+        createdById: ids.hod,
+        cycleId,
+      },
+    });
+    await prepareDraftForSubmit(submissionId);
+  });
+
+  afterAll(async () => {
+    await removeGuards();
+    await prisma.submission.deleteMany({ where: { id: submissionId } });
+    await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+  });
+
+  const act = (userId: string, action: string, remarks?: string) => {
+    authState.userId = userId;
+    return transitionSubmission(
+      new NextRequest(`http://localhost/api/submissions/${submissionId}/transition`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, remarks }),
+      }),
+      { params: Promise.resolve({ id: submissionId }) },
+    );
+  };
+
+  it("writes one row per state change, with the actor's role and the text version", async () => {
+    expect((await act(ids.hod, "SUBMIT")).status).toBe(200);
+    expect((await act(ids.dean, "APPROVE")).status).toBe(200);
+    expect((await act(ids.admin, "RETURN", "Clarify the mission.")).status).toBe(200);
+    // The School revises the text before sending it on again.
+    await prisma.submissionContent.update({
+      where: { submissionId },
+      data: { mission: "To form graduates of character and service." },
+    });
+    expect((await act(ids.dean, "SUBMIT")).status).toBe(200);
+    // A refused action leaves no row.
+    expect((await act(ids.dean, "APPROVE")).status).toBe(403);
+
+    const ledger = await prisma.phaseTransition.findMany({
+      where: { submissionId },
+      orderBy: { transitionedAt: "asc" },
+      select: {
+        id: true,
+        action: true,
+        fromPhase: true,
+        toPhase: true,
+        actorRole: true,
+        performedById: true,
+        contentHash: true,
+      },
+    });
+    expect(ledger.map(({ action, fromPhase, toPhase, actorRole }) => ({
+      action,
+      fromPhase,
+      toPhase,
+      actorRole,
+    }))).toEqual([
+      { action: "SUBMIT", fromPhase: 1, toPhase: 2, actorRole: "HOD" },
+      { action: "APPROVE", fromPhase: 2, toPhase: 3, actorRole: "DEAN" },
+      { action: "RETURN", fromPhase: 3, toPhase: 2, actorRole: "ADMIN" },
+      { action: "SUBMIT", fromPhase: 2, toPhase: 3, actorRole: "DEAN" },
+    ]);
+
+    // The text version only changes when the text does.
+    const [submitted, approved, returned, resubmitted] = ledger.map((row) => row.contentHash);
+    expect(submitted).toMatch(/^[0-9a-f]{64}$/);
+    expect(approved).toBe(submitted);
+    expect(returned).toBe(submitted);
+    expect(resubmitted).not.toBe(submitted);
+    expect(resubmitted).toBe(await bulletinContentHash(prisma, submissionId));
+
+    // Each ledger row has exactly one Activity Log entry pointing back to it.
+    const activity = await prisma.activityLog.findMany({
+      where: { entityId: submissionId, action: { startsWith: "SUBMISSION_" } },
+      select: { metadata: true },
+    });
+    expect(
+      activity
+        .map((entry) => (entry.metadata as { transitionId?: string } | null)?.transitionId)
+        .sort(),
+    ).toEqual(ledger.map((row) => row.id).sort());
+  });
+
+  it("refuses to edit or delete ledger rows, or to move a bulletin without one", async () => {
+    await sql(readFileSync(guardMigration, "utf8"));
+    try {
+      // The workflow itself still works with the guards in place.
+      expect((await act(ids.hod, "SUBMIT")).status).toBe(200);
+      const row = await prisma.phaseTransition.findFirstOrThrow({ where: { submissionId } });
+
+      await expect(
+        prisma.phaseTransition.update({ where: { id: row.id }, data: { remarks: "Edited" } }),
+      ).rejects.toThrow(/append-only/);
+      await expect(
+        prisma.phaseTransition.delete({ where: { id: row.id } }),
+      ).rejects.toThrow(/append-only/);
+
+      // A phase or status can't be changed directly, but other fields can.
+      await expect(
+        prisma.submission.update({ where: { id: submissionId }, data: { currentPhase: 5 } }),
+      ).rejects.toThrow(/phase_transitions row/);
+      await expect(
+        prisma.submission.update({ where: { id: submissionId }, data: { status: "APPROVED" } }),
+      ).rejects.toThrow(/phase_transitions row/);
+      await prisma.submission.update({ where: { id: submissionId }, data: { title: "Renamed" } });
+
+      // A bulletin with history can't be deleted, by the API or by the database.
+      authState.userId = ids.super;
+      const deletion = await deleteSubmission(
+        new NextRequest(`http://localhost/api/submissions/${submissionId}`, { method: "DELETE" }),
+        { params: Promise.resolve({ id: submissionId }) },
+      );
+      expect(deletion.status).toBe(409);
+      expect(await deletion.json()).toMatchObject({ code: "HAS_WORKFLOW_HISTORY" });
+      await expect(
+        prisma.submission.delete({ where: { id: submissionId } }),
+      ).rejects.toThrow(/append-only/);
+
+      expect(
+        await prisma.submission.findUniqueOrThrow({
+          where: { id: submissionId },
+          select: { currentPhase: true, status: true },
+        }),
+      ).toEqual({ currentPhase: 2, status: "IN_REVIEW" });
+      expect(await prisma.phaseTransition.count({ where: { submissionId } })).toBe(1);
+
+      // A deliberate repair names itself; this also cleans up the test record.
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SET LOCAL app.ledger_maintenance = 'on'`;
+        await tx.submission.delete({ where: { id: submissionId } });
+      });
+      expect(await prisma.phaseTransition.count({ where: { submissionId } })).toBe(0);
+    } finally {
+      await removeGuards();
+    }
+  });
+
+  it("still deletes a draft that has never moved", async () => {
+    authState.userId = ids.super;
+    const deletion = await deleteSubmission(
+      new NextRequest(`http://localhost/api/submissions/${submissionId}`, { method: "DELETE" }),
+      { params: Promise.resolve({ id: submissionId }) },
+    );
+    expect(deletion.status).toBe(200);
+    expect(await prisma.submission.count({ where: { id: submissionId } })).toBe(0);
   });
 });

@@ -11,6 +11,7 @@ import {
   resolveWorkflowTransition,
 } from "@/lib/submissions/workflow";
 import { loadPhaseOwners, previousGateActorId } from "@/lib/submissions/phase-owners";
+import { bulletinContentHash, linkStateChangeToLedger } from "@/lib/submissions/ledger";
 import { PHASE_REQUIRED_EVIDENCE } from "@/lib/submissions/phases";
 import { getSubmitReadinessIssues } from "@/lib/submissions/submit-readiness";
 import { recordActivity } from "@/lib/activity-log";
@@ -162,7 +163,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Create transition record and update submission in a transaction
+    // The ledger row and the change it records commit together or not at all.
     const { transition, updated } = await prisma.$transaction(async (tx) => {
       const transition = await tx.phaseTransition.create({
         data: {
@@ -172,6 +173,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           action,
           remarks,
           reference: requiredEvidence ? reference : null,
+          actorRole: user.role,
+          contentHash: await bulletinContentHash(tx, id),
           performedById: user.id,
         },
         include: {
@@ -185,6 +188,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           },
         },
       });
+      await linkStateChangeToLedger(tx, transition.id);
       const updated = await tx.submission.update({
         where: { id },
         data: {
@@ -208,6 +212,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           entityId: id,
           description: `${action.charAt(0)}${action.slice(1).toLowerCase()} action recorded for ${updated.programme.name}.`,
           metadata: {
+            transitionId: transition.id,
             fromPhase,
             toPhase: newPhase,
             status: newStatus,
