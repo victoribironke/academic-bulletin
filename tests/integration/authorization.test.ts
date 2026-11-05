@@ -56,8 +56,8 @@ import { DELETE as deleteUser, PATCH as updateUser } from "@/app/api/users/[id]/
 import { adminCreateUser } from "@/app/actions/admin";
 import { GET as listCourses } from "@/app/api/courses/route";
 import { POST as transitionSubmission } from "@/app/api/submissions/[id]/transition/route";
-import { PUT as updateSubmission } from "@/app/api/submissions/[id]/route";
-import { POST as createComment } from "@/app/api/submissions/[id]/comments/route";
+import { GET as getSubmission, PUT as updateSubmission } from "@/app/api/submissions/[id]/route";
+import { GET as listComments, POST as createComment } from "@/app/api/submissions/[id]/comments/route";
 import { POST as checkGrace } from "@/app/api/grace-check/route";
 import { GET as listMasterCourses } from "@/app/api/master-courses/route";
 import { PATCH as updateMasterCourse } from "@/app/api/master-courses/[id]/route";
@@ -1843,5 +1843,274 @@ describe("activity log", () => {
         where: { actorId: ids.hod, description: "Updated TST 901 - Coalesce Test." },
       }),
     ).toBe(2);
+  });
+});
+
+// The server refuses what the page hides: the wrong school, the wrong role,
+// and the wrong phase each get a 403, and a refusal changes nothing.
+describe("server-side refusals", () => {
+  const request = (path: string, method = "GET", body?: object) =>
+    new NextRequest(`http://localhost${path}`, {
+      method,
+      ...(body && {
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    });
+  const routeParams = (id: string) => ({ params: Promise.resolve({ id }) });
+  const transition = (id: string, action: string, remarks?: string) =>
+    transitionSubmission(
+      request(`/api/submissions/${id}/transition`, "POST", { action, remarks }),
+      routeParams(id),
+    );
+  // Each test gets its own cycle: a programme has one submission per cycle.
+  const createSubmission = async (key: string, programmeId: string, title: string) => {
+    const cycle = await prisma.reviewCycle.create({
+      data: { id: `refusal-${key}`, name: `Refusal ${key}`, createdById: ids.super },
+    });
+    return prisma.submission.create({
+      data: { title, programmeId, createdById: ids.super, cycleId: cycle.id },
+    });
+  };
+  const removeSubmission = async (submission: { id: string; cycleId: string | null }) => {
+    await prisma.submission.delete({ where: { id: submission.id } });
+    if (submission.cycleId) {
+      await prisma.reviewCycle.delete({ where: { id: submission.cycleId } });
+    }
+  };
+
+  it("refuses another school's submission on read and returns no record", async () => {
+    const outside = await createSubmission("read", ids.programmeB, "Other School Bulletin");
+
+    try {
+      for (const userId of [ids.hod, ids.coordinator, ids.dean]) {
+        authState.userId = userId;
+        const record = await getSubmission(
+          request(`/api/submissions/${outside.id}`),
+          routeParams(outside.id),
+        );
+        expect(record.status).toBe(403);
+        expect(await record.json()).toEqual({ error: "Forbidden" });
+
+        const comments = await listComments(
+          request(`/api/submissions/${outside.id}/comments`),
+          routeParams(outside.id),
+        );
+        expect(comments.status).toBe(403);
+
+        const courses = await listCourses(
+          new Request(`http://localhost/api/courses?submissionId=${outside.id}`),
+        );
+        expect(courses.status).toBe(403);
+      }
+
+      authState.userId = ids.admin;
+      const allowed = await getSubmission(
+        request(`/api/submissions/${outside.id}`),
+        routeParams(outside.id),
+      );
+      expect(allowed.status).toBe(200);
+      expect(await allowed.json()).toMatchObject({ id: outside.id });
+    } finally {
+      await removeSubmission(outside);
+    }
+  });
+
+  it("refuses edits, comments and submits on another school's submission", async () => {
+    const outside = await createSubmission("write", ids.programmeB, "Other School Bulletin");
+
+    try {
+      for (const userId of [ids.hod, ids.coordinator, ids.dean]) {
+        authState.userId = userId;
+        const edit = await updateSubmission(
+          request(`/api/submissions/${outside.id}`, "PUT", { title: "Changed" }),
+          routeParams(outside.id),
+        );
+        expect(edit.status).toBe(403);
+
+        const comment = await createComment(
+          request(`/api/submissions/${outside.id}/comments`, "POST", {
+            content: "Out-of-scope comment",
+            type: "ISSUE",
+          }),
+          routeParams(outside.id),
+        );
+        expect(comment.status).toBe(403);
+
+        expect((await transition(outside.id, "SUBMIT")).status).toBe(403);
+      }
+
+      expect(
+        await prisma.submission.findUniqueOrThrow({
+          where: { id: outside.id },
+          select: { title: true, currentPhase: true, status: true },
+        }),
+      ).toEqual({ title: "Other School Bulletin", currentPhase: 1, status: "DRAFT" });
+      expect(await prisma.comment.count({ where: { submissionId: outside.id } })).toBe(0);
+      expect(
+        await prisma.phaseTransition.count({ where: { submissionId: outside.id } }),
+      ).toBe(0);
+    } finally {
+      await removeSubmission(outside);
+    }
+  });
+
+  it("refuses workflow actions for the wrong role or the wrong phase", async () => {
+    const submission = await createSubmission("phase", ids.programmeA, "Phase Gate Bulletin");
+    // An unchecked course: a caller with the wrong role must be refused
+    // before the GRACE gate is consulted, not told what the course lacks.
+    await prisma.course.create({
+      data: {
+        code: "PGT 101",
+        title: "Phase Gate Course",
+        units: 2,
+        semester: 1,
+        level: 100,
+        submissionId: submission.id,
+      },
+    });
+    const setStage = (currentPhase: number, status: "DRAFT" | "IN_REVIEW") =>
+      prisma.submission.update({
+        where: { id: submission.id },
+        data: { currentPhase, status },
+      });
+    const refusals: Array<[userId: string, action: string]> = [];
+
+    try {
+      // Phase 1 draft: only the department may submit, and nothing is approved.
+      await setStage(1, "DRAFT");
+      refusals.push(
+        [ids.dean, "SUBMIT"],
+        [ids.admin, "SUBMIT"],
+        [ids.admin, "APPROVE"],
+        [ids.hod, "APPROVE"],
+      );
+      for (const [userId, action] of refusals.splice(0)) {
+        authState.userId = userId;
+        const response = await transition(submission.id, action);
+        expect({ userId, action, status: response.status }).toEqual({
+          userId,
+          action,
+          status: 403,
+        });
+        expect(await response.json()).not.toHaveProperty("blockers");
+      }
+
+      // Phase 2: only the Dean reviews; the department can no longer edit.
+      await setStage(2, "IN_REVIEW");
+      refusals.push(
+        [ids.hod, "APPROVE"],
+        [ids.coordinator, "APPROVE"],
+        [ids.admin, "APPROVE"],
+        [ids.hod, "SUBMIT"],
+      );
+      for (const [userId, action] of refusals.splice(0)) {
+        authState.userId = userId;
+        const response = await transition(submission.id, action, "Remarks");
+        expect({ userId, action, status: response.status }).toEqual({
+          userId,
+          action,
+          status: 403,
+        });
+      }
+      authState.userId = ids.hod;
+      const lateEdit = await updateSubmission(
+        request(`/api/submissions/${submission.id}`, "PUT", { title: "Late edit" }),
+        routeParams(submission.id),
+      );
+      expect(lateEdit.status).toBe(403);
+
+      // Phase 3: Academic Planning owns the record; the Dean and department don't.
+      await setStage(3, "IN_REVIEW");
+      refusals.push(
+        [ids.dean, "APPROVE"],
+        [ids.hod, "RETURN"],
+        [ids.coordinator, "REJECT"],
+      );
+      for (const [userId, action] of refusals.splice(0)) {
+        authState.userId = userId;
+        const response = await transition(submission.id, action, "Remarks");
+        expect({ userId, action, status: response.status }).toEqual({
+          userId,
+          action,
+          status: 403,
+        });
+      }
+      authState.userId = ids.dean;
+      const deanEdit = await updateSubmission(
+        request(`/api/submissions/${submission.id}`, "PUT", { title: "Dean edit" }),
+        routeParams(submission.id),
+      );
+      expect(deanEdit.status).toBe(403);
+
+      // None of the refusals moved the record or wrote a transition.
+      expect(
+        await prisma.submission.findUniqueOrThrow({
+          where: { id: submission.id },
+          select: { title: true, currentPhase: true, status: true },
+        }),
+      ).toEqual({ title: "Phase Gate Bulletin", currentPhase: 3, status: "IN_REVIEW" });
+      expect(
+        await prisma.phaseTransition.count({ where: { submissionId: submission.id } }),
+      ).toBe(0);
+
+      // The right caller at the right phase still goes through.
+      authState.userId = ids.admin;
+      expect((await transition(submission.id, "APPROVE")).status).toBe(200);
+      expect(
+        await prisma.submission.findUniqueOrThrow({
+          where: { id: submission.id },
+          select: { currentPhase: true },
+        }),
+      ).toEqual({ currentPhase: 4 });
+    } finally {
+      await removeSubmission(submission);
+    }
+  });
+
+  it("refuses role and account changes by anyone below their tier, and logs each one", async () => {
+    const patch = (id: string, body: object) =>
+      updateUser(request(`/api/users/${id}`, "PATCH", body), routeParams(id));
+    const attempts: Array<[actor: string, target: string, body: object]> = [
+      [ids.hod, ids.hod, { role: "SUPER_ADMIN" }],
+      [ids.hod, ids.dean, { role: "HOD" }],
+      [ids.coordinator, ids.coordinator, { role: "ADMIN" }],
+      [ids.dean, ids.hod, { role: "DEAN" }],
+      [ids.admin, ids.hod, { role: "SUPER_ADMIN" }],
+      [ids.admin, ids.super, { role: "HOD" }],
+      [ids.admin, ids.hod, { isActive: false }],
+    ];
+    const rolesBefore = await prisma.user.findMany({
+      select: { id: true, role: true, isActive: true },
+      orderBy: { id: "asc" },
+    });
+    const refusedBefore = await prisma.activityLog.count({
+      where: { action: "USER_UPDATE_REFUSED" },
+    });
+
+    for (const [actor, target, body] of attempts) {
+      authState.userId = actor;
+      const response = await patch(target, body);
+      expect({ actor, target, status: response.status }).toEqual({
+        actor,
+        target,
+        status: 403,
+      });
+      const entry = await prisma.activityLog.findFirst({
+        where: { action: "USER_UPDATE_REFUSED", actorId: actor, entityId: target },
+        orderBy: { createdAt: "desc" },
+      });
+      expect(entry?.metadata).toMatchObject({ attempted: body });
+    }
+
+    expect(
+      await prisma.user.findMany({
+        select: { id: true, role: true, isActive: true },
+        orderBy: { id: "asc" },
+      }),
+    ).toEqual(rolesBefore);
+    expect(
+      await prisma.activityLog.count({ where: { action: "USER_UPDATE_REFUSED" } }),
+    ).toBe(refusedBefore + attempts.length);
   });
 });
