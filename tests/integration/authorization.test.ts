@@ -75,6 +75,7 @@ import { GET as listSubmissions } from "@/app/api/submissions/route";
 import { GET as listActivities } from "@/app/api/activity-log/route";
 import { GET as getDashboardStats } from "@/app/api/dashboard/stats/route";
 import { courseGraceContentHash } from "@/lib/courses/grace-compliance";
+import { philosophyGraceHash } from "@/lib/submissions/submit-readiness";
 
 const ids = {
   schoolA: "test-school-a",
@@ -241,6 +242,109 @@ afterAll(async () => {
   await clearFixtures();
   await prisma.$disconnect();
 });
+
+const readyPhilosophy = Array.from(
+  { length: 160 },
+  (_, index) => `principle${index + 1}`,
+).join(" ");
+
+/**
+ * Fills a draft in Department A with everything Submit requires: the
+ * programme sections, a GRACE pass for the saved philosophy, a staff member,
+ * and (unless the test brings its own) one GRACE-compliant course. The stated
+ * total units always match the courses on the draft.
+ */
+async function prepareDraftForSubmit(
+  submissionId: string,
+  options: { course?: boolean } = {},
+) {
+  await prisma.staff.upsert({
+    where: { id: "ready-staff-a" },
+    update: {},
+    create: {
+      id: "ready-staff-a",
+      title: "DR",
+      gender: "FEMALE",
+      surname: "Example",
+      firstName: "Ada",
+      highestQualification: "PHD",
+      academicRank: "SENIOR_LECTURER",
+      departmentId: ids.departmentA,
+    },
+  });
+
+  if (options.course !== false) {
+    const courseContent = Array.from(
+      { length: 150 },
+      (_, index) => `topic${index + 1}`,
+    ).join(" ");
+    const learningOutcomes = ["Explain the core ideas of the course"];
+    const course = await prisma.course.create({
+      data: {
+        code: "RDY 101",
+        title: "Ready Course",
+        units: 3,
+        semester: 1,
+        level: 100,
+        submissionId,
+      },
+    });
+    const contentHash = courseGraceContentHash({
+      title: course.title,
+      learningOutcomes,
+      courseContent,
+    })!;
+    const result = { passed: true, scores: { G: 3, R: 3, A: 3, C: 3, E: 3 } };
+    await prisma.graceAssessment.upsert({
+      where: { contentHash },
+      update: {},
+      create: {
+        contentHash,
+        title: course.title,
+        courseContent,
+        learningOutcomes,
+        status: "COMPLIANT",
+        result,
+        checkedAt: new Date(),
+      },
+    });
+    await prisma.courseDescription.create({
+      data: {
+        courseId: course.id,
+        submissionId,
+        courseContent,
+        learningOutcomes,
+        graceContentHash: contentHash,
+        graceStatus: "COMPLIANT",
+        gracePass: true,
+        graceResult: result,
+        graceCheckedAt: new Date(),
+      },
+    });
+  }
+
+  const { _sum } = await prisma.course.aggregate({
+    where: { submissionId },
+    _sum: { units: true },
+  });
+  const content = {
+    philosophy: readyPhilosophy,
+    philosophyGracePass: true,
+    philosophyGrace: { passed: true, contentHash: philosophyGraceHash(readyPhilosophy) },
+    mission: "To form graduates of character.",
+    vision: "A leading programme.",
+    utmeRequirements: "Five credit passes.",
+    graduationRequirements: "Pass every required course.",
+    minimumDuration: "4 years",
+    minimumCGPA: 2.5,
+    totalUnits: _sum.units ?? 0,
+  };
+  await prisma.submissionContent.upsert({
+    where: { submissionId },
+    update: content,
+    create: { submissionId, ...content },
+  });
+}
 
 describe("active account enforcement", () => {
   it("rejects missing and inactive sessions", async () => {
@@ -845,6 +949,7 @@ describe("route authorization", () => {
         cycleId,
       },
     });
+    await prepareDraftForSubmit(submissionId);
 
     const transition = (userId: string, action: string, remarks?: string) => {
       authState.userId = userId;
@@ -987,6 +1092,8 @@ describe("route authorization", () => {
         graceContentHash: contentHash,
       },
     });
+    // Everything else is complete, so only the course's GRACE state decides.
+    await prepareDraftForSubmit(submissionId, { course: false });
 
     authState.userId = ids.hod;
     const submit = () =>
@@ -2112,5 +2219,149 @@ describe("server-side refusals", () => {
     expect(
       await prisma.activityLog.count({ where: { action: "USER_UPDATE_REFUSED" } }),
     ).toBe(refusedBefore + attempts.length);
+  });
+});
+
+// The checks the page runs before Submit are enforced by the server too, so a
+// draft with contradictions can't be sent by calling the API directly.
+describe("submit validators", () => {
+  const cycleId = "submit-validators-cycle";
+  const submissionId = "submit-validators-submission";
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.create({
+      data: { id: cycleId, name: "Submit Validators", createdById: ids.super },
+    });
+  });
+
+  beforeEach(async () => {
+    await prisma.submission.deleteMany({ where: { id: submissionId } });
+    await prisma.submission.create({
+      data: {
+        id: submissionId,
+        title: "Submit Validators Bulletin",
+        programmeId: ids.programmeA,
+        createdById: ids.hod,
+        cycleId,
+      },
+    });
+  });
+
+  afterAll(async () => {
+    await prisma.submission.deleteMany({ where: { id: submissionId } });
+    await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+  });
+
+  const submit = () => {
+    authState.userId = ids.hod;
+    return transitionSubmission(
+      new NextRequest(`http://localhost/api/submissions/${submissionId}/transition`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "SUBMIT" }),
+      }),
+      { params: Promise.resolve({ id: submissionId }) },
+    );
+  };
+  const save = (content: object) => {
+    authState.userId = ids.hod;
+    return updateSubmission(
+      new NextRequest(`http://localhost/api/submissions/${submissionId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      }),
+      { params: Promise.resolve({ id: submissionId }) },
+    );
+  };
+  const refusalCodes = async () => {
+    const response = await submit();
+    expect(response.status).toBe(409);
+    const body = await response.json();
+    expect(body.code).toBe("SUBMISSION_INCOMPLETE");
+    // Every reason is also listed for the page to show.
+    expect(body.issues).toEqual(
+      expect.arrayContaining(body.readiness.map((item: { message: string }) => item.message)),
+    );
+    return body.readiness.map((item: { code: string }) => item.code) as string[];
+  };
+  const stage = () =>
+    prisma.submission.findUniqueOrThrow({
+      where: { id: submissionId },
+      select: { currentPhase: true, status: true },
+    });
+
+  it("refuses an empty draft with every reason at once", async () => {
+    expect(await refusalCodes()).toEqual(
+      expect.arrayContaining([
+        "NO_COURSES",
+        "MISSING_PHILOSOPHY",
+        "MISSING_MISSION",
+        "MISSING_MINIMUM_DURATION",
+        "MISSING_MINIMUM_CGPA",
+        "MISSING_TOTAL_UNITS",
+      ]),
+    );
+    expect(await stage()).toEqual({ currentPhase: 1, status: "DRAFT" });
+  });
+
+  it("refuses each contradiction with a specific reason, then submits once it is fixed", async () => {
+    await prepareDraftForSubmit(submissionId);
+    const fix = (data: object) =>
+      prisma.submissionContent.update({ where: { submissionId }, data });
+
+    // The audit's case: 203 units declared against the structured courses.
+    await fix({ totalUnits: 203 });
+    const mismatch = await submit();
+    expect(mismatch.status).toBe(409);
+    expect((await mismatch.json()).readiness).toEqual([
+      {
+        code: "UNIT_TOTAL_MISMATCH",
+        message: "The course structure contains 3 units, but the programme states 203 expected units.",
+      },
+    ]);
+    await fix({ totalUnits: 3 });
+
+    await fix({ minimumCGPA: 7 });
+    expect(await refusalCodes()).toEqual(["CGPA_OUT_OF_RANGE"]);
+    await fix({ minimumCGPA: 2.5 });
+
+    await fix({ philosophy: "Too short to be a philosophy." });
+    expect(await refusalCodes()).toEqual(
+      expect.arrayContaining(["PHILOSOPHY_LENGTH", "PHILOSOPHY_GRACE_REQUIRED"]),
+    );
+
+    // Editing the philosophy after it passed, while claiming a pass in the
+    // save, leaves the old result stale: GRACE must be run again.
+    expect(
+      (await save({ philosophy: `${readyPhilosophy} amended`, philosophyGracePass: true })).status,
+    ).toBe(200);
+    expect(await refusalCodes()).toEqual(["PHILOSOPHY_GRACE_REQUIRED"]);
+
+    expect(await stage()).toEqual({ currentPhase: 1, status: "DRAFT" });
+    expect(await prisma.phaseTransition.count({ where: { submissionId } })).toBe(0);
+
+    // Back to the wording that passed: the draft is clean and submits.
+    expect((await save({ philosophy: readyPhilosophy })).status).toBe(200);
+    expect((await submit()).status).toBe(200);
+    expect(await stage()).toEqual({ currentPhase: 2, status: "IN_REVIEW" });
+  });
+
+  it("never lets a save mark the philosophy as passing GRACE", async () => {
+    expect(
+      (
+        await save({
+          philosophy: readyPhilosophy,
+          philosophyGracePass: true,
+          philosophyGrace: { passed: true, contentHash: philosophyGraceHash(readyPhilosophy) },
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      await prisma.submissionContent.findUniqueOrThrow({
+        where: { submissionId },
+        select: { philosophyGracePass: true, philosophyGrace: true },
+      }),
+    ).toEqual({ philosophyGracePass: false, philosophyGrace: null });
   });
 });
