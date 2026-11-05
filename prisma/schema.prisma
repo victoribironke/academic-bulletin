@@ -210,6 +210,8 @@ model User {
   reviewCycles     ReviewCycle[]
   programmeAssignments UserProgramme[]
   activities       ActivityLog[]
+  // Review phases this user owns by name, beyond what their role grants
+  phaseOwnerships  PhaseOwner[]
 
   @@map("users")
 }
@@ -485,6 +487,8 @@ model PhaseTransition {
   transitionedAt DateTime @default(now())
   // When this was included in a daily summary email (null = not yet sent)
   notifiedAt     DateTime?
+  // Evidence a phase requires to close, e.g. the Senate minute reference
+  reference      String?
 
   // Foreign Keys
   submissionId  String
@@ -495,7 +499,27 @@ model PhaseTransition {
   performedBy User       @relation(fields: [performedById], references: [id], onDelete: Restrict)
 
   @@index([notifiedAt, transitionedAt])
+  @@index([submissionId, toPhase, transitionedAt])
   @@map("phase_transitions")
+}
+
+// Who may act on a bulletin at each review phase. A row names either a role
+// (its usual scope applies: department roles their department, Deans their
+// school, administrators everywhere) or a single user, who may then act on
+// every bulletin at that phase. Kept as data so phase owners can change, for
+// example when Phases 6 to 9 are assigned, without a code change.
+model PhaseOwner {
+  id        String    @id @default(cuid())
+  phase     Int
+  role      UserRole?
+  userId    String?
+  createdAt DateTime  @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([phase, role])
+  @@unique([phase, userId])
+  @@map("phase_owners")
 }
 
 // ============================================================================

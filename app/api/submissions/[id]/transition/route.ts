@@ -7,8 +7,11 @@ import {
 } from "@/lib/api-auth";
 import {
   canPerformWorkflowAction,
+  clearedPreviousGate,
   resolveWorkflowTransition,
 } from "@/lib/submissions/workflow";
+import { loadPhaseOwners, previousGateActorId } from "@/lib/submissions/phase-owners";
+import { PHASE_REQUIRED_EVIDENCE } from "@/lib/submissions/phases";
 import { getSubmitReadinessIssues } from "@/lib/submissions/submit-readiness";
 import { recordActivity } from "@/lib/activity-log";
 import {
@@ -61,14 +64,33 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       !canPerformWorkflowAction(
         {
           role: user.role,
+          userId: user.id,
           currentPhase: submission.currentPhase,
           currentStatus: submission.status,
+          owners: await loadPhaseOwners(),
         },
         action,
       )
     ) {
       return NextResponse.json(
         { error: "This action is not available to your role at the current phase." },
+        { status: 403 },
+      );
+    }
+
+    if (
+      clearedPreviousGate(
+        action,
+        user.id,
+        await previousGateActorId(id, submission.currentPhase),
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "You moved this bulletin into its current phase, so someone else must clear it.",
+          code: "SEPARATION_OF_DUTIES",
+        },
         { status: 403 },
       );
     }
@@ -88,6 +110,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
     const newPhase = resolved.phase;
     const newStatus = resolved.status;
+
+    // Some phases close only with evidence, e.g. Senate with its minute reference.
+    const requiredEvidence =
+      action === "APPROVE" ? PHASE_REQUIRED_EVIDENCE[fromPhase] : undefined;
+    const reference =
+      typeof body.reference === "string" ? body.reference.trim() : "";
+    if (requiredEvidence && (!reference || reference.length > 200)) {
+      return NextResponse.json(
+        {
+          error: `Enter the ${requiredEvidence} (up to 200 characters) to approve this phase.`,
+          code: "EVIDENCE_REQUIRED",
+        },
+        { status: 400 },
+      );
+    }
 
     if (action === "SUBMIT") {
       const gate = await requireSubmissionWriteAccess(user, id);
@@ -134,6 +171,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           toPhase: newPhase,
           action,
           remarks,
+          reference: requiredEvidence ? reference : null,
           performedById: user.id,
         },
         include: {
@@ -174,6 +212,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             toPhase: newPhase,
             status: newStatus,
             ...(remarks?.trim() && { remarks: remarks.trim() }),
+            ...(requiredEvidence && { reference }),
           },
         },
         tx,

@@ -72,10 +72,7 @@ import {
   PHASE_NAMES as phaseNames,
   TOTAL_PHASES,
 } from "@/lib/submissions/phases";
-import {
-  canEditSubmissionAtStage,
-  getAllowedWorkflowActions,
-} from "@/lib/submissions/workflow";
+import type { SubmissionWorkflow } from "@/lib/submissions/phase-owners";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { PhaseTracker } from "@/components/shared/phase-tracker";
@@ -149,6 +146,8 @@ interface Submission {
   } | null;
   comments: Comment[];
   phaseTransitions: PhaseTransition[];
+  /** What the signed-in person may do now, worked out by the server. */
+  workflow?: SubmissionWorkflow & { canEdit: boolean };
 }
 
 interface Comment {
@@ -457,6 +456,8 @@ export default function SubmissionDetailPage({
     "APPROVE" | "REJECT" | "RETURN" | null
   >(null);
   const [reviewRemarks, setReviewRemarks] = useState("");
+  // Evidence some phases need to close, e.g. the Senate minute reference
+  const [reviewReference, setReviewReference] = useState("");
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [submitBlockers, setSubmitBlockers] = useState<string[] | null>(null);
 
@@ -489,23 +490,11 @@ export default function SubmissionDetailPage({
 
   const submissionsBackHref = "/submissions";
 
-  const workflowActions =
-    currentUser && submission
-      ? getAllowedWorkflowActions({
-          role: currentUser.role,
-          currentPhase: submission.currentPhase,
-          currentStatus: submission.status,
-        })
-      : [];
+  // The server decides from the phase owners and who cleared the last gate.
+  const workflowActions = submission?.workflow?.actions ?? [];
+  const requiredEvidence = submission?.workflow?.requiredEvidence ?? null;
   const canEdit = Boolean(
-    currentUser &&
-      submission &&
-      canEditSubmissionAtStage({
-        role: currentUser.role,
-        currentPhase: submission.currentPhase,
-        currentStatus: submission.status,
-      }) &&
-      isAssignedSubmission,
+    currentUser && submission?.workflow?.canEdit && isAssignedSubmission,
   );
   const canComment =
     hasPermission("comment:submission") || hasPermission("review:submission");
@@ -865,6 +854,8 @@ export default function SubmissionDetailPage({
         body: JSON.stringify({
           action,
           remarks,
+          ...(action === "APPROVE" &&
+            requiredEvidence && { reference: reviewReference.trim() }),
         }),
       });
 
@@ -886,6 +877,7 @@ export default function SubmissionDetailPage({
         toast.success(messages[action] || "Action completed");
         setReviewAction(null);
         setReviewRemarks("");
+        setReviewReference("");
         fetchSubmission();
       } else {
         const data = await response.json().catch(() => ({}));
@@ -904,6 +896,7 @@ export default function SubmissionDetailPage({
 
   const openReview = (action: "APPROVE" | "REJECT" | "RETURN") => {
     setReviewRemarks("");
+    setReviewReference("");
     setReviewAction(action);
   };
 
@@ -1278,6 +1271,11 @@ export default function SubmissionDetailPage({
                     </Button>
                   )}
                 </>
+              )}
+              {submission.workflow?.clearedPreviousGate && (
+                <p className="text-sm text-muted-foreground">
+                  You moved this bulletin into this phase, so someone else must clear it.
+                </p>
               )}
 
               <Sheet>
@@ -2254,6 +2252,18 @@ export default function SubmissionDetailPage({
                   : "The bulletin goes back one phase with your remarks, and the department is emailed."}
             </DialogDescription>
           </DialogHeader>
+          {reviewAction === "APPROVE" && requiredEvidence && (
+            <div className="space-y-2">
+              <Label htmlFor="review-reference">{requiredEvidence} *</Label>
+              <Input
+                id="review-reference"
+                value={reviewReference}
+                maxLength={200}
+                onChange={(e) => setReviewReference(e.target.value)}
+                placeholder="As recorded in the minutes"
+              />
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="review-remarks">
               {reviewAction === "APPROVE" ? "Remarks (optional)" : "What needs to change?"}
@@ -2285,7 +2295,10 @@ export default function SubmissionDetailPage({
               }
               disabled={
                 isTransitioning ||
-                (reviewAction !== "APPROVE" && !reviewRemarks.trim())
+                (reviewAction !== "APPROVE" && !reviewRemarks.trim()) ||
+                (reviewAction === "APPROVE" &&
+                  Boolean(requiredEvidence) &&
+                  !reviewReference.trim())
               }
               className={
                 reviewAction === "APPROVE"

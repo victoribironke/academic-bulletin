@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import {
   canViewSubmission,
+  canWriteSubmission,
   getApiUser,
   requireApiUser,
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
 import { AUTOSAVE_COALESCE_MINUTES, recordActivity } from "@/lib/activity-log";
+import { getSubmissionWorkflow } from "@/lib/submissions/phase-owners";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -89,7 +91,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    return NextResponse.json(submission);
+    // What this person may do now, worked out from the phase owners, so the
+    // page shows exactly the actions the transition route will accept.
+    const workflow = {
+      ...(await getSubmissionWorkflow(auth.user, submission)),
+      canEdit: await canWriteSubmission(auth.user, id),
+    };
+
+    return NextResponse.json({ ...submission, workflow });
   } catch (error) {
     console.error("Failed to fetch submission:", error);
     return NextResponse.json(
