@@ -76,6 +76,7 @@ import { GET as listActivities } from "@/app/api/activity-log/route";
 import { GET as getDashboardStats } from "@/app/api/dashboard/stats/route";
 import { courseGraceContentHash } from "@/lib/courses/grace-compliance";
 import { philosophyGraceHash } from "@/lib/submissions/submit-readiness";
+import { DEFAULT_PHASE_OWNERS } from "@/lib/submissions/workflow";
 
 const ids = {
   schoolA: "test-school-a",
@@ -2363,5 +2364,162 @@ describe("submit validators", () => {
         select: { philosophyGracePass: true, philosophyGrace: true },
       }),
     ).toEqual({ philosophyGracePass: false, philosophyGrace: null });
+  });
+});
+
+// Who may act at each phase is data, no one clears two gates in a row, and
+// Senate closes only with its minute reference.
+describe("phase owners and separation of duties", () => {
+  const cycleId = "phase-owners-cycle";
+  const submissionId = "phase-owners-submission";
+  const secondAdmin = "test-admin-2";
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.create({
+      data: { id: cycleId, name: "Phase Owners", createdById: ids.super },
+    });
+    await prisma.user.create({
+      data: {
+        id: secondAdmin,
+        email: `${secondAdmin}@example.edu`,
+        firstName: "Second",
+        lastName: "Admin",
+        role: "ADMIN",
+      },
+    });
+  });
+
+  beforeEach(async () => {
+    await prisma.phaseOwner.deleteMany({});
+    await prisma.submission.deleteMany({ where: { id: submissionId } });
+  });
+
+  afterAll(async () => {
+    await prisma.phaseOwner.deleteMany({});
+    await prisma.submission.deleteMany({ where: { id: submissionId } });
+    await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+    await prisma.user.deleteMany({ where: { id: secondAdmin } });
+  });
+
+  const act = async (userId: string, action: string, extra: object = {}) => {
+    authState.userId = userId;
+    const response = await transitionSubmission(
+      new NextRequest(`http://localhost/api/submissions/${submissionId}/transition`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ...extra }),
+      }),
+      { params: Promise.resolve({ id: submissionId }) },
+    );
+    return { status: response.status, body: await response.json() };
+  };
+  const workflowFor = async (userId: string) => {
+    authState.userId = userId;
+    const response = await getSubmission(
+      new NextRequest(`http://localhost/api/submissions/${submissionId}`),
+      { params: Promise.resolve({ id: submissionId }) },
+    );
+    return { status: response.status, workflow: (await response.json()).workflow };
+  };
+  const phase = async () =>
+    (
+      await prisma.submission.findUniqueOrThrow({
+        where: { id: submissionId },
+        select: { currentPhase: true },
+      })
+    ).currentPhase;
+  const createDraft = async (programmeId: string) => {
+    await prisma.submission.create({
+      data: {
+        id: submissionId,
+        title: "Phase Owners Bulletin",
+        programmeId,
+        createdById: ids.hod,
+        cycleId,
+      },
+    });
+  };
+
+  it("lets no single person clear two gates in a row", async () => {
+    await createDraft(ids.programmeA);
+    await prepareDraftForSubmit(submissionId);
+
+    expect((await act(ids.hod, "SUBMIT")).status).toBe(200);
+    expect((await act(ids.dean, "APPROVE")).status).toBe(200);
+    expect((await act(ids.admin, "APPROVE")).status).toBe(200);
+    expect(await phase()).toBe(4);
+
+    // The admin who cleared Phase 3 can't also clear Phase 4, and the page
+    // is told why instead of being offered the button.
+    expect(await act(ids.admin, "APPROVE")).toMatchObject({
+      status: 403,
+      body: { code: "SEPARATION_OF_DUTIES" },
+    });
+    expect((await workflowFor(ids.admin)).workflow).toMatchObject({
+      actions: ["RETURN", "REJECT"],
+      clearedPreviousGate: true,
+    });
+    expect((await workflowFor(secondAdmin)).workflow).toMatchObject({
+      actions: ["APPROVE", "RETURN", "REJECT"],
+      clearedPreviousGate: false,
+    });
+
+    // The Super Admin override is bound by the same rule.
+    expect((await act(secondAdmin, "APPROVE")).status).toBe(200);
+    expect((await act(ids.super, "APPROVE")).status).toBe(200);
+    expect(await phase()).toBe(6);
+    expect((await act(ids.super, "APPROVE", { reference: "SEN/2027/14" })).status).toBe(403);
+
+    // Senate closes only with its minute reference, which is kept on the record.
+    expect((await workflowFor(ids.admin)).workflow.requiredEvidence).toBe(
+      "Senate minute reference",
+    );
+    expect(await act(ids.admin, "APPROVE")).toMatchObject({
+      status: 400,
+      body: { code: "EVIDENCE_REQUIRED" },
+    });
+    expect((await act(ids.admin, "APPROVE", { reference: "   " })).status).toBe(400);
+    expect(await phase()).toBe(6);
+    expect((await act(ids.admin, "APPROVE", { reference: " SEN/2027/14 " })).status).toBe(200);
+    expect(
+      await prisma.phaseTransition.findFirst({
+        where: { submissionId, fromPhase: 6, action: "APPROVE" },
+        select: { reference: true, performedById: true },
+      }),
+    ).toEqual({ reference: "SEN/2027/14", performedById: ids.admin });
+    expect(await phase()).toBe(7);
+
+    // Refusals wrote nothing: one transition per gate that was actually cleared.
+    expect(await prisma.phaseTransition.count({ where: { submissionId } })).toBe(6);
+  });
+
+  it("follows the phase-owner table, including owners named by user", async () => {
+    // Phase 7 (Editing) handed from Academic Planning to one named person,
+    // here a Dean of another school, without any code change.
+    await prisma.phaseOwner.createMany({
+      data: [
+        ...DEFAULT_PHASE_OWNERS.filter((owner) => owner.phase !== 7),
+        { phase: 7, role: null, userId: ids.dean },
+      ],
+    });
+    await createDraft(ids.programmeB);
+    await prisma.submission.update({
+      where: { id: submissionId },
+      data: { currentPhase: 7, status: "IN_REVIEW" },
+    });
+
+    expect((await act(ids.admin, "APPROVE")).status).toBe(403);
+    expect((await workflowFor(ids.admin)).workflow.actions).toEqual([]);
+
+    // The named owner sees and clears a School B bulletin at their phase.
+    const owner = await workflowFor(ids.dean);
+    expect(owner.status).toBe(200);
+    expect(owner.workflow.actions).toEqual(["APPROVE", "RETURN", "REJECT"]);
+    expect((await act(ids.dean, "APPROVE")).status).toBe(200);
+    expect(await phase()).toBe(8);
+
+    // Past their phase, the bulletin is back outside their reach.
+    expect((await workflowFor(ids.dean)).status).toBe(403);
+    expect((await act(ids.admin, "APPROVE")).status).toBe(200);
   });
 });

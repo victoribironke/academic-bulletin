@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
 import { canEditSubmissionAtStage } from "@/lib/submissions/workflow";
+import { isNamedPhaseOwner, loadPhaseOwners } from "@/lib/submissions/phase-owners";
 import type { UserRole } from "@prisma/client";
 
 export interface ApiUser {
@@ -113,6 +114,7 @@ export async function canViewSubmission(
   const submission = await prisma.submission.findUnique({
     where: { id: submissionId },
     select: {
+      currentPhase: true,
       programme: {
         select: {
           id: true,
@@ -124,9 +126,8 @@ export async function canViewSubmission(
   if (!submission) return false;
 
   if (user.role === "HOD") {
-    return submission.programme.department.id === user.departmentId;
-  }
-  if (user.role === "PROGRAMME_COORDINATOR") {
+    if (submission.programme.department.id === user.departmentId) return true;
+  } else if (user.role === "PROGRAMME_COORDINATOR") {
     const assigned = await prisma.userProgramme.findUnique({
       where: {
         userId_programmeId: {
@@ -136,19 +137,22 @@ export async function canViewSubmission(
       },
       select: { id: true },
     });
-    return Boolean(assigned);
+    if (assigned) return true;
+  } else if (user.role === "DEAN") {
+    if (submission.programme.department.schoolId === user.schoolId) return true;
   }
-  if (user.role === "DEAN") {
-    return submission.programme.department.schoolId === user.schoolId;
-  }
-  return false;
+
+  // Someone named as owner of the bulletin's current phase sees every
+  // bulletin at that phase, whatever their unit.
+  return isNamedPhaseOwner(await loadPhaseOwners(), user.id, submission.currentPhase);
 }
 
 /**
  * Check if the user can write to a submission (content, courses, images, submit draft).
- * Editing follows the workflow owner: department at phase 1, Dean at phase 2,
- * and Academic Planning from phase 3 onward. Super Admin is the recovery
- * override. Unit/programme scope is still enforced below.
+ * Editing follows the phase owners (department at phase 1, Dean at phase 2,
+ * Academic Planning from phase 3 unless the phase_owners table says
+ * otherwise). Super Admin is the recovery override. Unit/programme scope is
+ * still enforced below for owners by role.
  */
 export async function canWriteSubmission(
   user: ApiUser,
@@ -172,15 +176,19 @@ export async function canWriteSubmission(
     return false;
   }
 
+  const owners = await loadPhaseOwners();
   if (
     !canEditSubmissionAtStage({
       role: user.role,
+      userId: user.id,
       currentPhase: submission.currentPhase,
       currentStatus: submission.status,
+      owners,
     })
   ) return false;
 
   if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
+  if (isNamedPhaseOwner(owners, user.id, submission.currentPhase)) return true;
 
   if (user.role === "HOD") {
     return submission.programme.department.id === user.departmentId;
