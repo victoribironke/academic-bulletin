@@ -158,12 +158,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           ...(content.philosophy !== undefined && {
             philosophy: content.philosophy,
           }),
-          ...(content.philosophyGracePass !== undefined && {
-            philosophyGracePass: content.philosophyGracePass,
-          }),
-          ...(content.philosophyGrace !== undefined && {
-            philosophyGrace: content.philosophyGrace,
-          }),
+          // The philosophy's GRACE result is written only by the GRACE check
+          // itself; a save can't mark the philosophy as passed.
           ...(content.mission !== undefined && { mission: content.mission }),
           ...(content.vision !== undefined && { vision: content.vision }),
           ...(content.objectives !== undefined && {
@@ -210,8 +206,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           submissionId: id,
           programmeInfo: content.programmeInfo || null,
           philosophy: content.philosophy || null,
-          philosophyGracePass: content.philosophyGracePass || false,
-          philosophyGrace: content.philosophyGrace || null,
           mission: content.mission || null,
           vision: content.vision || null,
           objectives: content.objectives || null,

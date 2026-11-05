@@ -9,6 +9,7 @@ import {
   canPerformWorkflowAction,
   resolveWorkflowTransition,
 } from "@/lib/submissions/workflow";
+import { getSubmitReadinessIssues } from "@/lib/submissions/submit-readiness";
 import { recordActivity } from "@/lib/activity-log";
 import {
   describeCourseGraceBlockers,
@@ -97,15 +98,27 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
+      // Report every problem at once, so the department can fix them in one go.
+      const readiness = await getSubmitReadinessIssues(id);
       const blockers = await getCourseGraceBlockers(id);
-      if (hasCourseGraceBlockers(blockers)) {
+      const graceBlocked = hasCourseGraceBlockers(blockers);
+      if (readiness.length > 0 || graceBlocked) {
         return NextResponse.json(
           {
             error:
-              "Every course description must pass GRACE before this bulletin can be submitted.",
-            code: "GRACE_COMPLIANCE_REQUIRED",
-            issues: describeCourseGraceBlockers(blockers),
-            blockers,
+              readiness.length > 0
+                ? "This bulletin is not ready to submit."
+                : "Every course description must pass GRACE before this bulletin can be submitted.",
+            code:
+              readiness.length > 0
+                ? "SUBMISSION_INCOMPLETE"
+                : "GRACE_COMPLIANCE_REQUIRED",
+            issues: [
+              ...readiness.map((item) => item.message),
+              ...(graceBlocked ? describeCourseGraceBlockers(blockers) : []),
+            ],
+            readiness,
+            ...(graceBlocked && { blockers }),
           },
           { status: 409 },
         );
