@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { TableSkeleton } from "@/components/shared/states";
 import { SubmissionsList } from "@/components/submissions/submissions-list";
 
-/** HODs: read-only view of every programme's submission, own programme first. */
+/** HODs: read-only view of every programme in their school, own department first. */
 export default function SubmissionsBrowsePage() {
   const router = useRouter();
   const { hasPermission } = usePermission();
@@ -28,8 +28,8 @@ export default function SubmissionsBrowsePage() {
   return (
     <div>
       <PageHeader
-        title="All programme submissions"
-        description="Other departments' submissions are read-only. Your own programme is listed first."
+        title="Programmes in your school"
+        description="Other departments' bulletins in your school are read-only. Your own department is listed first."
         actions={
           <Button asChild variant="outline">
             <Link href="/submissions/me">
@@ -43,7 +43,10 @@ export default function SubmissionsBrowsePage() {
       {userLoading || !currentUser || !isHod ? (
         <TableSkeleton columns={6} />
       ) : (
-        <SubmissionsList highlightDepartmentId={currentUser.departmentId} />
+        <SubmissionsList
+          highlightDepartmentId={currentUser.departmentId}
+          hodSchoolScope
+        />
       )}
     </div>
   );
