@@ -508,7 +508,8 @@ export default function SubmissionDetailPage({
       isAssignedSubmission,
   );
   const canComment =
-    hasPermission("comment:submission") || hasPermission("review:submission");
+    (hasPermission("comment:submission") || hasPermission("review:submission")) &&
+    isAssignedSubmission;
   const canSubmit = workflowActions.includes("SUBMIT") && isAssignedSubmission;
   const canApprove = workflowActions.includes("APPROVE");
   const canReturn = workflowActions.includes("RETURN");
