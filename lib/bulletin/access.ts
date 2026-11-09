@@ -1,7 +1,7 @@
 import prisma from "@/lib/prisma";
 import {
   canAccessDepartment,
-  canViewSubmission,
+  canReadSubmission,
   isAdministrator,
   type ApiUser,
 } from "@/lib/api-auth";
@@ -25,7 +25,7 @@ export async function canExportBulletin(
       },
     });
 
-    if (!submission || !(await canViewSubmission(user, scope.submissionId))) {
+    if (!submission || !(await canReadSubmission(user, scope.submissionId))) {
       return false;
     }
     if (scope.programmeId && scope.programmeId !== submission.programmeId) {
