@@ -35,14 +35,27 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status");
     const phase = searchParams.get("phase");
     const programmeId = searchParams.get("programmeId");
+    // HODs see their department; the Browse page asks for their school.
+    const hodBrowsingSchool =
+      auth.user.role === "HOD" && searchParams.get("scope") === "school";
     const departmentId =
       auth.user.role === "HOD"
-        ? auth.user.departmentId
+        ? hodBrowsingSchool
+          ? null
+          : auth.user.departmentId
         : searchParams.get("departmentId");
     const schoolId =
-      auth.user.role === "DEAN"
+      auth.user.role === "DEAN" || hodBrowsingSchool
         ? auth.user.schoolId
-        : searchParams.get("schoolId");
+        : auth.user.role === "HOD"
+          ? null
+          : searchParams.get("schoolId");
+    if (hodBrowsingSchool && !auth.user.schoolId) {
+      return NextResponse.json(
+        { error: "Your account is not assigned to a school." },
+        { status: 403 },
+      );
+    }
     const createdById = searchParams.get("createdById");
     const cycleId = searchParams.get("cycleId");
 
