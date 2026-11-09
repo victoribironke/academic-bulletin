@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import {
+  canReadSubmission,
   canViewSubmission,
   getApiUser,
   requireApiUser,
@@ -18,7 +19,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const auth = await requireApiUser();
     if (!auth.ok) return auth.response;
-    if (!(await canViewSubmission(auth.user, id))) {
+    const isMember = await canViewSubmission(auth.user, id);
+    if (!isMember && !(await canReadSubmission(auth.user, id))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -87,6 +89,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         { error: "Submission not found" },
         { status: 404 },
       );
+    }
+
+    if (!isMember) {
+      // Browsing HODs see the bulletin, not the review discussion.
+      return NextResponse.json({
+        ...submission,
+        comments: [],
+        phaseTransitions: submission.phaseTransitions.map((transition) => ({
+          ...transition,
+          remarks: null,
+        })),
+      });
     }
 
     return NextResponse.json(submission);
