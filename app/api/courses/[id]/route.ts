@@ -6,7 +6,7 @@ import {
   isValidCourseCode,
 } from "@/lib/validation/name-format";
 import {
-  canViewSubmission,
+  canReadSubmission,
   getApiUser,
   requireApiUser,
   requireSubmissionWriteAccess,
@@ -51,7 +51,7 @@ export async function GET(
 
     const auth = await requireApiUser();
     if (!auth.ok) return auth.response;
-    if (!(await canViewSubmission(auth.user, course.submission.id))) {
+    if (!(await canReadSubmission(auth.user, course.submission.id))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
