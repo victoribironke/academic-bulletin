@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma";
 import { prepareCourseGraceState } from "@/lib/courses/grace-compliance";
+import { titleKey, uniqueTitle } from "@/lib/courses/unique-title";
 
 const EDITABLE_SUBMISSION_STATUSES = ["DRAFT", "CORRECTIONS_REQUIRED"] as const;
 
@@ -81,9 +82,12 @@ export async function preloadRegistryCoursesForSubmission(
 
   const existing = await prisma.course.findMany({
     where: { submissionId },
-    select: { id: true, code: true, masterCourseId: true },
+    select: { id: true, code: true, title: true, masterCourseId: true },
   });
   const existingCodes = new Set(existing.map((course) => course.code));
+  // Course titles are unique per submission. Some Registry courses share a
+  // title (e.g. GST 112 and GST 113), so later ones get their code appended.
+  const takenTitles = new Set(existing.map((course) => titleKey(course.title)));
   let added = 0;
   let linked = 0;
 
@@ -91,6 +95,10 @@ export async function preloadRegistryCoursesForSubmission(
     const programmeLink = master.programmeLinks[0];
     const effectiveType = programmeLink?.typeOverride ?? master.type;
     const wasPresent = existingCodes.has(master.code);
+    const title = wasPresent
+      ? (programmeLink?.titleOverride || master.title)
+      : uniqueTitle(programmeLink?.titleOverride || master.title, master.code, takenTitles);
+    if (!wasPresent) takenTitles.add(titleKey(title));
     const course = await prisma.course.upsert({
       where: {
         code_submissionId: { code: master.code, submissionId },
@@ -99,7 +107,7 @@ export async function preloadRegistryCoursesForSubmission(
         submissionId,
         masterCourseId: master.id,
         code: master.code,
-        title: programmeLink?.titleOverride || master.title,
+        title,
         units: programmeLink?.unitsOverride ?? master.units,
         status:
           effectiveType === "ELECTIVE" || programmeLink?.isCore === false
@@ -144,7 +152,7 @@ export async function preloadRegistryCoursesForSubmission(
       });
       if (!description) {
         const graceState = await prepareCourseGraceState(prisma, {
-          title: programmeLink?.titleOverride || master.title,
+          title,
           learningOutcomes,
           courseContent,
         });
