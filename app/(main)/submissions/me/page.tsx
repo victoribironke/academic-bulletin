@@ -93,7 +93,7 @@ export default function SubmissionsMePage() {
         description={message}
         action={
           <Button asChild variant="outline">
-            <Link href="/submissions/browse">Browse all programme submissions</Link>
+            <Link href="/submissions/browse">Browse programmes in your school</Link>
           </Button>
         }
         className="mt-8"
