@@ -145,6 +145,40 @@ export async function canViewSubmission(
 }
 
 /**
+ * Read-only access: everything `canViewSubmission` allows, plus HODs reading
+ * other departments' bulletins in their own school (the Browse page). Use it
+ * only on GET routes; comments, GRACE runs and edits keep `canViewSubmission`.
+ */
+export async function canReadSubmission(
+  user: ApiUser,
+  submissionId: string,
+): Promise<boolean> {
+  if (await canViewSubmission(user, submissionId)) return true;
+  if (user.role !== "HOD" || !user.schoolId) return false;
+
+  const submission = await prisma.submission.findUnique({
+    where: { id: submissionId },
+    select: { programme: { select: { department: { select: { schoolId: true } } } } },
+  });
+  return submission?.programme.department.schoolId === user.schoolId;
+}
+
+/** Read-only department access, with the same HOD school rule as above. */
+export async function canReadDepartment(
+  user: ApiUser,
+  departmentId: string,
+): Promise<boolean> {
+  if (await canAccessDepartment(user, departmentId)) return true;
+  if (user.role !== "HOD" || !user.schoolId) return false;
+
+  const department = await prisma.department.findUnique({
+    where: { id: departmentId },
+    select: { schoolId: true },
+  });
+  return department?.schoolId === user.schoolId;
+}
+
+/**
  * Check if the user can write to a submission (content, courses, images, submit draft).
  * Editing follows the workflow owner: department at phase 1, Dean at phase 2,
  * and Academic Planning from phase 3 onward. Super Admin is the recovery
