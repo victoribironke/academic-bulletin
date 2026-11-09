@@ -112,14 +112,22 @@ export async function GET(request: Request) {
         prisma.user.count({ where: { isActive: true } }),
       ]);
 
-    // What this person needs to act on next.
-    const actionStatuses =
-      ["HOD", "PROGRAMME_COORDINATOR"].includes(auth.user.role)
-        ? (["CORRECTIONS_REQUIRED", "DRAFT"] as const)
-        : (["IN_REVIEW"] as const);
-    const actionWhere = {
-      ...whereClause,
-      status: { in: [...actionStatuses] },
+    // What this person needs to act on next: bulletins at the phase their
+    // role owns (department at 1, Dean at 2, Academic Planning from 3).
+    const role = auth.user.role;
+    const actionStage: Prisma.SubmissionWhereInput =
+      role === "HOD" || role === "PROGRAMME_COORDINATOR"
+        ? { currentPhase: 1, status: { in: ["DRAFT", "CORRECTIONS_REQUIRED"] } }
+        : role === "DEAN"
+          ? { currentPhase: 2, status: { in: ["IN_REVIEW", "CORRECTIONS_REQUIRED"] } }
+          : role === "ADMIN"
+            ? {
+                currentPhase: { gte: 3 },
+                status: { in: ["IN_REVIEW", "CORRECTIONS_REQUIRED"] },
+              }
+            : { status: "IN_REVIEW" };
+    const actionWhere: Prisma.SubmissionWhereInput = {
+      AND: [whereClause, actionStage],
     };
     const [actionItems, actionTotal] = await Promise.all([
       prisma.submission.findMany({
