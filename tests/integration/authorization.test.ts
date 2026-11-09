@@ -46,6 +46,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 import prisma from "@/lib/prisma";
 import {
   canAccessDepartment,
+  canReadSubmission,
   canViewSubmission,
   canWriteSubmission,
   getApiUser,
@@ -56,7 +57,10 @@ import { DELETE as deleteUser, PATCH as updateUser } from "@/app/api/users/[id]/
 import { adminCreateUser } from "@/app/actions/admin";
 import { GET as listCourses } from "@/app/api/courses/route";
 import { POST as transitionSubmission } from "@/app/api/submissions/[id]/transition/route";
-import { PUT as updateSubmission } from "@/app/api/submissions/[id]/route";
+import {
+  GET as getSubmission,
+  PUT as updateSubmission,
+} from "@/app/api/submissions/[id]/route";
 import { POST as createComment } from "@/app/api/submissions/[id]/comments/route";
 import { POST as checkGrace } from "@/app/api/grace-check/route";
 import { GET as listMasterCourses } from "@/app/api/master-courses/route";
@@ -75,6 +79,7 @@ import { GET as listSubmissions } from "@/app/api/submissions/route";
 import { GET as listActivities } from "@/app/api/activity-log/route";
 import { GET as getDashboardStats } from "@/app/api/dashboard/stats/route";
 import { courseGraceContentHash } from "@/lib/courses/grace-compliance";
+import { preloadRegistryCoursesForSubmission } from "@/lib/courses/gst-pool";
 
 const ids = {
   schoolA: "test-school-a",
@@ -1843,5 +1848,194 @@ describe("activity log", () => {
         where: { actorId: ids.hod, description: "Updated TST 901 - Coalesce Test." },
       }),
     ).toBe(2);
+  });
+});
+
+describe("registry preload", () => {
+  it("keeps Registry courses that share a title instead of failing", async () => {
+    const shared = {
+      title: "Nigerian Peoples and Culture",
+      units: 2,
+      type: "GST_NUC" as const,
+      ownership: "INSTITUTIONAL" as const,
+      level: 100,
+      semester: 1,
+      discoverable: true,
+    };
+    await prisma.masterCourse.createMany({
+      data: [
+        { ...shared, code: "DUP 112" },
+        { ...shared, code: "DUP 113" },
+      ],
+    });
+    // Earlier tests may have moved the shared fixture along the workflow.
+    await prisma.submission.update({
+      where: { id: ids.submission },
+      data: { status: "DRAFT", currentPhase: 1 },
+    });
+    try {
+      await expect(
+        preloadRegistryCoursesForSubmission(ids.submission),
+      ).resolves.toMatchObject({ added: expect.any(Number) });
+      const courses = await prisma.course.findMany({
+        where: { submissionId: ids.submission, code: { in: ["DUP 112", "DUP 113"] } },
+        select: { code: true, title: true },
+        orderBy: { code: "asc" },
+      });
+      expect(courses).toEqual([
+        { code: "DUP 112", title: "Nigerian Peoples and Culture" },
+        { code: "DUP 113", title: "Nigerian Peoples and Culture (DUP 113)" },
+      ]);
+
+      // Running it again links the existing rows without errors.
+      await expect(
+        preloadRegistryCoursesForSubmission(ids.submission),
+      ).resolves.toMatchObject({ added: 0 });
+    } finally {
+      await prisma.course.deleteMany({
+        where: { submissionId: ids.submission, code: { in: ["DUP 112", "DUP 113"] } },
+      });
+      await prisma.programmeCourse.deleteMany({
+        where: { course: { code: { in: ["DUP 112", "DUP 113"] } } },
+      });
+      await prisma.masterCourse.deleteMany({
+        where: { code: { in: ["DUP 112", "DUP 113"] } },
+      });
+    }
+  });
+});
+
+describe("dashboard action required", () => {
+  it("lists only Phase 2 bulletins for a Dean, including returned ones", async () => {
+    const cycleIds = ["test-cycle-act-1", "test-cycle-act-2", "test-cycle-act-3"];
+    await prisma.reviewCycle.createMany({
+      data: cycleIds.map((id) => ({ id, name: id, createdById: ids.super })),
+    });
+    const rows = [
+      { cycleId: cycleIds[0], currentPhase: 2, status: "IN_REVIEW" as const },
+      { cycleId: cycleIds[1], currentPhase: 2, status: "CORRECTIONS_REQUIRED" as const },
+      { cycleId: cycleIds[2], currentPhase: 3, status: "IN_REVIEW" as const },
+    ];
+    await prisma.submission.createMany({
+      data: rows.map((row, i) => ({
+        id: `test-action-${i}`,
+        title: `Action ${i}`,
+        programmeId: ids.programmeA,
+        createdById: ids.hod,
+        ...row,
+      })),
+    });
+    try {
+      authState.userId = ids.dean;
+      const deanStats = await (
+        await getDashboardStats(new Request("http://localhost/api/dashboard/stats"))
+      ).json();
+      expect(
+        deanStats.actionRequired.items
+          .map((item: { id: string }) => item.id)
+          .filter((id: string) => id.startsWith("test-action-"))
+          .sort(),
+      ).toEqual(["test-action-0", "test-action-1"]);
+
+      // Phase 2 corrections belong to the Dean, not the department.
+      authState.userId = ids.hod;
+      const hodStats = await (
+        await getDashboardStats(new Request("http://localhost/api/dashboard/stats"))
+      ).json();
+      expect(
+        hodStats.actionRequired.items.map((item: { id: string }) => item.id),
+      ).not.toContain("test-action-1");
+    } finally {
+      await prisma.submission.deleteMany({ where: { id: { startsWith: "test-action-" } } });
+      await prisma.reviewCycle.deleteMany({ where: { id: { in: cycleIds } } });
+    }
+  });
+});
+
+describe("HOD browsing within their school", () => {
+  const sibling = {
+    department: "test-department-a2",
+    programme: "test-programme-a2",
+    submission: "test-submission-a2",
+    outside: "test-submission-b",
+    cycle: "test-cycle-browse",
+  };
+
+  beforeAll(async () => {
+    // Own cycle, so these don't clash with submissions left by earlier tests.
+    await prisma.reviewCycle.create({
+      data: { id: sibling.cycle, name: sibling.cycle, createdById: ids.super },
+    });
+    await prisma.submission.create({
+      data: { id: "test-submission-a-browse", title: "Own", programmeId: ids.programmeA, createdById: ids.hod, cycleId: sibling.cycle, status: "DRAFT" },
+    });
+    await prisma.department.create({
+      data: { id: sibling.department, name: "Test Department A2", code: "TDA2", schoolId: ids.schoolA },
+    });
+    await prisma.programme.create({
+      data: { id: sibling.programme, name: "Test Programme A2", code: "TPA2", departmentId: sibling.department },
+    });
+    await prisma.submission.createMany({
+      data: [
+        { id: sibling.submission, title: "Sibling", programmeId: sibling.programme, createdById: ids.super, cycleId: sibling.cycle, status: "DRAFT" },
+        { id: sibling.outside, title: "Other school", programmeId: ids.programmeB, createdById: ids.super, cycleId: sibling.cycle, status: "DRAFT" },
+      ],
+    });
+    await prisma.comment.create({
+      data: { submissionId: sibling.submission, authorId: ids.dean, content: "Internal note", type: "ISSUE", phase: 1 },
+    });
+  });
+
+  afterAll(async () => {
+    await prisma.comment.deleteMany({ where: { submissionId: sibling.submission } });
+    await prisma.submission.deleteMany({ where: { cycleId: sibling.cycle } });
+    await prisma.reviewCycle.deleteMany({ where: { id: sibling.cycle } });
+    await prisma.programme.deleteMany({ where: { id: sibling.programme } });
+    await prisma.department.deleteMany({ where: { id: sibling.department } });
+  });
+
+  it("can read but not edit or comment on another department's bulletin in the school", async () => {
+    authState.userId = ids.hod;
+    const hod = (await getApiUser())!;
+    expect(await canReadSubmission(hod, sibling.submission)).toBe(true);
+    expect(await canViewSubmission(hod, sibling.submission)).toBe(false);
+    expect(await canWriteSubmission(hod, sibling.submission)).toBe(false);
+    expect(await canReadSubmission(hod, sibling.outside)).toBe(false);
+
+    const response = await getSubmission(
+      new NextRequest(`http://localhost/api/submissions/${sibling.submission}`),
+      { params: Promise.resolve({ id: sibling.submission }) },
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).comments).toEqual([]);
+
+    const comment = await createComment(
+      new NextRequest(`http://localhost/api/submissions/${sibling.submission}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: "Not mine", type: "QUESTION" }),
+      }),
+      { params: Promise.resolve({ id: sibling.submission }) },
+    );
+    expect(comment.status).toBe(403);
+  });
+
+  it("lists the school only when asked, and never another school", async () => {
+    authState.userId = ids.hod;
+    const listIds = async (query: string) =>
+      ((await (await listSubmissions(new NextRequest(`http://localhost/api/submissions?cycleId=${sibling.cycle}${query}`))).json()) as { id: string }[]).map((row) => row.id);
+
+    const own = await listIds("");
+    expect(own).toContain("test-submission-a-browse");
+    expect(own).not.toContain(sibling.submission);
+
+    const school = await listIds("&scope=school");
+    expect(school).toEqual(expect.arrayContaining(["test-submission-a-browse", sibling.submission]));
+    expect(school).not.toContain(sibling.outside);
+
+    // A schoolId in the URL no longer widens an HOD's list.
+    const spoofed = await listIds(`&schoolId=${ids.schoolB}`);
+    expect(spoofed).not.toContain(sibling.outside);
+    expect(spoofed).toContain("test-submission-a-browse");
   });
 });
