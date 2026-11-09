@@ -1714,7 +1714,7 @@ describe("daily summary emails", () => {
       expect(first).toMatchObject({ transitions: 3, failed: 0 });
 
       // The Department hand-off goes to the active Dean for that School.
-      const deanEmails = sent.filter((m) => m.subject.includes("School review"));
+      const deanEmails = sent.filter((m) => m.subject.includes("School Board review"));
       expect(deanEmails.map((m) => m.to[0]).sort()).toEqual(
         [
           `${ids.dean}@example.edu`,

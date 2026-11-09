@@ -55,7 +55,7 @@ export function HelpButton() {
               <li>Address comments, update content, and resubmit if returned.</li>
             </ol>
             <p className="text-muted-foreground">
-              Department submissions go directly to School Approval. A Dean&apos;s
+              Department submissions go directly to School Board Review. A Dean&apos;s
               approval sends them directly to Academic Planning; Academic
               Planning controls the later stages.
             </p>

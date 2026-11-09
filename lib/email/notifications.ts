@@ -250,7 +250,7 @@ export async function sendDailyDigests(now = new Date()): Promise<DigestResult> 
 
     for (const { email, items } of byDean.values()) {
       const content = renderDigest({
-        heading: "Bulletins awaiting School review",
+        heading: "Bulletins awaiting School Board review",
         intro: "These bulletins now require action from the School:",
         items,
         link: `${site}/submissions`,
@@ -258,7 +258,7 @@ export async function sendDailyDigests(now = new Date()): Promise<DigestResult> 
       });
       const ok = await sendEmail({
         to: [email],
-        subject: `Daily summary: ${items.length} item${items.length === 1 ? "" : "s"} for School review`,
+        subject: `Daily summary: ${items.length} item${items.length === 1 ? "" : "s"} for School Board review`,
         ...content,
       });
       if (ok) result.deanEmails++;

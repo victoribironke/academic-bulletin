@@ -126,7 +126,7 @@ Once all sections are complete and validated:
    - The Programme Duration has not been selected.
    - The Philosophy has not passed GRACE compliance.
    - Any course descriptions have failed GRACE compliance.
-3. If all validations pass, the bulletin moves immediately to **Phase 2: School Approval** for the Dean. The Dean can return it with correction notes or approve and send it directly to Academic Planning.
+3. If all validations pass, the bulletin moves immediately to **Phase 2: School Board Review** for the Dean. The Dean can return it with correction notes or approve and send it directly to Academic Planning.
 
 > **HODs and assigned Programme Coordinators can submit** their programme's bulletin to the School. Academic Planning does not need to approve this hand-off.
 
@@ -150,7 +150,7 @@ Each submission displays:
 | Phase | Name                              | Description                                      |
 | ----- | --------------------------------- | ------------------------------------------------ |
 | 1     | Preparation & Departmental Review | Draft preparation and internal departmental review |
-| 2     | School Approval                   | Dean-level approval                              |
+| 2     | School Board Review               | Dean-level approval                              |
 | 3     | Academic Planning Review          | Central academic planning review                 |
 | 4     | Corrections                       | Corrections based on review feedback             |
 | 5     | Final Consolidation               | Final consolidation of all changes               |

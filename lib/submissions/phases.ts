@@ -10,7 +10,7 @@ export const PHASES = [
     name: "Preparation & Departmental Review",
     short: "Dept Prep/Review",
   },
-  { number: 2, name: "School Approval", short: "School" },
+  { number: 2, name: "School Board Review", short: "School Board Review" },
   { number: 3, name: "Academic Planning Review", short: "Academic Planning" },
   { number: 4, name: "Corrections", short: "Corrections" },
   { number: 5, name: "Final Consolidation", short: "Consolidation" },
@@ -23,7 +23,7 @@ export const PHASES = [
 
 export const TOTAL_PHASES = PHASES.length;
 
-/** Full phase names by number, e.g. PHASE_NAMES[2] === "School Approval". */
+/** Full phase names by number, e.g. PHASE_NAMES[2] === "School Board Review". */
 export const PHASE_NAMES: Record<number, string> = Object.fromEntries(
   PHASES.map((p) => [p.number, p.name]),
 );
