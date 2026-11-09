@@ -5,7 +5,11 @@ import {
   isValidName,
   toTitleCase,
 } from "@/lib/validation/name-format";
-import { canAccessDepartment, requireApiUser } from "@/lib/api-auth";
+import {
+  canAccessDepartment,
+  canReadDepartment,
+  requireApiUser,
+} from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
 
 // Valid enum values for validation
@@ -51,10 +55,19 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
+    const requestedDepartmentId = searchParams.get("departmentId");
+    // HODs browsing a bulletin in their school can read that department's staff.
+    const hodReadingOther =
+      auth.user.role === "HOD" &&
+      !!requestedDepartmentId &&
+      requestedDepartmentId !== auth.user.departmentId &&
+      (await canReadDepartment(auth.user, requestedDepartmentId));
     const departmentId =
       ["HOD", "PROGRAMME_COORDINATOR"].includes(auth.user.role)
-        ? auth.user.departmentId
-        : searchParams.get("departmentId");
+        ? hodReadingOther
+          ? requestedDepartmentId
+          : auth.user.departmentId
+        : requestedDepartmentId;
     const type = searchParams.get("type");
     const rank = searchParams.get("rank");
     const qualification = searchParams.get("qualification");
