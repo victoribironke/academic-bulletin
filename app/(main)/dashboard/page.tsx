@@ -35,7 +35,7 @@ import {
 } from "lucide-react";
 import { useUser, usePermission } from "@/contexts/user-context";
 import { getRoleDisplayName } from "@/lib/auth";
-import { PHASE_NAMES } from "@/lib/submissions/phases";
+import { PHASE_NAMES, TOTAL_PHASES } from "@/lib/submissions/phases";
 import {
   Card,
   CardContent,
@@ -390,7 +390,7 @@ export default function DashboardPage() {
         <Card className="lg:col-span-3">
           <CardHeader>
             <CardTitle className="text-base">Submissions by phase</CardTitle>
-            <CardDescription>Where bulletins are in the 11-phase review</CardDescription>
+            <CardDescription>Where bulletins are in the {TOTAL_PHASES}-phase review</CardDescription>
           </CardHeader>
           <CardContent>
             {hasSubmissions ? (
