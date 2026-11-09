@@ -77,18 +77,21 @@ function formatDate(value: string | null): string {
  * Filterable, searchable table of submissions.
  * - `schoolId` limits results to one school (Deans).
  * - `highlightDepartmentId` pins and marks that department's programmes (HODs).
+ * - `hodSchoolScope` asks for the HOD's whole school, read-only (Browse page).
  * - `reloadKey` refetches when it changes (e.g. after creating drafts).
  * - `onCycleChange` reports the selected cycle to the parent page.
  */
 export function SubmissionsList({
   schoolId,
   highlightDepartmentId,
+  hodSchoolScope = false,
   reloadKey = 0,
   onCycleChange,
   emptyDescription,
 }: {
   schoolId?: string | null;
   highlightDepartmentId?: string | null;
+  hodSchoolScope?: boolean;
   reloadKey?: number;
   onCycleChange?: (cycleId: string | null) => void;
   emptyDescription?: string;
@@ -136,6 +139,7 @@ export function SubmissionsList({
     if (filterPhase !== "all") params.set("phase", filterPhase);
     if (filterCycle !== "all") params.set("cycleId", filterCycle);
     if (schoolId) params.set("schoolId", schoolId);
+    if (hodSchoolScope) params.set("scope", "school");
 
     let cancelled = false;
     fetch(`/api/submissions?${params.toString()}`)
@@ -151,7 +155,7 @@ export function SubmissionsList({
     return () => {
       cancelled = true;
     };
-  }, [schoolId, filterStatus, filterPhase, filterCycle, reloadKey, retryKey]);
+  }, [schoolId, hodSchoolScope, filterStatus, filterPhase, filterCycle, reloadKey, retryKey]);
 
   const visible = useMemo(() => {
     if (!submissions) return [];
