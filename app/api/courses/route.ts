@@ -13,7 +13,7 @@ import {
 } from "@/lib/api-auth";
 import { preloadGstCoursesForSubmission } from "@/lib/courses/gst-pool";
 import { recordActivity } from "@/lib/activity-log";
-import { synchronizeSubmissionGraceAssessments } from "@/lib/courses/grace-compliance";
+import { currentCourseGraceState } from "@/lib/courses/grace-compliance";
 
 // GET /api/courses - Get courses for a submission
 export async function GET(request: Request) {
@@ -38,7 +38,6 @@ export async function GET(request: Request) {
     // University-wide GST courses are centrally managed and automatically
     // appear in every editable programme submission.
     await preloadGstCoursesForSubmission(submissionId);
-    await synchronizeSubmissionGraceAssessments(submissionId);
 
     const where: Record<string, unknown> = { submissionId };
     if (level) where.level = parseInt(level);
@@ -73,7 +72,15 @@ export async function GET(request: Request) {
       orderBy: [{ level: "asc" }, { semester: "asc" }, { code: "asc" }],
     });
 
-    return NextResponse.json(courses);
+    // Reading the list never queues or runs a GRACE check: a description whose
+    // text changed since its last check is shown as waiting, not rewritten.
+    return NextResponse.json(
+      courses.map((course) =>
+        course.description
+          ? { ...course, description: currentCourseGraceState(course.title, course.description) }
+          : course,
+      ),
+    );
   } catch (error) {
     console.error("Failed to fetch courses:", error);
     return NextResponse.json(

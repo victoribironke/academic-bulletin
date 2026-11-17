@@ -253,7 +253,11 @@ export function CourseDescriptionForm({
   const [graceErrors, setGraceErrors] = useState<Record<string, string>>({});
   const [graceProgress, setGraceProgress] = useState<GraceProgress | null>(null);
   const [isProcessingGraceQueue, setIsProcessingGraceQueue] = useState(false);
+  // Bumped each time an editor asks for the waiting checks to run.
   const [graceQueueVersion, setGraceQueueVersion] = useState(0);
+  // Bumped to follow checks that are running on the server.
+  const [graceProgressPollVersion, setGraceProgressPollVersion] = useState(0);
+  const [graceQueueNotice, setGraceQueueNotice] = useState<string | null>(null);
 
   // Autosave state
   const [dirtyDescriptions, setDirtyDescriptions] = useState<Set<string>>(
@@ -327,11 +331,13 @@ export function CourseDescriptionForm({
   }, [submissionId, fetchCourses]);
 
   useEffect(() => {
+    // A bulk change to the course list (upload, import, delete) is a save, so
+    // it runs the checks it queued.
     const handleCoursesChanged = (event: Event) => {
       const detail = (event as CustomEvent<{ submissionId?: string }>).detail;
       if (detail?.submissionId !== submissionId) return;
       void fetchCourses(false);
-      setGraceQueueVersion((version) => version + 1);
+      if (!disabled) setGraceQueueVersion((version) => version + 1);
     };
     window.addEventListener("bulletin:courses-changed", handleCoursesChanged);
     return () =>
@@ -339,25 +345,72 @@ export function CourseDescriptionForm({
         "bulletin:courses-changed",
         handleCoursesChanged,
       );
-  }, [fetchCourses, submissionId]);
+  }, [fetchCourses, submissionId, disabled]);
 
-  // Bulk uploads, Registry imports, CCMAS, GST, and existing descriptions all
-  // enter the same queue. Drain it in small batches while this page is open.
+  // Reading progress never runs a check, so it is safe on opening the page and
+  // for anyone who can see the bulletin.
+  const refreshGraceProgress = useCallback(async (): Promise<GraceProgress | null> => {
+    try {
+      const res = await fetch(`/api/grace-check/progress?submissionId=${submissionId}`);
+      if (!res.ok) return null;
+      const data = (await res.json()) as { progress: GraceProgress };
+      setGraceProgress(data.progress);
+      return data.progress;
+    } catch {
+      return null;
+    }
+  }, [submissionId]);
+
+  // Follow checks running on the server (started by Submit, another tab or the
+  // daily job) for up to about five minutes, refreshing results as they land.
   useEffect(() => {
     if (!submissionId) return;
     let cancelled = false;
+    const checkedCount = (progress: GraceProgress | null) =>
+      progress ? progress.compliant + progress.needsRevision + progress.error : 0;
+    void (async () => {
+      let progress = await refreshGraceProgress();
+      let lastChecked = checkedCount(progress);
+      for (let poll = 0; !cancelled && progress?.checking && poll < 60; poll += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 5000));
+        if (cancelled) break;
+        progress = await refreshGraceProgress();
+        if (checkedCount(progress) !== lastChecked) {
+          lastChecked = checkedCount(progress);
+          await fetchCourses(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [submissionId, refreshGraceProgress, fetchCourses, graceProgressPollVersion]);
+
+  // Queued checks run only when an editor asks: saving a description, a bulk
+  // change to the course list, or "Run waiting checks". Opening the page never
+  // runs one. Each call runs a small batch; repeat while any were run.
+  useEffect(() => {
+    if (!submissionId || disabled || graceQueueVersion === 0) return;
+    let cancelled = false;
     const timeoutId = window.setTimeout(async () => {
       setIsProcessingGraceQueue(true);
-      // Checks claimed by another tab or the daily job finish elsewhere, so
-      // keep polling a while for them instead of stopping early.
-      let idlePolls = 0;
+      setGraceQueueNotice(null);
       try {
         while (!cancelled) {
           const response = await fetch("/api/grace-check/process", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ submissionId, limit: 3 }),
+            body: JSON.stringify({ submissionId }),
           });
+          if (response.status === 429) {
+            const data = (await response.json().catch(() => null)) as
+              | { retryAfterSeconds?: number }
+              | null;
+            setGraceQueueNotice(
+              `Checks paused: too many were run in a short time. Run the waiting checks again in ${data?.retryAfterSeconds ?? 60} seconds.`,
+            );
+            break;
+          }
           if (!response.ok) break;
           const data = (await response.json()) as {
             processed: number;
@@ -365,26 +418,22 @@ export function CourseDescriptionForm({
           };
           if (cancelled) break;
           setGraceProgress(data.progress);
-          if (data.processed > 0) {
-            idlePolls = 0;
-            await fetchCourses(false);
-            continue;
-          }
-          if (!data.progress?.checking || idlePolls >= 24) break;
-          idlePolls += 1;
-          await new Promise((resolve) => window.setTimeout(resolve, 5000));
-          if (cancelled) break;
+          if (data.processed === 0) break;
           await fetchCourses(false);
         }
       } finally {
-        if (!cancelled) setIsProcessingGraceQueue(false);
+        if (!cancelled) {
+          setIsProcessingGraceQueue(false);
+          // Checks another tab or job had already claimed finish there.
+          setGraceProgressPollVersion((version) => version + 1);
+        }
       }
     }, 750);
     return () => {
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [submissionId, fetchCourses, graceQueueVersion]);
+  }, [submissionId, disabled, fetchCourses, graceQueueVersion]);
 
   const updateDescription = (
     courseId: string,
@@ -467,9 +516,10 @@ export function CourseDescriptionForm({
           console.error(`Autosave failed for course ${courseId}:`, error);
         }
       }
-      // Only clear dirty flags for successfully saved descriptions
+      // Only clear dirty flags for successfully saved descriptions. Autosave
+      // queues the saved text for a check but doesn't run one on a draft.
       if (saved.size > 0) {
-        setGraceQueueVersion((version) => version + 1);
+        void refreshGraceProgress();
         setDirtyDescriptions((prev) => {
           const next = new Set(prev);
           saved.forEach((id) => next.delete(id));
@@ -483,7 +533,7 @@ export function CourseDescriptionForm({
         clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [dirtyDescriptions, descriptions, disabled]);
+  }, [dirtyDescriptions, descriptions, disabled, refreshGraceProgress]);
 
   const addLearningOutcome = (courseId: string) => {
     const current = descriptions[courseId]?.learningOutcomes || [];
@@ -627,6 +677,7 @@ export function CourseDescriptionForm({
       }));
     } finally {
       setGraceChecking(null);
+      void refreshGraceProgress();
     }
   };
 
@@ -714,10 +765,11 @@ export function CourseDescriptionForm({
         {graceProgress && graceProgress.total > 0 && (
           <div className="mb-4 rounded-lg border bg-muted/30 p-3 text-sm">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              {isProcessingGraceQueue && (
+              {(isProcessingGraceQueue || graceProgress.checking > 0) && (
                 <Loader2 className="h-4 w-4 animate-spin text-primary" />
               )}
               <span className="font-medium">
+                {(isProcessingGraceQueue || graceProgress.checking > 0) && "Checking — "}
                 {graceProgress.compliant + graceProgress.needsRevision} of{" "}
                 {graceProgress.total - graceProgress.missing} courses checked —{" "}
                 {graceProgress.compliant} compliant
@@ -727,6 +779,11 @@ export function CourseDescriptionForm({
                   </span>
                 )}
               </span>
+              {graceProgress.pending > 0 && (
+                <span className="text-blue-700">
+                  {graceProgress.pending} waiting for a check
+                </span>
+              )}
               {graceProgress.error > 0 && (
                 <span className="text-destructive">
                   {graceProgress.error} need to be retried
@@ -737,7 +794,23 @@ export function CourseDescriptionForm({
                   {graceProgress.missing} have no description yet
                 </span>
               )}
+              {!disabled &&
+                !isProcessingGraceQueue &&
+                graceProgress.pending + graceProgress.error > 0 && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="ml-auto h-7"
+                    onClick={() => setGraceQueueVersion((version) => version + 1)}
+                  >
+                    Run waiting checks
+                  </Button>
+                )}
             </div>
+            {graceQueueNotice && (
+              <p className="mt-2 text-amber-700">{graceQueueNotice}</p>
+            )}
           </div>
         )}
         {Object.entries(coursesByLevel)
@@ -796,15 +869,22 @@ export function CourseDescriptionForm({
                               )}
 
                               {desc.graceStatus === "CHECKING" ||
-                              desc.graceStatus === "PENDING" ? (
+                              desc.graceStatus === "PENDING" ||
+                              graceChecking === course.id ? (
                                 desc.courseContent ? (
                                   <Badge
                                     variant="outline"
                                     className="text-xs text-blue-700 border-blue-200 bg-blue-50"
                                   >
-                                    {desc.graceStatus === "CHECKING"
-                                      ? "Checking"
-                                      : "GRACE check required"}
+                                    {desc.graceStatus === "CHECKING" ||
+                                    graceChecking === course.id ? (
+                                      <>
+                                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                        Checking
+                                      </>
+                                    ) : (
+                                      "Waiting for GRACE check"
+                                    )}
                                   </Badge>
                                 ) : null
                               ) : hasGraceResult ? (

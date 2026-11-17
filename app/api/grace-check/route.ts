@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { GraceServiceError, runGraceCheck } from "@/lib/grace";
 import {
+  currentCourseGraceState,
   processGraceAssessment,
   synchronizeCourseGraceAssessment,
 } from "@/lib/courses/grace-compliance";
+import { aiRateLimitResponse } from "@/lib/rate-limit";
 import {
   canViewSubmission,
   getApiUser,
@@ -42,6 +44,9 @@ export async function POST(request: NextRequest) {
     if (!gate.ok) {
       return NextResponse.json({ error: gate.message }, { status: gate.status });
     }
+
+    const limited = await aiRateLimitResponse("graceCheck", user!.id);
+    if (limited) return limited;
 
     if (type === "philosophy" && submissionId) {
       if (!title || !content) {
@@ -144,7 +149,7 @@ export async function GET(request: NextRequest) {
     if (courseId) {
       const course = await prisma.course.findUnique({
         where: { id: courseId },
-        select: { submissionId: true },
+        select: { submissionId: true, title: true },
       });
       if (
         !course ||
@@ -152,9 +157,12 @@ export async function GET(request: NextRequest) {
       ) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
-      const desc = await prisma.courseDescription.findUnique({
+      const stored = await prisma.courseDescription.findUnique({
         where: { courseId },
         select: {
+          courseContent: true,
+          learningOutcomes: true,
+          graceContentHash: true,
           gracePass: true,
           graceResult: true,
           graceStatus: true,
@@ -162,6 +170,8 @@ export async function GET(request: NextRequest) {
           graceAssessment: { select: { error: true } },
         },
       });
+      // A result for older text is reported as waiting, without rewriting it.
+      const desc = stored && currentCourseGraceState(course.title, stored);
       return NextResponse.json({
         passed: desc?.gracePass ?? false,
         result: desc?.graceResult ?? null,

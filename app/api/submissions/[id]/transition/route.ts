@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import {
   canViewSubmission,
@@ -16,13 +16,43 @@ import { PHASE_REQUIRED_EVIDENCE } from "@/lib/submissions/phases";
 import { getSubmitReadinessIssues } from "@/lib/submissions/submit-readiness";
 import { recordActivity } from "@/lib/activity-log";
 import {
+  type CourseGraceBlockers,
   describeCourseGraceBlockers,
+  drainSubmissionGraceQueue,
   getCourseGraceBlockers,
   hasCourseGraceBlockers,
 } from "@/lib/courses/grace-compliance";
+import { takeRateLimit } from "@/lib/rate-limit";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
+}
+
+// A refused Submit can go on running waiting GRACE checks after it responds.
+export const maxDuration = 60;
+const SUBMIT_GRACE_BUDGET_MS = 30_000;
+
+/**
+ * Submit is one of the moments queued GRACE checks run: when it is refused
+ * because course checks are still waiting, it starts them on the server after
+ * responding, so trying again shortly can succeed. It counts against the same
+ * per-person limit as running the queue from the page.
+ */
+async function startWaitingGraceChecks(
+  submissionId: string,
+  userId: string,
+  blockers: CourseGraceBlockers,
+): Promise<boolean> {
+  if (blockers.pending.length + blockers.changed.length === 0) return false;
+  if (!(await takeRateLimit("graceQueue", userId)).ok) return false;
+  after(async () => {
+    try {
+      await drainSubmissionGraceQueue(submissionId, SUBMIT_GRACE_BUDGET_MS);
+    } catch (error) {
+      console.error("GRACE checks started by Submit failed:", error);
+    }
+  });
+  return true;
 }
 
 // POST /api/submissions/[id]/transition - Transition to a new phase
@@ -140,6 +170,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const readiness = await getSubmitReadinessIssues(id);
       const blockers = await getCourseGraceBlockers(id);
       const graceBlocked = hasCourseGraceBlockers(blockers);
+      const startedChecks =
+        graceBlocked && (await startWaitingGraceChecks(id, user.id, blockers));
       if (readiness.length > 0 || graceBlocked) {
         return NextResponse.json(
           {
@@ -154,9 +186,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             issues: [
               ...readiness.map((item) => item.message),
               ...(graceBlocked ? describeCourseGraceBlockers(blockers) : []),
+              ...(startedChecks
+                ? [
+                    "GRACE checks have started for the courses still waiting. Try submitting again in a few minutes.",
+                  ]
+                : []),
             ],
             readiness,
             ...(graceBlocked && { blockers }),
+            ...(startedChecks && { gracePending: true }),
           },
           { status: 409 },
         );

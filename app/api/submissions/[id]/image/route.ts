@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fileUrl, putFile } from "@/lib/storage";
 import { checkProfessionalImageFile } from "@/lib/grace";
 import { getApiUser, requireSubmissionWriteAccess } from "@/lib/api-auth";
+import { aiRateLimitResponse } from "@/lib/rate-limit";
 import {
   optimizePortrait,
   PortraitOptimizationError,
@@ -63,6 +64,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { status: 400 },
       );
     }
+
+    // The photo review is an AI call; it's limited per person.
+    const limited = await aiRateLimitResponse("imageReview", user!.id);
+    if (limited) return limited;
 
     const imageCheck = await checkProfessionalImageFile(file);
     if (!imageCheck.ok) {

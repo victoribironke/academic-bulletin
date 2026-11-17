@@ -203,8 +203,10 @@ async function publishAssessmentResult(
   error: string | null,
 ) {
   const checkedAt = result ? new Date() : null;
+  // Each stored result names the text it scored, alongside the model and
+  // rubric version the check recorded.
   const jsonResult = result
-    ? (result as unknown as Prisma.InputJsonValue)
+    ? ({ ...result, contentHash } as unknown as Prisma.InputJsonValue)
     : Prisma.JsonNull;
 
   await prisma.$transaction([
@@ -282,17 +284,62 @@ export async function processGraceAssessment(
   return prisma.graceAssessment.findUnique({ where: { contentHash } });
 }
 
+type StoredGraceState = {
+  courseContent: string | null;
+  learningOutcomes: Prisma.JsonValue;
+  graceContentHash: string | null;
+  graceStatus: GraceStatus;
+  gracePass: boolean;
+  graceResult: Prisma.JsonValue;
+  graceCheckedAt: Date | null;
+};
+
+/**
+ * A description's GRACE state as it stands for its current text, worked out
+ * without writing anything: a result for older text shows as waiting for a
+ * check. Saving, the queue and Submit bring the stored state up to date.
+ */
+export function currentCourseGraceState<T extends StoredGraceState>(
+  title: string,
+  description: T,
+): T {
+  const expectedHash = courseGraceContentHash({
+    title,
+    courseContent: description.courseContent,
+    learningOutcomes: description.learningOutcomes,
+  });
+  if (expectedHash === description.graceContentHash) return description;
+  return {
+    ...description,
+    graceStatus: "PENDING",
+    gracePass: false,
+    graceResult: null,
+    graceCheckedAt: null,
+  };
+}
+
+const STORED_GRACE_STATE = {
+  courseContent: true,
+  learningOutcomes: true,
+  graceContentHash: true,
+  graceStatus: true,
+  gracePass: true,
+  graceResult: true,
+  graceCheckedAt: true,
+} as const;
+
 export async function getSubmissionGraceProgress(
   submissionId: string,
 ): Promise<GraceProgress> {
-  const courses = await prisma.course.findMany({
+  const stored = await prisma.course.findMany({
     where: { submissionId },
-    select: {
-      description: {
-        select: { courseContent: true, graceStatus: true },
-      },
-    },
+    select: { title: true, description: { select: STORED_GRACE_STATE } },
   });
+  const courses = stored.map((course) => ({
+    description: course.description
+      ? currentCourseGraceState(course.title, course.description)
+      : null,
+  }));
   const progress: GraceProgress = {
     total: courses.length,
     missing: 0,
@@ -368,6 +415,26 @@ export async function processPendingGraceAssessments(options: {
     ? await getSubmissionGraceProgress(options.submissionId)
     : null;
   return { processed: assessments.length, progress };
+}
+
+/**
+ * Works through one bulletin's queued checks on the server until none are
+ * left or the time budget is used. A batch already running when the budget
+ * ends is allowed to finish; a check cut off by the platform is picked up
+ * again once it goes stale.
+ */
+export async function drainSubmissionGraceQueue(
+  submissionId: string,
+  budgetMs: number,
+): Promise<number> {
+  const deadline = Date.now() + budgetMs;
+  let processed = 0;
+  while (Date.now() < deadline) {
+    const batch = await processPendingGraceAssessments({ submissionId, limit: 3 });
+    processed += batch.processed;
+    if (batch.processed === 0) break;
+  }
+  return processed;
 }
 
 export type CourseGraceBlockers = {

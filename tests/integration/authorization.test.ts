@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { NextRequest } from "next/server";
+import { after, NextRequest } from "next/server";
 
 const authState = vi.hoisted(() => ({ userId: null as string | null }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -43,6 +43,10 @@ import {
 } from "@/app/api/submissions/[id]/route";
 import { GET as listComments, POST as createComment } from "@/app/api/submissions/[id]/comments/route";
 import { POST as checkGrace } from "@/app/api/grace-check/route";
+import { POST as processGraceQueue } from "@/app/api/grace-check/process/route";
+import { GET as readGraceProgress } from "@/app/api/grace-check/progress/route";
+import { AI_RATE_LIMITS, pruneRateLimits, takeRateLimit } from "@/lib/rate-limit";
+import { GRACE_RUBRIC_VERSION } from "@/lib/grace";
 import { GET as listMasterCourses } from "@/app/api/master-courses/route";
 import { PATCH as updateMasterCourse } from "@/app/api/master-courses/[id]/route";
 import { canExportBulletin } from "@/lib/bulletin/access";
@@ -86,6 +90,7 @@ const ids = {
 };
 
 async function clearFixtures() {
+  await prisma.apiRateLimit.deleteMany({});
   await prisma.activityLog.deleteMany({});
   await prisma.courseDescription.deleteMany({});
   await prisma.graceAssessment.deleteMany({});
@@ -2998,5 +3003,317 @@ describe("Google sign-in", () => {
     expect(
       await refreshSessionToken(token!, undefined, start + RECHECK_MS + 1),
     ).toMatchObject({ userId: ids.hod, checkedAt: start + RECHECK_MS + 1 });
+  });
+});
+
+// GRACE checks run on save or Submit, never because someone opened a page,
+// and the endpoints that spend AI credits are limited per person.
+describe("GRACE checks on save and submit", () => {
+  const draftCycle = "grace-draft-cycle";
+  const reviewCycle = "grace-review-cycle";
+  const draftId = "grace-draft-submission";
+  const reviewId = "grace-review-submission";
+  const words = (count: number, word = "topic") =>
+    Array.from({ length: count }, (_, index) => `${word}${index + 1}`).join(" ");
+  const learningOutcomes = ["Explain the core ideas of the course"];
+  let previousKey: string | undefined;
+
+  beforeAll(async () => {
+    // No AI service here: texts under the minimum length get the
+    // minimum-length result, which needs no model call.
+    previousKey = process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = "";
+    await prisma.reviewCycle.createMany({
+      data: [
+        { id: draftCycle, name: "GRACE Draft", createdById: ids.super },
+        { id: reviewCycle, name: "GRACE Review", createdById: ids.super },
+      ],
+    });
+  });
+
+  beforeEach(async () => {
+    await prisma.apiRateLimit.deleteMany({});
+    vi.mocked(after).mockClear();
+    await prisma.submission.deleteMany({ where: { id: { in: [draftId, reviewId] } } });
+    await prisma.submission.create({
+      data: {
+        id: draftId,
+        title: "GRACE Draft Bulletin",
+        programmeId: ids.programmeA,
+        createdById: ids.hod,
+        cycleId: draftCycle,
+      },
+    });
+    // With Academic Planning, which the Registry preload leaves alone.
+    await prisma.submission.create({
+      data: {
+        id: reviewId,
+        title: "GRACE Review Bulletin",
+        programmeId: ids.programmeA,
+        createdById: ids.hod,
+        cycleId: reviewCycle,
+        currentPhase: 3,
+        status: "IN_REVIEW",
+      },
+    });
+  });
+
+  afterAll(async () => {
+    if (previousKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = previousKey;
+    await prisma.apiRateLimit.deleteMany({});
+    await prisma.submission.deleteMany({ where: { id: { in: [draftId, reviewId] } } });
+    await prisma.reviewCycle.deleteMany({ where: { id: { in: [draftCycle, reviewCycle] } } });
+  });
+
+  /** A course whose description is saved and queued, as autosave leaves it. */
+  const queuedCourse = async (
+    submissionId: string,
+    code: string,
+    courseContent = words(20),
+  ) => {
+    const course = await prisma.course.create({
+      data: { code, title: `Queued ${code}`, units: 2, semester: 1, level: 100, submissionId },
+    });
+    const contentHash = courseGraceContentHash({
+      title: course.title,
+      learningOutcomes,
+      courseContent,
+    })!;
+    await prisma.graceAssessment.upsert({
+      where: { contentHash },
+      update: {},
+      create: { contentHash, title: course.title, courseContent, learningOutcomes },
+    });
+    await prisma.courseDescription.create({
+      data: {
+        courseId: course.id,
+        submissionId,
+        courseContent,
+        learningOutcomes,
+        graceContentHash: contentHash,
+      },
+    });
+    return { course, contentHash };
+  };
+
+  const processQueue = (userId: string, submissionId = draftId) => {
+    authState.userId = userId;
+    return processGraceQueue(
+      new NextRequest("http://localhost/api/grace-check/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submissionId }),
+      }),
+    );
+  };
+
+  const submit = () => {
+    authState.userId = ids.hod;
+    return transitionSubmission(
+      new NextRequest(`http://localhost/api/submissions/${draftId}/transition`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "SUBMIT" }),
+      }),
+      { params: Promise.resolve({ id: draftId }) },
+    );
+  };
+
+  /** Uses up a person's allowance now and in the next window. */
+  const exhaust = async (name: keyof typeof AI_RATE_LIMITS, userId: string) => {
+    const { limit, windowSeconds } = AI_RATE_LIMITS[name];
+    const windowMs = windowSeconds * 1000;
+    const window = Math.floor(Date.now() / windowMs);
+    for (const w of [window, window + 1]) {
+      const key = `${name}:${userId}:${w}`;
+      await prisma.apiRateLimit.upsert({
+        where: { key },
+        update: { count: limit },
+        create: { key, count: limit, expiresAt: new Date((w + 1) * windowMs) },
+      });
+    }
+  };
+
+  it("runs and rewrites nothing when a reviewer opens the course list", async () => {
+    const { course, contentHash } = await queuedCourse(reviewId, "GQ 101");
+    // The text changed after a pass was stored, so that pass is stale.
+    const edited = words(20, "edited");
+    await prisma.courseDescription.update({
+      where: { courseId: course.id },
+      data: { courseContent: edited, graceStatus: "COMPLIANT", gracePass: true },
+    });
+    const before = await prisma.courseDescription.findUniqueOrThrow({
+      where: { courseId: course.id },
+    });
+
+    for (const reviewer of [ids.admin, ids.dean]) {
+      authState.userId = reviewer;
+      const list = await listCourses(
+        new NextRequest(`http://localhost/api/courses?submissionId=${reviewId}`),
+      );
+      expect(list.status).toBe(200);
+      const listed = ((await list.json()) as Array<{ id: string; description: unknown }>)
+        .find((item) => item.id === course.id);
+      // Shown as waiting for a check, not as the stale pass.
+      expect(listed?.description).toMatchObject({
+        graceStatus: "PENDING",
+        gracePass: false,
+        graceResult: null,
+      });
+
+      const progress = await readGraceProgress(
+        new NextRequest(`http://localhost/api/grace-check/progress?submissionId=${reviewId}`),
+      );
+      expect(progress.status).toBe(200);
+      expect((await progress.json()).progress).toMatchObject({
+        total: 1,
+        pending: 1,
+        compliant: 0,
+        checking: 0,
+      });
+    }
+
+    // A reviewer who can't edit can't run the queue either.
+    const refused = await processQueue(ids.dean, reviewId);
+    expect(refused.status).toBe(403);
+
+    // Nothing was queued, claimed or rewritten.
+    expect(
+      await prisma.courseDescription.findUniqueOrThrow({ where: { courseId: course.id } }),
+    ).toEqual(before);
+    const editedHash = courseGraceContentHash({
+      title: course.title,
+      learningOutcomes,
+      courseContent: edited,
+    })!;
+    expect(await prisma.graceAssessment.count({ where: { contentHash: editedHash } })).toBe(0);
+    expect(
+      (await prisma.graceAssessment.findUniqueOrThrow({ where: { contentHash } })).status,
+    ).toBe("PENDING");
+    expect(await prisma.apiRateLimit.count()).toBe(0);
+  });
+
+  it("lets editors run the queue, records what scored each result, and throttles", async () => {
+    const { course, contentHash } = await queuedCourse(draftId, "GQ 201");
+
+    expect((await processQueue(ids.dean)).status).toBe(403);
+    expect(
+      (await prisma.graceAssessment.findUniqueOrThrow({ where: { contentHash } })).status,
+    ).toBe("PENDING");
+
+    const ran = await processQueue(ids.hod);
+    expect(ran.status).toBe(200);
+    expect(await ran.json()).toMatchObject({ processed: 1 });
+
+    // The stored result names the text, the model and the rubric behind it.
+    const assessment = await prisma.graceAssessment.findUniqueOrThrow({ where: { contentHash } });
+    expect(assessment.status).toBe("NEEDS_REVISION");
+    expect(assessment.result).toMatchObject({
+      contentHash,
+      modelUsed: null,
+      rubricVersion: GRACE_RUBRIC_VERSION,
+      passed: false,
+    });
+    expect(
+      await prisma.courseDescription.findUniqueOrThrow({
+        where: { courseId: course.id },
+        select: { graceStatus: true, graceResult: true },
+      }),
+    ).toMatchObject({
+      graceStatus: "NEEDS_REVISION",
+      graceResult: { contentHash, rubricVersion: GRACE_RUBRIC_VERSION },
+    });
+
+    // Called directly and repeatedly, the queue stops at the limit.
+    await exhaust("graceQueue", ids.hod);
+    const throttled = await processQueue(ids.hod);
+    expect(throttled.status).toBe(429);
+    expect(Number(throttled.headers.get("Retry-After"))).toBeGreaterThan(0);
+    expect(await throttled.json()).toMatchObject({ code: "RATE_LIMITED" });
+  });
+
+  it("limits each person separately, per window, and prunes old counts", async () => {
+    const { limit } = AI_RATE_LIMITS.graceCheck;
+    const now = new Date("2026-11-17T10:00:30.000Z");
+    for (let call = 0; call < limit; call += 1) {
+      expect((await takeRateLimit("graceCheck", ids.hod, now)).ok).toBe(true);
+    }
+    expect(await takeRateLimit("graceCheck", ids.hod, now)).toEqual({
+      ok: false,
+      retryAfterSeconds: 30,
+    });
+    // Someone else, and the next window, are unaffected.
+    expect((await takeRateLimit("graceCheck", ids.coordinator, now)).ok).toBe(true);
+    expect(
+      (await takeRateLimit("graceCheck", ids.hod, new Date("2026-11-17T10:01:00.000Z"))).ok,
+    ).toBe(true);
+
+    expect(await pruneRateLimits(new Date("2026-11-17T10:01:30.000Z"))).toBe(2);
+    expect(await prisma.apiRateLimit.count()).toBe(1);
+  });
+
+  it("throttles the single GRACE check without running it", async () => {
+    await exhaust("graceCheck", ids.hod);
+    authState.userId = ids.hod;
+    const response = await checkGrace(
+      new NextRequest("http://localhost/api/grace-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "philosophy",
+          submissionId: draftId,
+          title: "Philosophy",
+          content: words(20),
+        }),
+      }),
+    );
+    expect(response.status).toBe(429);
+    expect(
+      await prisma.submissionContent.findUnique({
+        where: { submissionId: draftId },
+        select: { philosophyGrace: true },
+      }),
+    ).toBeNull();
+  });
+
+  it("starts the waiting checks when Submit is refused for them", async () => {
+    const { contentHash } = await queuedCourse(draftId, "GQ 301");
+    await prepareDraftForSubmit(draftId);
+
+    const refused = await submit();
+    expect(refused.status).toBe(409);
+    const body = await refused.json();
+    expect(body).toMatchObject({ code: "GRACE_COMPLIANCE_REQUIRED", gracePending: true });
+    expect(body.issues).toContain(
+      "GRACE checks have started for the courses still waiting. Try submitting again in a few minutes.",
+    );
+
+    // The checks run after the response, not while the person waits.
+    expect(vi.mocked(after)).toHaveBeenCalledTimes(1);
+    expect(
+      (await prisma.graceAssessment.findUniqueOrThrow({ where: { contentHash } })).status,
+    ).toBe("PENDING");
+    const scheduled = vi.mocked(after).mock.calls[0][0] as () => Promise<void>;
+    await scheduled();
+    expect(
+      await prisma.graceAssessment.findUniqueOrThrow({
+        where: { contentHash },
+        select: { status: true, result: true },
+      }),
+    ).toMatchObject({
+      status: "NEEDS_REVISION",
+      result: { contentHash, rubricVersion: GRACE_RUBRIC_VERSION },
+    });
+
+    // Over the limit, Submit is still refused but starts nothing more.
+    await prisma.course.deleteMany({ where: { submissionId: draftId, code: "GQ 301" } });
+    await queuedCourse(draftId, "GQ 302");
+    vi.mocked(after).mockClear();
+    await exhaust("graceQueue", ids.hod);
+    const again = await submit();
+    expect(again.status).toBe(409);
+    expect((await again.json()).gracePending).toBeUndefined();
+    expect(vi.mocked(after)).not.toHaveBeenCalled();
   });
 });

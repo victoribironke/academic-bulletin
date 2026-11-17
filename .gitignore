@@ -65,6 +65,8 @@ prisma/migrations/*
 !prisma/migrations/20261105140000_ledger_actor_role_content_hash_and_notifications/migration.sql
 !prisma/migrations/20261105140100_ledger_guards/
 !prisma/migrations/20261105140100_ledger_guards/migration.sql
+!prisma/migrations/20261117120000_add_api_rate_limits/
+!prisma/migrations/20261117120000_add_api_rate_limits/migration.sql
 
 # local
 *.log

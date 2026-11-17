@@ -453,6 +453,18 @@ model CourseDescription {
   @@map("course_descriptions")
 }
 
+// Counts calls to the AI endpoints per person in fixed windows, so a person
+// (or a script using their session) can't run up the AI bill. One row per
+// person, endpoint and window; the daily job removes expired rows.
+model ApiRateLimit {
+  key       String   @id // "<limit name>:<user id>:<window number>"
+  count     Int      @default(1)
+  expiresAt DateTime
+
+  @@index([expiresAt])
+  @@map("api_rate_limits")
+}
+
 // Shared by every unchanged copy of the same Registry, CCMAS, GST, uploaded,
 // or manually entered course description.
 model GraceAssessment {
