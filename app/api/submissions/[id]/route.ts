@@ -10,6 +10,7 @@ import {
 } from "@/lib/api-auth";
 import { AUTOSAVE_COALESCE_MINUTES, recordActivity } from "@/lib/activity-log";
 import { getSubmissionWorkflow } from "@/lib/submissions/phase-owners";
+import { workflowHistoryConflict } from "@/lib/submissions/workflow-history";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -311,6 +312,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (user.role !== "SUPER_ADMIN") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+
+    // The workflow ledger is permanent, so a bulletin that has moved through
+    // any phase can't be deleted with it.
+    const conflict = await workflowHistoryConflict({ submissionId: id });
+    if (conflict) return conflict;
 
     await prisma.$transaction(async (tx) => {
       await recordActivity(

@@ -170,7 +170,10 @@ export async function sendDailyDigests(now = new Date()): Promise<DigestResult> 
 
   const since = new Date(now.getTime() - DIGEST_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
   const transitions = await prisma.phaseTransition.findMany({
-    where: { notifiedAt: null, transitionedAt: { gte: since, lte: now } },
+    // Older code marked sent rows in notifiedAt. This code never sets it but
+    // still honours it, so a row emailed between the migration and the deploy
+    // isn't emailed again.
+    where: { notification: null, notifiedAt: null, transitionedAt: { gte: since, lte: now } },
     orderBy: { transitionedAt: "asc" },
     select: {
       id: true,
@@ -421,10 +424,11 @@ export async function sendDailyDigests(now = new Date()): Promise<DigestResult> 
   }
 
   // Mark everything in this batch as summarised, including actions nobody
-  // needed to hear about, so it isn't picked up again tomorrow.
-  await prisma.phaseTransition.updateMany({
-    where: { id: { in: transitions.map((t) => t.id) } },
-    data: { notifiedAt: now },
+  // needed to hear about, so it isn't picked up again tomorrow. This is kept
+  // beside the ledger, whose rows never change.
+  await prisma.phaseTransitionNotification.createMany({
+    data: transitions.map((t) => ({ transitionId: t.id, notifiedAt: now })),
+    skipDuplicates: true,
   });
 
   return result;

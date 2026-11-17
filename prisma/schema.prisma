@@ -478,6 +478,9 @@ model GraceAssessment {
 // AUDIT TRAIL - Phase Transitions
 // ============================================================================
 
+// The workflow ledger: one row per change of a bulletin's phase or status,
+// written in the same transaction as the change. Rows are never updated or
+// deleted; the database refuses both (see the ledger guard migration).
 model PhaseTransition {
   id             String   @id @default(cuid())
   fromPhase      Int
@@ -485,22 +488,41 @@ model PhaseTransition {
   action         String // e.g., "APPROVED", "RETURNED", "ESCALATED"
   remarks        String?
   transitionedAt DateTime @default(now())
-  // When this was included in a daily summary email (null = not yet sent)
+  // No longer written; daily summaries are tracked in
+  // phase_transition_notifications. Kept until a cleanup migration drops it.
   notifiedAt     DateTime?
   // Evidence a phase requires to close, e.g. the Senate minute reference
   reference      String?
+  // The role the person acted in (null on rows from before it was recorded)
+  actorRole      UserRole?
+  // Fingerprint of the bulletin's content at this moment: the text version
+  // that was sent on, approved or returned
+  contentHash    String?
 
   // Foreign Keys
   submissionId  String
   performedById String
 
   // Relations
-  submission  Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  performedBy User       @relation(fields: [performedById], references: [id], onDelete: Restrict)
+  submission   Submission                   @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  performedBy  User                         @relation(fields: [performedById], references: [id], onDelete: Restrict)
+  notification PhaseTransitionNotification?
 
   @@index([notifiedAt, transitionedAt])
+  @@index([transitionedAt])
   @@index([submissionId, toPhase, transitionedAt])
   @@map("phase_transitions")
+}
+
+// When a ledger row was included in a daily summary email. Kept apart from
+// the ledger so its rows never change.
+model PhaseTransitionNotification {
+  transitionId String   @id
+  notifiedAt   DateTime @default(now())
+
+  transition PhaseTransition @relation(fields: [transitionId], references: [id], onDelete: Cascade)
+
+  @@map("phase_transition_notifications")
 }
 
 // Who may act on a bulletin at each review phase. A row names either a role

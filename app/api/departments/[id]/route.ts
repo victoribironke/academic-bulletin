@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
+import { workflowHistoryConflict } from "@/lib/submissions/workflow-history";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -116,6 +117,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
+
+    // Deleting a department deletes its bulletins, and the workflow ledger of
+    // any that have moved is permanent.
+    const conflict = await workflowHistoryConflict({ departmentId: id });
+    if (conflict) return conflict;
 
     await prisma.$transaction(async (tx) => {
       await recordActivity(
