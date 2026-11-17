@@ -33,6 +33,14 @@ export const PHASE_SHORT_NAMES: Record<number, string> = Object.fromEntries(
   PHASES.map((p) => [p.number, p.short]),
 );
 
+/**
+ * Evidence a phase needs before it can be approved, by phase number. The
+ * reference is stored on the transition that closes the phase.
+ */
+export const PHASE_REQUIRED_EVIDENCE: Record<number, string> = {
+  6: "Senate minute reference",
+};
+
 export const STATUS_LABELS: Record<SubmissionStatus, string> = {
   DRAFT: "Draft",
   IN_REVIEW: "In Review",

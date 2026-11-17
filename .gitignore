@@ -59,6 +59,8 @@ prisma/migrations/*
 !prisma/migrations/20261102180000_merge_preparation_department_review/migration.sql
 !prisma/migrations/20261103173000_seamless_department_school_handoffs/
 !prisma/migrations/20261103173000_seamless_department_school_handoffs/migration.sql
+!prisma/migrations/20261105120000_add_phase_owners_and_transition_reference/
+!prisma/migrations/20261105120000_add_phase_owners_and_transition_reference/migration.sql
 
 # local
 *.log

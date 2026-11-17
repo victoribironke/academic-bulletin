@@ -3,11 +3,13 @@ import prisma from "@/lib/prisma";
 import {
   canReadSubmission,
   canViewSubmission,
+  canWriteSubmission,
   getApiUser,
   requireApiUser,
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
 import { AUTOSAVE_COALESCE_MINUTES, recordActivity } from "@/lib/activity-log";
+import { getSubmissionWorkflow } from "@/lib/submissions/phase-owners";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -92,7 +94,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     if (!isMember) {
-      // Browsing HODs see the bulletin, not the review discussion.
+      // Browsing HODs see the bulletin, not the review discussion, and can't
+      // act on it whatever their role would allow in their own department.
       return NextResponse.json({
         ...submission,
         comments: [],
@@ -100,10 +103,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           ...transition,
           remarks: null,
         })),
+        workflow: {
+          actions: [],
+          canEdit: false,
+          clearedPreviousGate: false,
+          requiredEvidence: null,
+        },
       });
     }
 
-    return NextResponse.json(submission);
+    // What this person may do now, worked out from the phase owners, so the
+    // page shows exactly the actions the transition route will accept.
+    const workflow = {
+      ...(await getSubmissionWorkflow(auth.user, submission)),
+      canEdit: await canWriteSubmission(auth.user, id),
+    };
+
+    return NextResponse.json({ ...submission, workflow });
   } catch (error) {
     console.error("Failed to fetch submission:", error);
     return NextResponse.json(
