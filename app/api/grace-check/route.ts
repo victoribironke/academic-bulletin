@@ -11,6 +11,7 @@ import {
   requireApiUser,
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
+import { philosophyGraceHash } from "@/lib/submissions/submit-readiness";
 
 // GRACE model calls can take a while; allow up to a minute.
 export const maxDuration = 60;
@@ -54,7 +55,9 @@ export async function POST(request: NextRequest) {
         where: { submissionId },
         data: {
           philosophyGracePass: graceResult.passed,
-          philosophyGrace: graceResult,
+          // The fingerprint ties this pass to the exact text that was checked;
+          // Submit ignores it once the saved philosophy no longer matches.
+          philosophyGrace: { ...graceResult, contentHash: philosophyGraceHash(content) },
         },
       });
       return NextResponse.json(graceResult);

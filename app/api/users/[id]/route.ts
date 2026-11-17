@@ -148,6 +148,22 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       where: { id: authUser.id },
     });
 
+    // Refused account changes are logged too, so an attempt to raise a role
+    // or reactivate an account leaves a trail even though it failed.
+    const refuse = async (message: string) => {
+      await recordActivity({
+        actorId: requestingUser?.id ?? null,
+        action: "USER_UPDATE_REFUSED",
+        entityType: "USER",
+        entityId: id,
+        description: `Refused an account change: ${message}`,
+        metadata: {
+          attempted: { role, isActive, schoolId, departmentId, programmeIds, ...names },
+        },
+      });
+      return NextResponse.json({ error: message }, { status: 403 });
+    };
+
     // Anyone may correct their own name; everything else needs an admin.
     const isOwnNameChange = requestingUser?.id === id && onlyNames;
 
@@ -156,10 +172,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       !requestingUser.isActive ||
       (!isOwnNameChange && getRoleTier(requestingUser.role) < getRoleTier("ADMIN"))
     ) {
-      return NextResponse.json(
-        { error: "Unauthorized: Only Admins can modify users." },
-        { status: 403 }
-      );
+      return refuse("Unauthorized: Only Admins can modify users.");
     }
 
     // 2. Get the target user to check their current tier
@@ -180,44 +193,26 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       requestorTier <= targetTier &&
       requestingUser.role !== "SUPER_ADMIN"
     ) {
-      return NextResponse.json(
-        { error: "You cannot modify a user with an equal or higher role." },
-        { status: 403 }
-      );
+      return refuse("You cannot modify a user with an equal or higher role.");
     }
 
     // 4. Only SUPER_ADMIN can assign SUPER_ADMIN role
     if (role === "SUPER_ADMIN" && requestingUser.role !== "SUPER_ADMIN") {
-      return NextResponse.json(
-        { error: "Only Super Administrators can assign the Super Admin role." },
-        { status: 403 }
-      );
+      return refuse("Only Super Administrators can assign the Super Admin role.");
     }
 
     // 5. Only SUPER_ADMIN can toggle active status
     if (isActive !== undefined && requestingUser.role !== "SUPER_ADMIN") {
-      return NextResponse.json(
-        {
-          error:
-            "Only Super Administrators can activate or deactivate accounts.",
-        },
-        { status: 403 }
-      );
+      return refuse("Only Super Administrators can activate or deactivate accounts.");
     }
 
     // 6. Prevent self-demotion for safety
     if (requestingUser.id === id && role && getRoleTier(role) < requestorTier) {
-      return NextResponse.json(
-        { error: "You cannot demote yourself." },
-        { status: 403 }
-      );
+      return refuse("You cannot demote yourself.");
     }
 
     if (requestingUser.id === id && isActive === false) {
-      return NextResponse.json(
-        { error: "You cannot deactivate your own account." },
-        { status: 403 },
-      );
+      return refuse("You cannot deactivate your own account.");
     }
 
     const nextRole = role ?? targetUser.role;
