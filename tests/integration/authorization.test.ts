@@ -2,20 +2,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { NextRequest } from "next/server";
 
 const authState = vi.hoisted(() => ({ userId: null as string | null }));
-const authSignOut = vi.hoisted(() => vi.fn(async () => ({ error: null })));
-const authAdmin = vi.hoisted(() => ({
-  getUserById: vi.fn(async (id: string) => ({
-    data: { user: { id, app_metadata: {} } },
-    error: null,
-  })),
-  updateUserById: vi.fn(async () => ({ data: { user: {} }, error: null })),
-  createUser: vi.fn(async ({ email }: { email: string }) => ({
-    data: { user: { id: `created-${email}` } },
-    error: null,
-  })),
-  deleteUser: vi.fn(async () => ({ data: {}, error: null })),
-}));
-
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 // after() needs a real request scope; workflow emails aren't under test here.
 vi.mock("next/server", async (importOriginal) => ({
@@ -23,24 +9,14 @@ vi.mock("next/server", async (importOriginal) => ({
   after: vi.fn(),
 }));
 
-vi.mock("@/lib/supabase/server", () => ({
-  createClient: async () => ({
-    auth: {
-      signOut: authSignOut,
-      getUser: async () => ({
-        data: {
-          user: authState.userId
-            ? { id: authState.userId, email: `${authState.userId}@example.edu` }
-            : null,
-        },
-        error: null,
-      }),
-    },
-  }),
-}));
-
-vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: () => ({ auth: { admin: authAdmin } }),
+// The signed-in user comes from Auth.js; tests set it through authState.
+vi.mock("@/auth", () => ({
+  auth: async () =>
+    authState.userId ? { user: { id: authState.userId } } : null,
+  getSessionUserId: async () => authState.userId,
+  signIn: vi.fn(),
+  signOut: vi.fn(),
+  handlers: {},
 }));
 
 import prisma from "@/lib/prisma";
@@ -84,6 +60,7 @@ import { GET as listActivities } from "@/app/api/activity-log/route";
 import { GET as getDashboardStats } from "@/app/api/dashboard/stats/route";
 import { courseGraceContentHash } from "@/lib/courses/grace-compliance";
 import { preloadRegistryCoursesForSubmission } from "@/lib/courses/gst-pool";
+import { RECHECK_MS, allowGoogleSignIn, refreshSessionToken } from "@/lib/auth-callbacks";
 import { philosophyGraceHash } from "@/lib/submissions/submit-readiness";
 import { DEFAULT_PHASE_OWNERS } from "@/lib/submissions/workflow";
 import { bulletinContentHash } from "@/lib/submissions/ledger";
@@ -245,11 +222,6 @@ beforeAll(async () => {
 
 beforeEach(() => {
   authState.userId = null;
-  authAdmin.getUserById.mockClear();
-  authAdmin.updateUserById.mockClear();
-  authAdmin.createUser.mockClear();
-  authAdmin.deleteUser.mockClear();
-  authSignOut.mockClear();
 });
 
 afterAll(async () => {
@@ -380,7 +352,6 @@ describe("active account enforcement", () => {
 
     const response = await getCurrentUser();
     expect(response.status).toBe(403);
-    expect(authSignOut).toHaveBeenCalledWith({ scope: "global" });
     expect(
       await prisma.user.findUnique({ where: { id: "unknown-auth-user" } }),
     ).toBeNull();
@@ -602,7 +573,7 @@ describe("route authorization", () => {
     );
   });
 
-  it("deactivates and bans a user, making API authentication fail", async () => {
+  it("deactivates a user, making API authentication fail", async () => {
     authState.userId = ids.super;
     const response = await updateUser(
       new NextRequest(`http://localhost/api/users/${ids.hod}`, {
@@ -614,13 +585,6 @@ describe("route authorization", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(authAdmin.updateUserById).toHaveBeenCalledWith(
-      ids.hod,
-      expect.objectContaining({
-        ban_duration: "876000h",
-        app_metadata: expect.objectContaining({ account_active: false }),
-      }),
-    );
     expect(
       await prisma.user.findUnique({
         where: { id: ids.hod },
@@ -774,10 +738,9 @@ describe("route authorization", () => {
     expect((await del(ids.hod)).status).toBe(409);
     expect(await prisma.user.findUnique({ where: { id: ids.hod } })).not.toBeNull();
 
-    // Someone with no history is removed, along with their sign-in account.
+    // Someone with no history is removed.
     expect((await del("test-to-delete")).status).toBe(200);
     expect(await prisma.user.findUnique({ where: { id: "test-to-delete" } })).toBeNull();
-    expect(authAdmin.deleteUser).toHaveBeenCalledWith("test-to-delete");
   });
 
   it("creates one role and sends login instructions by email", async () => {
@@ -797,15 +760,8 @@ describe("route authorization", () => {
       // Resend isn't configured in tests, so no access email goes out.
       emailSent: false,
     });
-    // The account is created directly (no invite, no password) so a Google
-    // sign-in with the same email links to it.
-    expect(authAdmin.createUser).toHaveBeenCalledWith(
-      expect.objectContaining({
-        email: "invited.user@example.edu",
-        email_confirm: true,
-      }),
-    );
-    expect(authAdmin.createUser.mock.calls[0][0]).not.toHaveProperty("password");
+    // Only the user record is created; a Google sign-in with the same email
+    // is matched to it.
     expect(
       await prisma.user.findUnique({
         where: { email: "invited.user@example.edu" },
@@ -3002,5 +2958,45 @@ describe("workflow ledger", () => {
     );
     expect(deletion.status).toBe(200);
     expect(await prisma.submission.count({ where: { id: submissionId } })).toBe(0);
+  });
+});
+
+describe("Google sign-in", () => {
+  it("admits only verified emails an administrator added, in any letter case", async () => {
+    const hod = await prisma.user.findUniqueOrThrow({ where: { id: ids.hod } });
+    expect(
+      await allowGoogleSignIn({ email: hod.email.toUpperCase(), email_verified: true }),
+    ).toBe(true);
+    expect(await allowGoogleSignIn({ email: hod.email, email_verified: false })).toBe(
+      "/login?error=not_authorized",
+    );
+    expect(
+      await allowGoogleSignIn({ email: "nobody@example.edu", email_verified: true }),
+    ).toBe("/login?error=not_authorized");
+
+    const inactive = await prisma.user.findUniqueOrThrow({ where: { id: ids.inactive } });
+    expect(await allowGoogleSignIn({ email: inactive.email, email_verified: true })).toBe(
+      "/login?error=account_deactivated",
+    );
+  });
+
+  it("links the session to the existing user id and ends it once deactivated", async () => {
+    const hod = await prisma.user.findUniqueOrThrow({ where: { id: ids.hod } });
+    const start = 1_000_000;
+    const token = await refreshSessionToken({}, { email: hod.email }, start);
+    expect(token).toMatchObject({ userId: ids.hod, checkedAt: start });
+
+    await prisma.user.update({ where: { id: ids.hod }, data: { isActive: false } });
+    try {
+      // Within the re-check window the token is trusted as is...
+      expect(await refreshSessionToken(token!, undefined, start + 1000)).toBe(token);
+      // ...after it, a deactivated account loses its session.
+      expect(await refreshSessionToken(token!, undefined, start + RECHECK_MS + 1)).toBeNull();
+    } finally {
+      await prisma.user.update({ where: { id: ids.hod }, data: { isActive: true } });
+    }
+    expect(
+      await refreshSessionToken(token!, undefined, start + RECHECK_MS + 1),
+    ).toMatchObject({ userId: ids.hod, checkedAt: start + RECHECK_MS + 1 });
   });
 });
