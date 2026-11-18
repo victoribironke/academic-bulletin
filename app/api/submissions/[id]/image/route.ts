@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { fileUrl, putFile } from "@/lib/storage";
 import { checkProfessionalImageFile } from "@/lib/grace";
 import { getApiUser, requireSubmissionWriteAccess } from "@/lib/api-auth";
 import {
@@ -10,7 +10,6 @@ import {
 // Vercel rejects request bodies over 4.5MB, so cap uploads at 4MB.
 const MAX_FILE_SIZE = 4 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const BUCKET_NAME = "staff-photos";
 
 // The photo check calls Gemini, which can take a while.
 export const maxDuration = 60;
@@ -86,29 +85,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: message }, { status: 400 });
     }
 
-    const supabase = createAdminClient();
     const filePath = `submissions/${id}/${role}.${optimized.extension}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from(BUCKET_NAME)
-      .upload(filePath, optimized.buffer, {
-        contentType: optimized.contentType,
-        cacheControl: "3600",
-        upsert: true,
-      });
-
-    if (uploadError) {
-      console.error("Supabase upload error:", uploadError);
-      return NextResponse.json(
-        { error: `Upload failed: ${uploadError.message}` },
-        { status: 500 },
-      );
+    try {
+      await putFile(filePath, optimized.buffer, optimized.contentType);
+    } catch (uploadError) {
+      console.error("Photo upload error:", uploadError);
+      return NextResponse.json({ error: "Upload failed" }, { status: 500 });
     }
 
-    const { data: urlData } = supabase.storage
-      .from(BUCKET_NAME)
-      .getPublicUrl(filePath);
-    const imageUrl = `${urlData.publicUrl}?v=${Date.now()}`;
+    const imageUrl = fileUrl(filePath);
 
     return NextResponse.json({
       imageUrl,
