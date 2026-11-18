@@ -1,13 +1,12 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { signIn, signOut } from "@/auth";
+
+/** Starts Google sign-in; Google returns the user to /dashboard. */
+export async function signInWithGoogle() {
+  await signIn("google", { redirectTo: "/dashboard" });
+}
 
 export async function logOut() {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
-
-  revalidatePath("/", "layout");
-  redirect("/login");
+  await signOut({ redirectTo: "/login" });
 }
