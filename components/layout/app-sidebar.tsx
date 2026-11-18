@@ -42,7 +42,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePermission, useUser } from "@/contexts/user-context";
 import { getRoleDisplayName, type Permission } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/client";
+import { logOut } from "@/app/actions/auth";
 import type { UserRole } from "@prisma/client";
 
 type NavItem = {
@@ -165,8 +165,7 @@ function NavUser() {
   const { isMobile } = useSidebar();
 
   const handleLogout = async () => {
-    await createClient().auth.signOut();
-    window.location.assign("/login");
+    await logOut();
   };
 
   if (isLoading || !currentUser) {
