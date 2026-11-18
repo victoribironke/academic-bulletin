@@ -11,32 +11,28 @@ export type AppUserRecord = {
   isActive: boolean;
 } | null;
 
+/** Emails are compared trimmed and lower-cased. */
+export function normalizeEmail(email: string | null | undefined): string {
+  return (email ?? "").trim().toLowerCase();
+}
+
 export function checkSignInAccess(
-  authUser: { id: string; email?: string | null },
+  googleAccount: { email?: string | null; emailVerified?: boolean | null },
   appUser: AppUserRecord,
 ): { ok: true } | { ok: false; reason: SignInRejection } {
+  // Google must vouch for the address, or anyone could claim it.
+  if (!googleAccount.emailVerified) return { ok: false, reason: "not_authorized" };
+
   // Only emails an administrator has added have an app user record.
   if (!appUser) return { ok: false, reason: "not_authorized" };
 
-  // The Google login must belong to the same account the admin created.
-  const authEmail = authUser.email?.trim().toLowerCase();
-  if (appUser.id !== authUser.id || appUser.email.toLowerCase() !== authEmail) {
+  // The Google account must use the same email the admin added.
+  const email = normalizeEmail(googleAccount.email);
+  if (!email || normalizeEmail(appUser.email) !== email) {
     return { ok: false, reason: "not_authorized" };
   }
 
   if (!appUser.isActive) return { ok: false, reason: "account_deactivated" };
 
   return { ok: true };
-}
-
-/** Maps an error that Supabase passes back to the callback onto a login message. */
-export function rejectionFromProviderError(
-  description: string | null,
-): SignInRejection | "sign_in_failed" {
-  const text = (description ?? "").toLowerCase();
-  if (text.includes("banned")) return "account_deactivated";
-  if (text.includes("signup") || text.includes("sign up") || text.includes("not allowed")) {
-    return "not_authorized";
-  }
-  return "sign_in_failed";
 }
