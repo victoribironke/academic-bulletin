@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getSessionUserId } from "@/auth";
 import prisma from "@/lib/prisma";
 import { canEditSubmissionAtStage } from "@/lib/submissions/workflow";
 import { isNamedPhaseOwner, loadPhaseOwners } from "@/lib/submissions/phase-owners";
@@ -23,14 +23,11 @@ export async function getApiUser(options?: {
   includeInactive?: boolean;
 }): Promise<ApiUser | null> {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return null;
+    const userId = await getSessionUserId();
+    if (!userId) return null;
 
     const dbUser = await prisma.user.findUnique({
-      where: { id: user.id },
+      where: { id: userId },
       select: {
         id: true,
         email: true,
