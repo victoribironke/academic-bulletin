@@ -6,8 +6,6 @@ import {
   securityHeaders,
 } from "@/lib/security-headers";
 
-const supabaseUrl = "https://abcd1234.supabase.co";
-
 function directives(policy: string): Record<string, string[]> {
   return Object.fromEntries(
     policy.split("; ").map((directive) => {
@@ -19,7 +17,7 @@ function directives(policy: string): Record<string, string[]> {
 
 describe("security headers", () => {
   it("sends every header the brief lists", () => {
-    expect(Object.fromEntries(securityHeaders({ supabaseUrl }).map((h) => [h.key, h.value])))
+    expect(Object.fromEntries(securityHeaders().map((h) => [h.key, h.value])))
       .toMatchObject({
         "X-Frame-Options": "DENY",
         "X-Content-Type-Options": "nosniff",
@@ -36,36 +34,24 @@ describe("security headers", () => {
     ]);
   });
 
-  it("allows only the app itself and Supabase to run code or receive data", () => {
-    const policy = directives(contentSecurityPolicy({ supabaseUrl }));
+  it("allows only the app itself to run code or receive data", () => {
+    const policy = directives(contentSecurityPolicy());
     expect(policy["default-src"]).toEqual(["'self'"]);
     expect(policy["script-src"]).toEqual(["'self'", "'unsafe-inline'"]);
-    expect(policy["connect-src"]).toEqual([
-      "'self'",
-      supabaseUrl,
-      "wss://abcd1234.supabase.co",
-    ]);
+    expect(policy["connect-src"]).toEqual(["'self'"]);
     expect(policy["frame-ancestors"]).toEqual(["'none'"]);
     expect(policy["frame-src"]).toEqual(["'none'"]);
     expect(policy["object-src"]).toEqual(["'none'"]);
     expect(policy["base-uri"]).toEqual(["'self'"]);
-    expect(policy["form-action"]).toEqual(["'self'"]);
+    // The sign-in form hands over to Google's sign-in page.
+    expect(policy["form-action"]).toEqual(["'self'", "https://accounts.google.com"]);
     expect(policy).toHaveProperty("upgrade-insecure-requests");
   });
 
   it("allows eval and plain HTTP only in development", () => {
-    const policy = directives(contentSecurityPolicy({ supabaseUrl, development: true }));
+    const policy = directives(contentSecurityPolicy({ development: true }));
     expect(policy["script-src"]).toContain("'unsafe-eval'");
     expect(policy).not.toHaveProperty("upgrade-insecure-requests");
-  });
-
-  it("uses only the Supabase origin and skips an unusable URL", () => {
-    expect(
-      directives(contentSecurityPolicy({ supabaseUrl: `${supabaseUrl}/rest/v1/` }))["connect-src"],
-    ).toEqual(["'self'", supabaseUrl, "wss://abcd1234.supabase.co"]);
-    expect(directives(contentSecurityPolicy({ supabaseUrl: "not a url" }))["connect-src"]).toEqual([
-      "'self'",
-    ]);
   });
 
   it("applies the headers to every path", async () => {
