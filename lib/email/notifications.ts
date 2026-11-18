@@ -11,7 +11,7 @@
  * New users get one "you've been added" email when an admin creates them.
  */
 import prisma from "@/lib/prisma";
-import { getSiteUrl } from "@/lib/supabase/config";
+import { getSiteUrl } from "@/lib/site-url";
 import { PHASE_NAMES, TOTAL_PHASES } from "@/lib/submissions/phases";
 import { isEmailConfigured, sendEmail } from "./resend";
 
