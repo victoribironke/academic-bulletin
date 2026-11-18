@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import prisma from "@/lib/prisma";
-import { createClient as createServerClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { randomUUID } from "node:crypto";
+import { getSessionUserId } from "@/auth";
 import { sendAccessGrantedEmail } from "@/lib/email/notifications";
 import { recordActivity } from "@/lib/activity-log";
 
@@ -17,26 +17,15 @@ const USER_ROLES = [
 
 export async function adminCreateUser(prevState: any, formData: FormData) {
   // 1. Verify Requesting User's Permissions
-  const serverSupabase = await createServerClient();
-  const {
-    data: { user: currentUser },
-    error: authError,
-  } = await serverSupabase.auth.getUser();
-
-  if (authError || !currentUser) {
-    console.error("adminCreateUser: auth.getUser() failed:", {
-      authError: authError?.message || authError,
-      hasUser: !!currentUser,
-    });
+  const currentUserId = await getSessionUserId();
+  if (!currentUserId) {
     return {
-      error:
-        authError?.message ||
-        "Authentication required. Please refresh the page and sign in again.",
+      error: "Authentication required. Please refresh the page and sign in again.",
     };
   }
 
   const requestingUser = await prisma.user.findUnique({
-    where: { id: currentUser.id },
+    where: { id: currentUserId },
   });
 
   if (
@@ -45,7 +34,7 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
     (requestingUser.role !== "ADMIN" && requestingUser.role !== "SUPER_ADMIN")
   ) {
     console.error("adminCreateUser: Unauthorized user attempted creation:", {
-      id: currentUser.id,
+      id: currentUserId,
       role: requestingUser?.role,
     });
     return { error: "Unauthorized: Only Admins can create new users." };
@@ -138,59 +127,39 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
       return { error: "A user with this email address already exists." };
     }
 
-    // Create the sign-in account up front. No password and no invite: when
-    // this person signs in with a Google account using the same email,
-    // Supabase links it to this account automatically.
-    const adminAuthClient = createAdminClient();
-    const { data: created, error: createError } =
-      await adminAuthClient.auth.admin.createUser({
-        email,
-        email_confirm: true,
-        user_metadata: { first_name: firstName.trim(), last_name: lastName.trim() },
-      });
+    // No separate sign-in account: when this person signs in with a Google
+    // account using the same email, they are matched to this record.
+    const userId = randomUUID();
 
-    if (createError || !created?.user) {
-      console.error("Supabase user creation failed:", createError);
-      return {
-        error: createError?.message || "The sign-in account could not be created.",
-      };
-    }
-    const userId = created.user.id;
-
-    try {
-      await prisma.$transaction(async (tx) => {
-        await tx.user.create({
-          data: {
-            id: userId,
-            email,
-            firstName: firstName.trim(),
-            lastName: lastName.trim(),
-            role,
-            schoolId: schoolId || null,
-            departmentId: departmentId || null,
-            ...(role === "PROGRAMME_COORDINATOR" && {
-              programmeAssignments: {
-                create: programmeIds.map((programmeId) => ({ programmeId })),
-              },
-            }),
-          },
-        });
-        await recordActivity(
-          {
-            actorId: requestingUser.id,
-            action: "USER_CREATED",
-            entityType: "USER",
-            entityId: userId,
-            description: `Created ${firstName.trim()} ${lastName.trim()}'s ${role.toLowerCase().replaceAll("_", " ")} account.`,
-            metadata: { email, role, programmeIds },
-          },
-          tx,
-        );
+    await prisma.$transaction(async (tx) => {
+      await tx.user.create({
+        data: {
+          id: userId,
+          email,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          role,
+          schoolId: schoolId || null,
+          departmentId: departmentId || null,
+          ...(role === "PROGRAMME_COORDINATOR" && {
+            programmeAssignments: {
+              create: programmeIds.map((programmeId) => ({ programmeId })),
+            },
+          }),
+        },
       });
-    } catch (profileError) {
-      await adminAuthClient.auth.admin.deleteUser(userId);
-      throw profileError;
-    }
+      await recordActivity(
+        {
+          actorId: requestingUser.id,
+          action: "USER_CREATED",
+          entityType: "USER",
+          entityId: userId,
+          description: `Created ${firstName.trim()} ${lastName.trim()}'s ${role.toLowerCase().replaceAll("_", " ")} account.`,
+          metadata: { email, role, programmeIds },
+        },
+        tx,
+      );
+    });
 
     const emailSent = await sendAccessGrantedEmail({
       to: email,
