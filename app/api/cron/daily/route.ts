@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { sendDailyDigests } from "@/lib/email/notifications";
 import { processPendingGraceAssessments } from "@/lib/courses/grace-compliance";
 
@@ -17,9 +16,7 @@ const GRACE_TIME_BUDGET_MS = 30_000;
  * (07:00 Lagos) - see vercel.json. It does two independent things, so one
  * failing doesn't stop the other:
  *
- * 1. Keep-alive: Supabase's free plan pauses projects after 7 days without
- *    activity, and this app can sit idle between bulletin cycles. Touching
- *    the database and the Supabase API counts as activity.
+ * 1. Health check: confirms the database answers (reported as keepAlive).
  * 2. Daily summary emails to admins and HODs (lib/email/notifications.ts).
  *
  * Protected by CRON_SECRET, which Vercel sends as `Authorization: Bearer ...`.
@@ -33,8 +30,6 @@ export async function GET(request: NextRequest) {
   let keepAlive: { ok: boolean; users?: number } = { ok: false };
   try {
     const users = await prisma.user.count();
-    const { error } = await createAdminClient().storage.listBuckets();
-    if (error) throw error;
     keepAlive = { ok: true, users };
   } catch (error) {
     console.error("Keep-alive failed:", error);
