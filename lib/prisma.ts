@@ -22,12 +22,12 @@ function createPrismaClient() {
   if (!globalForPrisma.pool) {
     globalForPrisma.pool = new Pool({
       connectionString: process.env.DATABASE_URL,
-      // Supabase requires SSL; its pooler certificate isn't in Node's default CA list.
+      // Railway's public Postgres endpoint uses SSL with a self-signed certificate.
       ssl: {
         rejectUnauthorized: false,
       },
-      // Each serverless instance gets its own small pool; Supabase's pooler
-      // (DATABASE_URL, port 6543) shares the real connections between them.
+      // Each serverless instance gets its own small pool, so many instances
+      // together stay well under Postgres's connection limit.
       max: 3,
       idleTimeoutMillis: 10000, // Close idle connections after 10 seconds
       connectionTimeoutMillis: 10000, // Timeout after 10 seconds if can't connect
