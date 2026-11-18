@@ -8,8 +8,7 @@ import React, {
   useCallback,
 } from "react";
 import { User, hasPermission, hasAnyPermission, Permission } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/client";
-import { AuthChangeEvent } from "@supabase/supabase-js";
+import { logOut } from "@/app/actions/auth";
 
 interface UserContextType {
   currentUser: User | null;
@@ -42,11 +41,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       } else {
         setCurrentUser(null);
         if (response.status === 401 || response.status === 403) {
-          const supabase = createClient();
-          await supabase.auth.signOut({ scope: "local" });
-          if (typeof window !== "undefined") {
-            window.location.assign("/login");
-          }
+          // Clears the session cookie and returns to /login.
+          await logOut();
         }
       }
     } catch (error) {
@@ -58,31 +54,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Load the signed-in user's profile once the app mounts. fetchUser only
+  // sets state after its request returns.
   useEffect(() => {
-    const supabase = createClient();
-    if (!supabase) return;
-
-    // Supabase fires INITIAL_SESSION straight after subscribing, which
-    // triggers the first load of the user's profile.
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event: AuthChangeEvent) => {
-      if (event === "SIGNED_OUT") {
-        setCurrentUser(null);
-        setIsLoading(false);
-      } else if (
-        event === "INITIAL_SESSION" ||
-        event === "SIGNED_IN" ||
-        event === "USER_UPDATED" ||
-        event === "TOKEN_REFRESHED"
-      ) {
-        fetchUser();
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchUser();
   }, [fetchUser]);
 
   return (
