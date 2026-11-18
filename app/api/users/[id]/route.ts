@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getSessionUserId } from "@/auth";
 import { requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
 
@@ -130,14 +130,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // 1. Get the requesting user from the Supabase session
-    const { createClient } = await import("@/lib/supabase/server");
-    const supabase = await createClient();
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser();
+    // 1. Get the requesting user from the session
+    const sessionUserId = await getSessionUserId();
 
-    if (!authUser) {
+    if (!sessionUserId) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
@@ -145,7 +141,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const requestingUser = await prisma.user.findUnique({
-      where: { id: authUser.id },
+      where: { id: sessionUserId },
     });
 
     // Refused account changes are logged too, so an attempt to raise a role
@@ -296,35 +292,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    if (isActive !== undefined && isActive !== targetUser.isActive) {
-      const adminAuthClient = createAdminClient();
-      const { data: authData, error: authLookupError } =
-        await adminAuthClient.auth.admin.getUserById(targetUser.id);
-
-      if (authLookupError || !authData.user) {
-        return NextResponse.json(
-          { error: "Unable to update the authentication account." },
-          { status: 502 },
-        );
-      }
-
-      const { error: authUpdateError } =
-        await adminAuthClient.auth.admin.updateUserById(targetUser.id, {
-          ban_duration: isActive ? "none" : "876000h",
-          app_metadata: {
-            ...authData.user.app_metadata,
-            account_active: isActive,
-          },
-        });
-
-      if (authUpdateError) {
-        return NextResponse.json(
-          { error: "Unable to update the authentication account." },
-          { status: 502 },
-        );
-      }
-    }
-
     const user = await prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id },
@@ -408,17 +375,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         },
       });
     });
-
-    // Keep the sign-in account's display name in step (not critical).
-    if (names.firstName || names.lastName) {
-      try {
-        await createAdminClient().auth.admin.updateUserById(id, {
-          user_metadata: { first_name: user.firstName, last_name: user.lastName },
-        });
-      } catch (metadataError) {
-        console.error("Failed to update auth display name:", metadataError);
-      }
-    }
 
     const { programmeAssignments, ...profile } = user;
     return NextResponse.json({
@@ -509,14 +465,6 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
       );
       await tx.user.delete({ where: { id } });
     });
-
-    // Remove the sign-in account too. If this fails the person still can't
-    // get in, because sign-in requires a matching user record.
-    const { error: authDeleteError } =
-      await createAdminClient().auth.admin.deleteUser(id);
-    if (authDeleteError) {
-      console.error("Deleted user record but not the auth account:", authDeleteError);
-    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
