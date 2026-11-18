@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { deleteFile, fileUrl, putFile } from "@/lib/storage";
 import { checkProfessionalImageFile } from "@/lib/grace";
 import { canAccessDepartment, requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
@@ -12,7 +12,6 @@ import {
 // Vercel rejects request bodies over 4.5MB, so cap uploads at 4MB.
 const MAX_FILE_SIZE = 4 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const BUCKET_NAME = "staff-photos";
 
 // The photo check calls Gemini, which can take a while.
 export const maxDuration = 60;
@@ -96,29 +95,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: message }, { status: 400 });
     }
 
-    const supabase = createAdminClient();
     const filePath = `${id}/photo.${optimized.extension}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from(BUCKET_NAME)
-      .upload(filePath, optimized.buffer, {
-        contentType: optimized.contentType,
-        cacheControl: "3600",
-        upsert: true,
-      });
-
-    if (uploadError) {
-      console.error("Supabase upload error:", uploadError);
-      return NextResponse.json(
-        { error: `Upload failed: ${uploadError.message}` },
-        { status: 500 },
-      );
+    try {
+      await putFile(filePath, optimized.buffer, optimized.contentType);
+    } catch (uploadError) {
+      console.error("Photo upload error:", uploadError);
+      return NextResponse.json({ error: "Upload failed" }, { status: 500 });
     }
 
-    const { data: urlData } = supabase.storage
-      .from(BUCKET_NAME)
-      .getPublicUrl(filePath);
-    const imageUrl = `${urlData.publicUrl}?v=${Date.now()}`;
+    const imageUrl = fileUrl(filePath);
 
     await prisma.staff.update({
       where: { id },
@@ -131,10 +117,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // A legacy timestamped file can be removed only after the replacement and
     // database update have both succeeded. Existing files are otherwise left alone.
     if (staff.imageDriveFileId && staff.imageDriveFileId !== filePath) {
-      const { error: cleanupError } = await supabase.storage
-        .from(BUCKET_NAME)
-        .remove([staff.imageDriveFileId]);
-      if (cleanupError) {
+      try {
+        await deleteFile(staff.imageDriveFileId);
+      } catch (cleanupError) {
         console.error("Previous staff photo cleanup failed:", cleanupError);
       }
     }
@@ -198,8 +183,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     if (staff.imageDriveFileId) {
-      const supabase = createAdminClient();
-      await supabase.storage.from(BUCKET_NAME).remove([staff.imageDriveFileId]);
+      try {
+        await deleteFile(staff.imageDriveFileId);
+      } catch (cleanupError) {
+        console.error("Staff photo removal failed:", cleanupError);
+      }
     }
 
     const updated = await prisma.staff.update({
