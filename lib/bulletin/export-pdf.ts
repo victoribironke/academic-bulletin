@@ -12,6 +12,7 @@ import {
   pdfSafeText,
 } from "./document-utils";
 import { validateBulletinData } from "./validation";
+import { loadPhoto } from "@/lib/storage";
 
 const MARGIN = 54;
 const NAVY = "#123B66";
@@ -149,15 +150,9 @@ function drawTable(
 }
 
 async function fetchPhoto(url?: string): Promise<Buffer | null> {
-  if (!url) return null;
-  try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-    const type = response.headers.get("content-type") || "";
-    if (!response.ok || !/(png|jpe?g)/i.test(type)) return null;
-    return Buffer.from(await response.arrayBuffer());
-  } catch {
-    return null;
-  }
+  const photo = await loadPhoto(url);
+  if (!photo || !/(png|jpe?g)/i.test(photo.contentType)) return null;
+  return photo.data;
 }
 
 async function loadStaffPhotos(data: BulletinData): Promise<Map<string, Buffer>> {
