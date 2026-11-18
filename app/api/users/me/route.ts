@@ -1,30 +1,16 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getSessionUserId } from "@/auth";
 
 export async function GET() {
   try {
-    const supabase = await createClient();
-    if (!supabase) {
-      return NextResponse.json(
-        { error: "Supabase client not initialized" },
-        { status: 500 },
-      );
-    }
-
-    const {
-      data: { user: authUser },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !authUser) {
+    const userId = await getSessionUserId();
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const user = await prisma.user.findFirst({
-      where: {
-        OR: [{ id: authUser.id }, { email: authUser.email! }],
-      },
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
       select: {
         id: true,
         email: true,
@@ -52,7 +38,6 @@ export async function GET() {
     });
 
     if (!user) {
-      await supabase.auth.signOut({ scope: "global" });
       return NextResponse.json(
         { error: "Account is not provisioned" },
         { status: 403 },
@@ -60,7 +45,6 @@ export async function GET() {
     }
 
     if (!user.isActive) {
-      await supabase.auth.signOut({ scope: "global" });
       return NextResponse.json(
         { error: "Account deactivated" },
         { status: 403 },
