@@ -44,7 +44,14 @@ async function startWaitingGraceChecks(
   blockers: CourseGraceBlockers,
 ): Promise<boolean> {
   if (blockers.pending.length + blockers.changed.length === 0) return false;
-  if (!(await takeRateLimit("graceQueue", userId)).ok) return false;
+  try {
+    if (!(await takeRateLimit("graceQueue", userId)).ok) return false;
+  } catch (error) {
+    // Submit is refused either way. If the checks can't be counted they just
+    // don't start now; the page or the daily job runs them later.
+    console.error("Couldn't count the GRACE checks Submit would start:", error);
+    return false;
+  }
   after(async () => {
     try {
       await drainSubmissionGraceQueue(submissionId, SUBMIT_GRACE_BUDGET_MS);

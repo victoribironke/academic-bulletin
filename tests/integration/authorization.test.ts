@@ -3316,4 +3316,28 @@ describe("GRACE checks on save and submit", () => {
     expect((await again.json()).gracePending).toBeUndefined();
     expect(vi.mocked(after)).not.toHaveBeenCalled();
   });
+
+  it("still refuses Submit normally when the checks can't be counted", async () => {
+    await prisma.course.deleteMany({ where: { submissionId: draftId } });
+    await queuedCourse(draftId, "GQ 401");
+    await prepareDraftForSubmit(draftId);
+    await prisma.apiRateLimit.deleteMany({});
+    vi.mocked(after).mockClear();
+    // As on a database where the rate-limit table hasn't been created yet.
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "api_rate_limits" RENAME TO "api_rate_limits_unavailable"',
+    );
+    try {
+      const refused = await submit();
+      expect(refused.status).toBe(409);
+      const body = await refused.json();
+      expect(body.code).toBe("GRACE_COMPLIANCE_REQUIRED");
+      expect(body.gracePending).toBeUndefined();
+      expect(vi.mocked(after)).not.toHaveBeenCalled();
+    } finally {
+      await prisma.$executeRawUnsafe(
+        'ALTER TABLE "api_rate_limits_unavailable" RENAME TO "api_rate_limits"',
+      );
+    }
+  });
 });

@@ -225,6 +225,9 @@ interface GraceProgress {
   error: number;
 }
 
+const CHECKS_COULD_NOT_RUN =
+  "The GRACE checks couldn't run just now. Your descriptions are saved; run the waiting checks again in a few minutes.";
+
 interface CourseWithDescription extends Course {
   description?: CourseDescription;
 }
@@ -411,7 +414,10 @@ export function CourseDescriptionForm({
             );
             break;
           }
-          if (!response.ok) break;
+          if (!response.ok) {
+            setGraceQueueNotice(CHECKS_COULD_NOT_RUN);
+            break;
+          }
           const data = (await response.json()) as {
             processed: number;
             progress: GraceProgress | null;
@@ -421,6 +427,9 @@ export function CourseDescriptionForm({
           if (data.processed === 0) break;
           await fetchCourses(false);
         }
+      } catch (error) {
+        console.error("Running the waiting GRACE checks failed:", error);
+        if (!cancelled) setGraceQueueNotice(CHECKS_COULD_NOT_RUN);
       } finally {
         if (!cancelled) {
           setIsProcessingGraceQueue(false);
@@ -877,7 +886,8 @@ export function CourseDescriptionForm({
                                     className="text-xs text-blue-700 border-blue-200 bg-blue-50"
                                   >
                                     {desc.graceStatus === "CHECKING" ||
-                                    graceChecking === course.id ? (
+                                    graceChecking === course.id ||
+                                    isProcessingGraceQueue ? (
                                       <>
                                         <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                                         Checking
