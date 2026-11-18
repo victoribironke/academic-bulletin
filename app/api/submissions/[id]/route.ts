@@ -11,6 +11,43 @@ import {
 import { AUTOSAVE_COALESCE_MINUTES, recordActivity } from "@/lib/activity-log";
 import { getSubmissionWorkflow } from "@/lib/submissions/phase-owners";
 import { workflowHistoryConflict } from "@/lib/submissions/workflow-history";
+import { inUseResponse, requireTypedConfirmation } from "@/lib/archive";
+
+/** Content columns that aren't anything a person wrote. */
+const BOOKKEEPING_FIELDS = new Set([
+  "id",
+  "submissionId",
+  "createdAt",
+  "updatedAt",
+  "philosophyGracePass",
+  "philosophyGrace",
+]);
+
+/** True for text, numbers or lists that hold something someone entered. */
+function hasWrittenValue(value: unknown): boolean {
+  if (value === null || value === undefined || value === false) return false;
+  if (typeof value === "string") return value.trim() !== "";
+  if (typeof value === "number" || value === true) return true;
+  if (Array.isArray(value)) return value.some(hasWrittenValue);
+  if (typeof value === "object") return Object.values(value).some(hasWrittenValue);
+  return false;
+}
+
+/** Why a bulletin can't be deleted: anything already written in it. */
+function submissionDeleteBlockers(submission: {
+  content: Record<string, unknown> | null;
+  _count: { courses: number; comments: number };
+}): string[] {
+  const reasons: string[] = [];
+  const { courses, comments } = submission._count;
+  if (courses) reasons.push(`It has ${courses} course${courses === 1 ? "" : "s"}.`);
+  if (comments) reasons.push(`It has ${comments} comment${comments === 1 ? "" : "s"}.`);
+  const written = Object.entries(submission.content ?? {}).some(
+    ([key, value]) => !BOOKKEEPING_FIELDS.has(key) && hasWrittenValue(value),
+  );
+  if (written) reasons.push("Some of its sections have been filled in.");
+  return reasons;
+}
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -317,6 +354,32 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     // any phase can't be deleted with it.
     const conflict = await workflowHistoryConflict({ submissionId: id });
     if (conflict) return conflict;
+
+    // Deleting a bulletin is permanent, so only an empty one can go: no
+    // courses, comments or written sections. Its programme name is typed to
+    // confirm.
+    const submission = await prisma.submission.findUnique({
+      where: { id },
+      select: {
+        programme: { select: { name: true } },
+        content: true,
+        _count: { select: { courses: true, comments: true } },
+      },
+    });
+    if (!submission) {
+      return NextResponse.json(
+        { error: "Submission not found" },
+        { status: 404 },
+      );
+    }
+    const blockers = submissionDeleteBlockers(submission);
+    if (blockers.length) return inUseResponse("bulletin", blockers);
+    const unconfirmed = await requireTypedConfirmation(
+      request,
+      submission.programme.name,
+      "bulletin's programme",
+    );
+    if (unconfirmed) return unconfirmed;
 
     await prisma.$transaction(async (tx) => {
       await recordActivity(

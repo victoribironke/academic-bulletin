@@ -3,6 +3,12 @@ import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
 import { workflowHistoryConflict } from "@/lib/submissions/workflow-history";
+import {
+  archiveRecord,
+  deleteBlockers,
+  inUseResponse,
+  requireTypedConfirmation,
+} from "@/lib/archive";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -140,11 +146,18 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
+    const record = await prisma.programme.findUnique({ where: { id } });
+    if (!record) {
+      return NextResponse.json({ error: "Programme not found" }, { status: 404 });
+    }
 
-    // Deleting a programme deletes its bulletins, and the workflow ledger of
-    // any that have moved is permanent.
+    // The workflow ledger of any bulletin that has moved is permanent.
     const conflict = await workflowHistoryConflict({ programmeId: id });
     if (conflict) return conflict;
+    const blockers = await deleteBlockers("PROGRAMME", id);
+    if (blockers.length) return inUseResponse("programme", blockers);
+    const unconfirmed = await requireTypedConfirmation(request, record.name, "programme");
+    if (unconfirmed) return unconfirmed;
 
     await prisma.$transaction(async (tx) => {
       await recordActivity(
@@ -153,29 +166,23 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
           action: "PROGRAMME_DELETED",
           entityType: "PROGRAMME",
           entityId: id,
-          description: "Deleted a programme and its dependent records.",
+          description: `Deleted the programme ${record.name}. It can be restored from the Archive.`,
         },
         tx,
       );
+      await archiveRecord(tx, {
+        entityType: "PROGRAMME",
+        entityId: id,
+        label: record.name,
+        data: record,
+        actorId: auth.user.id,
+      });
       await tx.programme.delete({ where: { id } });
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, archived: true });
   } catch (error: unknown) {
     console.error("Failed to delete programme:", error);
-
-    if (
-      error &&
-      typeof error === "object" &&
-      "code" in error &&
-      error.code === "P2025"
-    ) {
-      return NextResponse.json(
-        { error: "Programme not found" },
-        { status: 404 },
-      );
-    }
-
     return NextResponse.json(
       { error: "Failed to delete programme" },
       { status: 500 },

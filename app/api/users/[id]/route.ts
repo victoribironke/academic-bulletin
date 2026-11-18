@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { getSessionUserId } from "@/auth";
 import { requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
+import { requireTypedConfirmation } from "@/lib/archive";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -409,7 +410,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 // DELETE /api/users/[id] - Permanently remove a user (Super Admins only).
 // Users with review history can't be deleted; deactivate them instead so the
 // audit trail of who submitted, reviewed and commented stays intact.
-export async function DELETE(_request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const auth = await requireApiUser(["SUPER_ADMIN"]);
     if (!auth.ok) return auth.response;
@@ -426,6 +427,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
       where: { id },
       select: {
         id: true,
+        email: true,
         _count: {
           select: {
             submissions: true,
@@ -451,6 +453,10 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
         { status: 409 },
       );
     }
+
+    // Deleting an account is permanent, so its email is typed to confirm.
+    const unconfirmed = await requireTypedConfirmation(request, target.email, "user");
+    if (unconfirmed) return unconfirmed;
 
     await prisma.$transaction(async (tx) => {
       await recordActivity(

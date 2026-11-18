@@ -36,11 +36,12 @@ import {
   Plus,
   BookOpen,
   Link,
-  Trash,
   Upload,
   Pencil,
   RefreshCw,
 } from "lucide-react";
+import { useDeleteRecord } from "@/components/shared/delete-record-dialog";
+import { RowActionsMenu } from "@/components/shared/row-actions-menu";
 import { TableCard, TableToolbar } from "@/components/shared/table-toolbar";
 import { EmptyState, TableSkeleton } from "@/components/shared/states";
 import { TablePagination } from "@/components/shared/table-pagination";
@@ -130,7 +131,8 @@ export function MasterCourseManager({
   const [selectedCourse, setSelectedCourse] = useState<MasterCourse | null>(null);
   const [isLinkingCourseId, setIsLinkingCourseId] = useState<string | null>(null);
   const [isTogglingCourseId, setIsTogglingCourseId] = useState<string | null>(null);
-  const [isDeletingCourseId, setIsDeletingCourseId] = useState<string | null>(null);
+  const { requestDelete, dialog: deleteDialog, checkingUrl } = useDeleteRecord();
+  const isDeletingCourseId = checkingUrl?.split("/").pop() ?? null;
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [isSyncingCcmas, setIsSyncingCcmas] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -484,32 +486,19 @@ export function MasterCourseManager({
     }
   };
 
-  const handleDeleteCourse = async (courseId: string) => {
-    if (!confirm("Are you sure you want to delete this master course? This cannot be undone.")) return;
-    setIsDeletingCourseId(courseId);
-
-    try {
-      const res = await fetch(`/api/master-courses/${courseId}`, {
-        method: "DELETE",
-      });
-
-      if (res.ok) {
+  const handleDeleteCourse = (course: MasterCourse) =>
+    requestDelete({
+      url: `/api/master-courses/${course.id}`,
+      noun: "Registry course",
+      name: `${course.code} - ${course.title}`,
+      onDeleted: () => {
         fetchData();
-        if (selectedCourse?.id === courseId) {
+        if (selectedCourse?.id === course.id) {
           setLinkDialogOpen(false);
           setSelectedCourse(null);
         }
-      } else {
-        const data = await res.json();
-        alert(data.error || "Failed to delete course");
-      }
-    } catch (error) {
-      console.error("Failed to delete master course:", error);
-      alert("Failed to delete course");
-    } finally {
-      setIsDeletingCourseId(null);
-    }
-  };
+      },
+    });
 
   const handleToggleDiscoverable = async (course: MasterCourse) => {
     setIsTogglingCourseId(course.id);
@@ -668,20 +657,12 @@ export function MasterCourseManager({
                       >
                         <Link className="h-4 w-4" />
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => handleDeleteCourse(course.id)}
-                        disabled={isDeletingCourseId === course.id}
-                        title="Delete Course"
-                        aria-label={`Delete ${course.code}`}
-                      >
-                        {isDeletingCourseId === course.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash className="h-4 w-4" />
-                        )}
-                      </Button>
+                      <RowActionsMenu
+                        label={course.code}
+                        className="size-8"
+                        busy={isDeletingCourseId === course.id}
+                        onDelete={() => handleDeleteCourse(course)}
+                      />
                     </>
                   )}
                 </div>
@@ -1270,6 +1251,7 @@ export function MasterCourseManager({
             await fetchData();
           }}
         />
+      {deleteDialog}
     </div>
   );
 }

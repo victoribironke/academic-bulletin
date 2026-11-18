@@ -210,6 +210,8 @@ model User {
   reviewCycles     ReviewCycle[]
   programmeAssignments UserProgramme[]
   activities       ActivityLog[]
+  // Records this user deleted into the Archive
+  archivedRecords  ArchivedRecord[]
   // Review phases this user owns by name, beyond what their role grants
   phaseOwnerships  PhaseOwner[]
 
@@ -463,6 +465,27 @@ model ApiRateLimit {
 
   @@index([expiresAt])
   @@map("api_rate_limits")
+}
+
+// Records removed with "Delete". Only a record nothing else depends on can be
+// deleted, and it is kept here whole, so an administrator can restore it from
+// the Archive page with the same id.
+model ArchivedRecord {
+  id           String   @id @default(cuid())
+  // REVIEW_CYCLE, SCHOOL, DEPARTMENT, PROGRAMME, MASTER_COURSE or STAFF
+  entityType   String
+  entityId     String
+  // What the record was called, shown on the Archive page
+  label        String
+  // The record as it was when deleted
+  data         Json
+  archivedById String?
+  archivedAt   DateTime @default(now())
+
+  archivedBy User? @relation(fields: [archivedById], references: [id], onDelete: SetNull)
+
+  @@index([archivedAt])
+  @@map("archived_records")
 }
 
 // Shared by every unchanged copy of the same Registry, CCMAS, GST, uploaded,

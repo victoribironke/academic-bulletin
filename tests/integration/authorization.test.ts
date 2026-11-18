@@ -48,7 +48,10 @@ import { GET as readGraceProgress } from "@/app/api/grace-check/progress/route";
 import { AI_RATE_LIMITS, pruneRateLimits, takeRateLimit } from "@/lib/rate-limit";
 import { GRACE_RUBRIC_VERSION } from "@/lib/grace";
 import { GET as listMasterCourses } from "@/app/api/master-courses/route";
-import { PATCH as updateMasterCourse } from "@/app/api/master-courses/[id]/route";
+import {
+  DELETE as deleteMasterCourse,
+  PATCH as updateMasterCourse,
+} from "@/app/api/master-courses/[id]/route";
 import { canExportBulletin } from "@/lib/bulletin/access";
 import { sendDailyDigests } from "@/lib/email/notifications";
 import { getCcmasCatalogueSummary, syncCcmasCatalogue } from "@/lib/courses/ccmas-catalogue";
@@ -56,7 +59,11 @@ import { recordActivity } from "@/lib/activity-log";
 import { GET as getCurrentUser } from "@/app/api/users/me/route";
 import { POST as bulkImportStaff } from "@/app/api/staff/bulk/route";
 import { POST as createStaff } from "@/app/api/staff/route";
-import { PATCH as updateStaff } from "@/app/api/staff/[id]/route";
+import { DELETE as deleteStaff, PATCH as updateStaff } from "@/app/api/staff/[id]/route";
+import { DELETE as deleteCycle } from "@/app/api/cycles/[id]/route";
+import { GET as listArchive } from "@/app/api/archive/route";
+import { POST as restoreArchived } from "@/app/api/archive/[id]/restore/route";
+import { confirmationMatches } from "@/lib/archive";
 import { POST as bulkImportCourses } from "@/app/api/courses/bulk/route";
 import { POST as bulkImportMasterCourses } from "@/app/api/master-courses/bulk/route";
 import { GET as listSubmissions } from "@/app/api/submissions/route";
@@ -90,6 +97,7 @@ const ids = {
 };
 
 async function clearFixtures() {
+  await prisma.archivedRecord.deleteMany({});
   await prisma.apiRateLimit.deleteMany({});
   await prisma.activityLog.deleteMany({});
   await prisma.courseDescription.deleteMany({});
@@ -715,10 +723,14 @@ describe("route authorization", () => {
   });
 
   it("deletes users without history and refuses those with history", async () => {
-    const del = (id: string) =>
-      deleteUser(new NextRequest(`http://localhost/api/users/${id}`, { method: "DELETE" }), {
-        params: Promise.resolve({ id }),
-      });
+    const del = (id: string, confirm?: string) =>
+      deleteUser(
+        new NextRequest(`http://localhost/api/users/${id}`, {
+          method: "DELETE",
+          ...(confirm !== undefined && { body: JSON.stringify({ confirm }) }),
+        }),
+        { params: Promise.resolve({ id }) },
+      );
 
     await prisma.user.create({
       data: {
@@ -743,8 +755,15 @@ describe("route authorization", () => {
     expect((await del(ids.hod)).status).toBe(409);
     expect(await prisma.user.findUnique({ where: { id: ids.hod } })).not.toBeNull();
 
-    // Someone with no history is removed.
-    expect((await del("test-to-delete")).status).toBe(200);
+    // Someone with no history is removed, once their email is typed.
+    const unconfirmed = await del("test-to-delete");
+    expect(unconfirmed.status).toBe(400);
+    expect(await unconfirmed.json()).toMatchObject({
+      code: "CONFIRMATION_REQUIRED",
+      confirmText: "test-to-delete@example.edu",
+    });
+    expect(await prisma.user.count({ where: { id: "test-to-delete" } })).toBe(1);
+    expect((await del("test-to-delete", "TEST-TO-DELETE@example.edu")).status).toBe(200);
     expect(await prisma.user.findUnique({ where: { id: "test-to-delete" } })).toBeNull();
   });
 
@@ -2931,7 +2950,7 @@ describe("workflow ledger", () => {
     }
   });
 
-  it("still deletes a programme whose bulletins have never moved", async () => {
+  it("refuses a programme with bulletins, and archives it once it has none", async () => {
     const programmeId = "ledger-empty-programme";
     await prisma.programme.create({
       data: { id: programmeId, name: "Ledger Empty", code: "LEP", departmentId: ids.departmentA },
@@ -2945,23 +2964,56 @@ describe("workflow ledger", () => {
         cycleId,
       },
     });
+    const removeProgramme = (confirm?: string) =>
+      deleteProgramme(
+        new NextRequest(`http://localhost/api/programmes/${programmeId}`, {
+          method: "DELETE",
+          ...(confirm !== undefined && { body: JSON.stringify({ confirm }) }),
+        }),
+        { params: Promise.resolve({ id: programmeId }) },
+      );
     authState.userId = ids.super;
-    const deletion = await deleteProgramme(
-      new NextRequest(`http://localhost/api/programmes/${programmeId}`, { method: "DELETE" }),
-      { params: Promise.resolve({ id: programmeId }) },
-    );
-    expect(deletion.status).toBe(200);
+
+    // Deleting it would delete the bulletin too, even one that never moved.
+    const refused = await removeProgramme("Ledger Empty");
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({ code: "IN_USE", reasons: ["It has 1 bulletin."] });
+    expect(await prisma.submission.count({ where: { id: "ledger-empty-draft" } })).toBe(1);
+
+    await prisma.submission.delete({ where: { id: "ledger-empty-draft" } });
+    expect((await removeProgramme()).status).toBe(400);
+    expect((await removeProgramme("Ledger Empty")).status).toBe(200);
     expect(await prisma.programme.count({ where: { id: programmeId } })).toBe(0);
-    expect(await prisma.submission.count({ where: { id: "ledger-empty-draft" } })).toBe(0);
+    expect(
+      await prisma.archivedRecord.findFirstOrThrow({ where: { entityId: programmeId } }),
+    ).toMatchObject({ entityType: "PROGRAMME", label: "Ledger Empty" });
   });
 
-  it("still deletes a draft that has never moved", async () => {
+  it("deletes a draft only while nothing has been written in it", async () => {
     authState.userId = ids.super;
-    const deletion = await deleteSubmission(
-      new NextRequest(`http://localhost/api/submissions/${submissionId}`, { method: "DELETE" }),
-      { params: Promise.resolve({ id: submissionId }) },
-    );
-    expect(deletion.status).toBe(200);
+    const removeDraft = (confirm?: string) =>
+      deleteSubmission(
+        new NextRequest(`http://localhost/api/submissions/${submissionId}`, {
+          method: "DELETE",
+          ...(confirm !== undefined && { body: JSON.stringify({ confirm }) }),
+        }),
+        { params: Promise.resolve({ id: submissionId }) },
+      );
+
+    // The prepared draft has courses and written sections.
+    const refused = await removeDraft("Test Programme A");
+    expect(refused.status).toBe(409);
+    expect((await refused.json()).code).toBe("IN_USE");
+    expect(await prisma.submission.count({ where: { id: submissionId } })).toBe(1);
+
+    // Emptied, it can go once its programme's name is typed.
+    await prisma.course.deleteMany({ where: { submissionId } });
+    await prisma.comment.deleteMany({ where: { submissionId } });
+    await prisma.submissionContent.deleteMany({ where: { submissionId } });
+    const unconfirmed = await removeDraft();
+    expect(unconfirmed.status).toBe(400);
+    expect(await unconfirmed.json()).toMatchObject({ confirmText: "Test Programme A" });
+    expect((await removeDraft("test programme a")).status).toBe(200);
     expect(await prisma.submission.count({ where: { id: submissionId } })).toBe(0);
   });
 });
@@ -3339,5 +3391,283 @@ describe("GRACE checks on save and submit", () => {
         'ALTER TABLE "api_rate_limits_unavailable" RENAME TO "api_rate_limits"',
       );
     }
+  });
+});
+
+describe("Deleting into the Archive", () => {
+  type Handler = (
+    request: NextRequest,
+    context: { params: Promise<{ id: string }> },
+  ) => Promise<Response>;
+  const remove = (handler: Handler, path: string, id: string, confirm?: string) =>
+    handler(
+      new NextRequest(`http://localhost${path}/${id}`, {
+        method: "DELETE",
+        ...(confirm !== undefined && {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ confirm }),
+        }),
+      }),
+      { params: Promise.resolve({ id }) },
+    );
+  const restore = (archiveId: string) =>
+    restoreArchived(
+      new NextRequest(`http://localhost/api/archive/${archiveId}/restore`, { method: "POST" }),
+      { params: Promise.resolve({ id: archiveId }) },
+    );
+  const archived = (entityId: string) =>
+    prisma.archivedRecord.findFirstOrThrow({ where: { entityId } });
+  const staffFields = {
+    title: "DR",
+    gender: "FEMALE",
+    surname: "okafor",
+    firstName: "ada",
+    highestQualification: "PHD",
+    academicRank: "LECTURER_I",
+    type: "ACADEMIC",
+  } as const;
+
+  afterAll(async () => {
+    await prisma.archivedRecord.deleteMany({});
+    await prisma.submission.deleteMany({ where: { id: { startsWith: "arc-" } } });
+    await prisma.reviewCycle.deleteMany({ where: { id: { startsWith: "arc-" } } });
+    await prisma.staff.deleteMany({ where: { id: { startsWith: "arc-" } } });
+    await prisma.masterCourse.deleteMany({ where: { id: "arc-course" } });
+    await prisma.masterCourse.deleteMany({ where: { id: { startsWith: "arc-" } } });
+    await prisma.department.deleteMany({ where: { id: { startsWith: "arc-" } } });
+    await prisma.school.deleteMany({ where: { id: { startsWith: "arc-" } } });
+  });
+
+  it("matches the typed name ignoring case and extra spaces", () => {
+    expect(confirmationMatches("  test   SCHOOL a ", "Test School A")).toBe(true);
+    expect(confirmationMatches("Test School", "Test School A")).toBe(false);
+    expect(confirmationMatches("   ", "   ")).toBe(false);
+    expect(confirmationMatches(undefined, "Test School A")).toBe(false);
+  });
+
+  it("refuses a school that is still in use, even with its name typed", async () => {
+    await prisma.school.create({ data: { id: "arc-used", name: "Used School", code: "USD" } });
+    await prisma.department.create({
+      data: { id: "arc-used-dept", name: "Used Department", code: "USDD", schoolId: "arc-used" },
+    });
+    authState.userId = ids.admin;
+    const refused = await remove(deleteSchool, "/api/schools", "arc-used", "Used School");
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({
+      code: "IN_USE",
+      reasons: ["It has 1 department."],
+    });
+    expect(await prisma.school.count({ where: { id: "arc-used" } })).toBe(1);
+    expect(await prisma.department.count({ where: { id: "arc-used-dept" } })).toBe(1);
+    expect(await prisma.archivedRecord.count({ where: { entityId: "arc-used" } })).toBe(0);
+  });
+
+  it("asks for the name, then archives an unused school and restores it with the same id", async () => {
+    await prisma.school.create({ data: { id: "arc-school", name: "Archive Test School", code: "ARC" } });
+
+    authState.userId = ids.hod;
+    expect(
+      (await remove(deleteSchool, "/api/schools", "arc-school", "Archive Test School")).status,
+    ).toBe(403);
+
+    authState.userId = ids.admin;
+    const check = await remove(deleteSchool, "/api/schools", "arc-school");
+    expect(check.status).toBe(400);
+    expect(await check.json()).toMatchObject({
+      code: "CONFIRMATION_REQUIRED",
+      confirmText: "Archive Test School",
+    });
+    expect((await remove(deleteSchool, "/api/schools", "arc-school", "Archive School")).status).toBe(400);
+    expect(await prisma.school.count({ where: { id: "arc-school" } })).toBe(1);
+
+    const deleted = await remove(deleteSchool, "/api/schools", "arc-school", "  archive test SCHOOL ");
+    expect(deleted.status).toBe(200);
+    expect(await prisma.school.count({ where: { id: "arc-school" } })).toBe(0);
+    const record = await archived("arc-school");
+    expect(record).toMatchObject({
+      entityType: "SCHOOL",
+      label: "Archive Test School",
+      archivedById: ids.admin,
+    });
+    expect(
+      await prisma.activityLog.count({ where: { entityId: "arc-school", action: "SCHOOL_DELETED" } }),
+    ).toBe(1);
+
+    // Only administrators see the Archive and restore from it.
+    authState.userId = ids.hod;
+    expect((await listArchive()).status).toBe(403);
+    expect((await restore(record.id)).status).toBe(403);
+
+    authState.userId = ids.admin;
+    expect(await (await listArchive()).json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: record.id, label: "Archive Test School" }),
+      ]),
+    );
+    expect((await restore(record.id)).status).toBe(200);
+    expect(await prisma.school.findUniqueOrThrow({ where: { id: "arc-school" } })).toMatchObject({
+      name: "Archive Test School",
+      code: "ARC",
+    });
+    expect(await prisma.archivedRecord.count({ where: { id: record.id } })).toBe(0);
+    expect(
+      await prisma.activityLog.count({ where: { entityId: "arc-school", action: "SCHOOL_RESTORED" } }),
+    ).toBe(1);
+  });
+
+  it("won't restore before the parent, or over a record that took its code", async () => {
+    authState.userId = ids.admin;
+    await prisma.department.create({
+      data: { id: "arc-dept", name: "Archive Test Department", code: "ARCD", schoolId: "arc-school" },
+    });
+    expect(
+      (await remove(deleteDepartment, "/api/departments", "arc-dept", "Archive Test Department")).status,
+    ).toBe(200);
+    expect(
+      (await remove(deleteSchool, "/api/schools", "arc-school", "Archive Test School")).status,
+    ).toBe(200);
+
+    const department = await archived("arc-dept");
+    const early = await restore(department.id);
+    expect(early.status).toBe(409);
+    expect((await early.json()).error).toBe(
+      "Its school, Archive Test School, is in the Archive. Restore the school first.",
+    );
+
+    // Meanwhile another school took the code.
+    await prisma.school.create({ data: { id: "arc-taken", name: "Replacement School", code: "ARC" } });
+    const school = await archived("arc-school");
+    const clash = await restore(school.id);
+    expect(clash.status).toBe(409);
+    expect((await clash.json()).error).toMatch(/same name or code/);
+    expect(await prisma.archivedRecord.count({ where: { id: school.id } })).toBe(1);
+
+    await prisma.school.delete({ where: { id: "arc-taken" } });
+    expect((await restore(school.id)).status).toBe(200);
+    expect((await restore(department.id)).status).toBe(200);
+    expect(await prisma.department.findUniqueOrThrow({ where: { id: "arc-dept" } })).toMatchObject({
+      schoolId: "arc-school",
+      code: "ARCD",
+    });
+  });
+
+  it("keeps the active cycle and any cycle with bulletins", async () => {
+    authState.userId = ids.admin;
+    await prisma.reviewCycle.create({
+      data: { id: "arc-cycle", name: "Archive Test Cycle", createdById: ids.super, isActive: false },
+    });
+    await prisma.reviewCycle.create({
+      data: { id: "arc-cycle-used", name: "Used Cycle", createdById: ids.super, isActive: false },
+    });
+    await prisma.submission.create({
+      data: {
+        id: "arc-cycle-bulletin",
+        title: "Cycle Bulletin",
+        programmeId: ids.programmeB,
+        createdById: ids.super,
+        cycleId: "arc-cycle-used",
+      },
+    });
+
+    const used = await remove(deleteCycle, "/api/cycles", "arc-cycle-used", "Used Cycle");
+    expect(used.status).toBe(409);
+    expect((await used.json()).reasons).toEqual(["It has 1 bulletin."]);
+
+    await prisma.reviewCycle.update({ where: { id: "arc-cycle" }, data: { isActive: true } });
+    const active = await remove(deleteCycle, "/api/cycles", "arc-cycle", "Archive Test Cycle");
+    expect(active.status).toBe(409);
+    expect((await active.json()).reasons).toEqual([
+      "It is the active review cycle. Close it first.",
+    ]);
+    await prisma.reviewCycle.update({
+      where: { id: "arc-cycle" },
+      data: { isActive: false, closedAt: new Date() },
+    });
+
+    expect(
+      (await remove(deleteCycle, "/api/cycles", "arc-cycle", "Archive Test Cycle")).status,
+    ).toBe(200);
+    expect((await restore((await archived("arc-cycle")).id)).status).toBe(200);
+    expect(await prisma.reviewCycle.findUniqueOrThrow({ where: { id: "arc-cycle" } })).toMatchObject({
+      name: "Archive Test Cycle",
+      isActive: false,
+      createdById: ids.super,
+    });
+  });
+
+  it("archives a Registry course with its prerequisites, but not one another course needs", async () => {
+    authState.userId = ids.admin;
+    await prisma.masterCourse.create({
+      data: { id: "arc-pre", code: "ARC 100", title: "Archive basics", units: 2, level: 100, semester: 1 },
+    });
+    await prisma.masterCourse.create({
+      data: {
+        id: "arc-course",
+        code: "ARC 200",
+        title: "Archive practice",
+        units: 3,
+        level: 200,
+        semester: 2,
+        learningOutcomes: ["Restore records"],
+        prerequisites: { connect: [{ id: "arc-pre" }] },
+      },
+    });
+
+    const needed = await remove(deleteMasterCourse, "/api/master-courses", "arc-pre", "ARC 100");
+    expect(needed.status).toBe(409);
+    expect((await needed.json()).reasons).toEqual([
+      "It is a prerequisite of 1 other Registry course.",
+    ]);
+
+    const check = await remove(deleteMasterCourse, "/api/master-courses", "arc-course");
+    expect(await check.json()).toMatchObject({ confirmText: "ARC 200" });
+    expect(
+      (await remove(deleteMasterCourse, "/api/master-courses", "arc-course", "arc 200")).status,
+    ).toBe(200);
+    expect(await prisma.masterCourse.count({ where: { id: "arc-course" } })).toBe(0);
+
+    expect((await restore((await archived("arc-course")).id)).status).toBe(200);
+    expect(
+      await prisma.masterCourse.findUniqueOrThrow({
+        where: { id: "arc-course" },
+        select: { title: true, learningOutcomes: true, prerequisites: { select: { id: true } } },
+      }),
+    ).toEqual({
+      title: "Archive practice",
+      learningOutcomes: ["Restore records"],
+      prerequisites: [{ id: "arc-pre" }],
+    });
+  });
+
+  it("lets a department archive its own staff, and only administrators restore them", async () => {
+    await prisma.staff.create({
+      data: { ...staffFields, id: "arc-staff", departmentId: ids.departmentA },
+    });
+    await prisma.staff.create({
+      data: { ...staffFields, id: "arc-staff-b", departmentId: ids.departmentB },
+    });
+
+    authState.userId = ids.hod;
+    // Another department's staff are out of reach.
+    expect((await remove(deleteStaff, "/api/staff", "arc-staff-b", "Ada Okafor")).status).toBe(403);
+    expect(await prisma.staff.count({ where: { id: "arc-staff-b" } })).toBe(1);
+
+    const check = await remove(deleteStaff, "/api/staff", "arc-staff");
+    expect(await check.json()).toMatchObject({
+      code: "CONFIRMATION_REQUIRED",
+      confirmText: "Ada Okafor",
+    });
+    expect((await remove(deleteStaff, "/api/staff", "arc-staff", "Ada Okafor")).status).toBe(200);
+    expect(await prisma.staff.count({ where: { id: "arc-staff" } })).toBe(0);
+
+    const record = await archived("arc-staff");
+    expect((await restore(record.id)).status).toBe(403);
+    authState.userId = ids.admin;
+    expect((await restore(record.id)).status).toBe(200);
+    expect(await prisma.staff.findUniqueOrThrow({ where: { id: "arc-staff" } })).toMatchObject({
+      surname: "okafor",
+      departmentId: ids.departmentA,
+      academicRank: "LECTURER_I",
+    });
   });
 });

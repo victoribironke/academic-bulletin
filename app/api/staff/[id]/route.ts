@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { toTitleCase, isValidName } from "@/lib/validation/name-format";
+import {
+  isValidName,
+  staffConfirmationName,
+  toTitleCase,
+} from "@/lib/validation/name-format";
 import { canAccessDepartment, requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
+import { archiveRecord, requireTypedConfirmation } from "@/lib/archive";
 
 const VALID_TITLES = ["MR", "MRS", "MS", "DR", "PROF", "ENGR", "BARR", "REV", "PASTOR"];
 const VALID_GENDERS = ["MALE", "FEMALE"];
@@ -258,17 +263,17 @@ export async function DELETE(
     ]);
     if (!auth.ok) return auth.response;
 
-    // Check if staff exists
-    const existing = await prisma.staff.findUnique({
-      where: { id },
-    });
-
+    const existing = await prisma.staff.findUnique({ where: { id } });
     if (!existing) {
       return NextResponse.json({ error: "Staff not found" }, { status: 404 });
     }
     if (!(await canAccessDepartment(auth.user, existing.departmentId))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+
+    const name = staffConfirmationName(existing);
+    const unconfirmed = await requireTypedConfirmation(request, name, "staff member");
+    if (unconfirmed) return unconfirmed;
 
     await prisma.$transaction(async (tx) => {
       await recordActivity(
@@ -277,15 +282,22 @@ export async function DELETE(
           action: "STAFF_DELETED",
           entityType: "STAFF",
           entityId: id,
-          description: `Deleted ${existing.firstName} ${existing.surname}'s staff record.`,
+          description: `Deleted ${name}'s staff record. It can be restored from the Archive.`,
           metadata: { departmentId: existing.departmentId },
         },
         tx,
       );
+      await archiveRecord(tx, {
+        entityType: "STAFF",
+        entityId: id,
+        label: name,
+        data: existing,
+        actorId: auth.user.id,
+      });
       await tx.staff.delete({ where: { id } });
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, archived: true });
   } catch (error) {
     console.error("Failed to delete staff:", error);
     return NextResponse.json(

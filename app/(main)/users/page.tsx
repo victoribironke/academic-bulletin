@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PageHeader } from "@/components/shared/page-header";
+import { useDeleteRecord } from "@/components/shared/delete-record-dialog";
 import { TableCard, TableToolbar } from "@/components/shared/table-toolbar";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/shared/states";
 import {
@@ -182,33 +183,17 @@ export default function UsersPage() {
     `${search}|${filterRole}|${filterStatus}`,
   );
 
-  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
-
-  const handleDelete = async (user: User) => {
+  const { requestDelete, dialog: deleteDialog, checkingUrl } = useDeleteRecord();
+  const deletingUserId = checkingUrl?.split("/").pop() ?? null;
+  const handleDelete = (user: User) => {
     if (!isSuperAdmin) return;
-    const ok = window.confirm(
-      `Permanently delete ${user.firstName} ${user.lastName} (${user.email})? ` +
-        "They will no longer be able to sign in. This can't be undone.",
-    );
-    if (!ok) return;
-
-    setDeletingUserId(user.id);
-    try {
-      const res = await fetch(`/api/users/${user.id}`, { method: "DELETE" });
-      if (res.ok) {
-        toast.success("User deleted");
-        reload();
-      } else {
-        const data = await res.json().catch(() => ({}));
-        toast.error("Couldn't delete this user", {
-          description: data.error || "Please try again.",
-        });
-      }
-    } catch {
-      toast.error("Couldn't delete this user. Please try again.");
-    } finally {
-      setDeletingUserId(null);
-    }
+    requestDelete({
+      url: `/api/users/${user.id}`,
+      noun: "user",
+      name: `${user.firstName} ${user.lastName} (${user.email})`,
+      permanent: true,
+      onDeleted: reload,
+    });
   };
 
   const handleToggleActive = async (user: User) => {
@@ -538,6 +523,7 @@ export default function UsersPage() {
         />
         </>
       )}
+      {deleteDialog}
     </div>
   );
 }

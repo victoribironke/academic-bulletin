@@ -3,6 +3,12 @@ import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
 import { workflowHistoryConflict } from "@/lib/submissions/workflow-history";
+import {
+  archiveRecord,
+  deleteBlockers,
+  inUseResponse,
+  requireTypedConfirmation,
+} from "@/lib/archive";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -105,11 +111,18 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
+    const record = await prisma.school.findUnique({ where: { id } });
+    if (!record) {
+      return NextResponse.json({ error: "School not found" }, { status: 404 });
+    }
 
-    // Deleting a school deletes its bulletins, and the workflow ledger of
-    // any that have moved is permanent.
+    // The workflow ledger of any bulletin that has moved is permanent.
     const conflict = await workflowHistoryConflict({ schoolId: id });
     if (conflict) return conflict;
+    const blockers = await deleteBlockers("SCHOOL", id);
+    if (blockers.length) return inUseResponse("school", blockers);
+    const unconfirmed = await requireTypedConfirmation(request, record.name, "school");
+    if (unconfirmed) return unconfirmed;
 
     await prisma.$transaction(async (tx) => {
       await recordActivity(
@@ -118,29 +131,26 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
           action: "SCHOOL_DELETED",
           entityType: "SCHOOL",
           entityId: id,
-          description: "Deleted a school and its dependent records.",
+          description: `Deleted the school ${record.name}. It can be restored from the Archive.`,
         },
         tx,
       );
+      await archiveRecord(tx, {
+        entityType: "SCHOOL",
+        entityId: id,
+        label: record.name,
+        data: record,
+        actorId: auth.user.id,
+      });
       await tx.school.delete({ where: { id } });
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, archived: true });
   } catch (error: unknown) {
     console.error("Failed to delete school:", error);
-
-    if (
-      error &&
-      typeof error === "object" &&
-      "code" in error &&
-      error.code === "P2025"
-    ) {
-      return NextResponse.json({ error: "School not found" }, { status: 404 });
-    }
-
     return NextResponse.json(
       { error: "Failed to delete school" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

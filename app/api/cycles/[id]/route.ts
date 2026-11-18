@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
+import {
+  archiveRecord,
+  deleteBlockers,
+  inUseResponse,
+  requireTypedConfirmation,
+} from "@/lib/archive";
 
 export async function PUT(
   request: Request,
@@ -111,27 +117,18 @@ export async function DELETE(
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
-
-    const existing = await prisma.reviewCycle.findUnique({
-      where: { id },
-      include: {
-        _count: { select: { submissions: true } },
-      },
-    });
-
-    if (!existing) {
+    const cycle = await prisma.reviewCycle.findUnique({ where: { id } });
+    if (!cycle) {
       return NextResponse.json(
         { error: "Review cycle not found" },
         { status: 404 },
       );
     }
 
-    if (existing._count.submissions > 0) {
-      return NextResponse.json(
-        { error: "Cannot delete review cycle with submissions. Remove submissions first." },
-        { status: 400 },
-      );
-    }
+    const blockers = await deleteBlockers("REVIEW_CYCLE", id);
+    if (blockers.length) return inUseResponse("review cycle", blockers);
+    const unconfirmed = await requireTypedConfirmation(request, cycle.name, "review cycle");
+    if (unconfirmed) return unconfirmed;
 
     await prisma.$transaction(async (tx) => {
       await recordActivity(
@@ -140,14 +137,21 @@ export async function DELETE(
           action: "REVIEW_CYCLE_DELETED",
           entityType: "REVIEW_CYCLE",
           entityId: id,
-          description: `Deleted the ${existing.name} review cycle.`,
+          description: `Deleted the ${cycle.name} review cycle. It can be restored from the Archive.`,
         },
         tx,
       );
+      await archiveRecord(tx, {
+        entityType: "REVIEW_CYCLE",
+        entityId: id,
+        label: cycle.name,
+        data: cycle,
+        actorId: auth.user.id,
+      });
       await tx.reviewCycle.delete({ where: { id } });
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, archived: true });
   } catch (error) {
     console.error("Failed to delete review cycle:", error);
     return NextResponse.json(

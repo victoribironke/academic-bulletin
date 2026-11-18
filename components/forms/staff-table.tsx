@@ -25,6 +25,7 @@ import {
   type StaffImportData,
 } from "@/lib/imports/staff";
 import { validateStaffEntryRows } from "@/lib/validation/staff-entry";
+import { staffConfirmationName } from "@/lib/validation/name-format";
 import { PhotoUploadGuidance } from "@/components/shared/photo-upload-guidance";
 
 // Updated StaffMember interface with new structured fields
@@ -225,6 +226,9 @@ export function StaffTable({
   const [originalStaffIds, setOriginalStaffIds] = useState<Set<string>>(
     new Set(),
   );
+  // Each saved record's name: deleting one confirms it by name, and removing a
+  // row and saving the table is that confirmation.
+  const savedStaffNames = useRef(new Map<string, string>());
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -250,8 +254,12 @@ export function StaffTable({
 
       // Track original staff IDs for deletion detection
       const ids = new Set<string>();
+      savedStaffNames.current = new Map();
       data.forEach((s: StaffMember) => {
-        if (s.id) ids.add(s.id);
+        if (s.id) {
+          ids.add(s.id);
+          savedStaffNames.current.set(s.id, staffConfirmationName(s));
+        }
       });
       setOriginalStaffIds(ids);
 
@@ -409,6 +417,10 @@ export function StaffTable({
         if (!currentStaffIds.has(originalId)) {
           const res = await fetch(`/api/staff/${originalId}`, {
             method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              confirm: savedStaffNames.current.get(originalId) ?? "",
+            }),
           });
           if (!res.ok) {
             errors.push(
@@ -434,6 +446,10 @@ export function StaffTable({
       setAdjunctStaff((prev) => patchList(prev, acadLen));
       setNonAcademicStaff((prev) => patchList(prev, acadLen + adjLen));
       setOriginalStaffIds(currentStaffIds);
+      allStaff.forEach((staff, i) => {
+        const id = createdMap.get(i) ?? (staff.isNew ? undefined : staff.id);
+        if (id) savedStaffNames.current.set(id, staffConfirmationName(staff));
+      });
 
       if (errors.length > 0) {
         markDirty(true);

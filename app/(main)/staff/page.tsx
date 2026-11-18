@@ -37,7 +37,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Plus, Pencil, Trash2, RefreshCw, Upload, UserCog } from "lucide-react";
+import { Plus, Pencil, RefreshCw, Upload, UserCog } from "lucide-react";
+import { useDeleteRecord } from "@/components/shared/delete-record-dialog";
+import { RowActionsMenu } from "@/components/shared/row-actions-menu";
 import { toast } from "sonner";
 import { BulkImportDialog } from "@/components/imports/bulk-import-dialog";
 import {
@@ -257,30 +259,9 @@ export default function StaffPage() {
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (
-      !confirm(
-        `Are you sure you want to delete ${name}? This action cannot be undone.`,
-      )
-    )
-      return;
-
-    try {
-      const url = `/api/staff/${id}`;
-      const response = await fetch(url, { method: "DELETE" });
-
-      if (response.ok) {
-        toast.success("Staff member deleted successfully");
-        fetchData();
-      } else {
-        const data = await response.json();
-        toast.error(data.error || "Failed to delete staff member");
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error("An unexpected error occurred");
-    }
-  };
+  const { requestDelete, dialog: deleteDialog, checkingUrl } = useDeleteRecord();
+  const handleDelete = (id: string, name: string) =>
+    requestDelete({ url: `/api/staff/${id}`, noun: "staff member", name, onDeleted: fetchData });
 
   const filtersActive =
     searchTerm.trim() !== "" || typeFilter !== "ALL" || deptFilter !== "ALL";
@@ -374,15 +355,11 @@ export default function StaffPage() {
                       >
                         <Pencil />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => handleDelete(s.id, formatStaffName(s as any))}
-                        aria-label={`Delete ${formatStaffName(s as any)}`}
-                      >
-                        <Trash2 />
-                      </Button>
+                      <RowActionsMenu
+                        label={formatStaffName(s as any)}
+                        busy={checkingUrl === `/api/staff/${s.id}`}
+                        onDelete={() => handleDelete(s.id, formatStaffName(s as any))}
+                      />
                     </div>
                   </TableCell>
                 )}
@@ -773,6 +750,7 @@ export default function StaffPage() {
           await fetchData();
         }}
       />
+      {deleteDialog}
     </div>
   );
 }

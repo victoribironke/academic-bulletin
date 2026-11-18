@@ -8,6 +8,12 @@ import {
 import { requireApiUser } from "@/lib/api-auth";
 import { propagateMasterCourseChanges } from "@/lib/courses/propagation";
 import { recordActivity } from "@/lib/activity-log";
+import {
+  archiveRecord,
+  deleteBlockers,
+  inUseResponse,
+  requireTypedConfirmation,
+} from "@/lib/archive";
 
 // Valid enum values
 const VALID_COURSE_TYPES = [
@@ -304,33 +310,20 @@ export async function DELETE(
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
-
-    // Check if course exists and has dependencies
-    const existing = await prisma.masterCourse.findUnique({
+    const course = await prisma.masterCourse.findUnique({
       where: { id },
-      include: {
-        _count: { select: { programmeLinks: true, submissionCourses: true } },
-      },
+      include: { prerequisites: { select: { id: true } } },
     });
-
-    if (!existing) {
+    if (!course) {
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
     }
 
-    // Prevent deletion if has linked programmes or submissions
-    if (
-      existing._count.programmeLinks > 0 ||
-      existing._count.submissionCourses > 0
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Cannot delete course with linked programmes or submissions. Remove links first.",
-        },
-        { status: 400 },
-      );
-    }
+    const blockers = await deleteBlockers("MASTER_COURSE", id);
+    if (blockers.length) return inUseResponse("Registry course", blockers);
+    const unconfirmed = await requireTypedConfirmation(request, course.code, "Registry course");
+    if (unconfirmed) return unconfirmed;
 
+    const { prerequisites, ...columns } = course;
     await prisma.$transaction(async (tx) => {
       await recordActivity(
         {
@@ -338,14 +331,21 @@ export async function DELETE(
           action: "REGISTRY_COURSE_DELETED",
           entityType: "MASTER_COURSE",
           entityId: id,
-          description: `Deleted Registry course ${existing.code} - ${existing.title}.`,
+          description: `Deleted Registry course ${course.code} - ${course.title}. It can be restored from the Archive.`,
         },
         tx,
       );
+      await archiveRecord(tx, {
+        entityType: "MASTER_COURSE",
+        entityId: id,
+        label: `${course.code} - ${course.title}`,
+        data: { ...columns, prerequisiteIds: prerequisites.map((p) => p.id) },
+        actorId: auth.user.id,
+      });
       await tx.masterCourse.delete({ where: { id } });
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, archived: true });
   } catch (error) {
     console.error("Failed to delete master course:", error);
     return NextResponse.json(

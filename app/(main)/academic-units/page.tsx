@@ -27,13 +27,14 @@ import {
 import {
   Plus,
   Pencil,
-  Trash2,
   School as SchoolIcon,
   Building2,
   GraduationCap,
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
+import { useDeleteRecord } from "@/components/shared/delete-record-dialog";
+import { RowActionsMenu } from "@/components/shared/row-actions-menu";
 import { toast } from "sonner";
 
 // Types
@@ -89,7 +90,6 @@ export default function AcademicUnitsPage() {
   const [parentDeptId, setParentDeptId] = useState<string | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -247,39 +247,14 @@ export default function AcademicUnitsPage() {
     }
   };
 
-  const handleDelete = async (
+  const { requestDelete, dialog: deleteDialog, checkingUrl } = useDeleteRecord();
+  const handleDelete = (
     type: "school" | "department" | "programme",
     id: string,
     name: string,
-  ) => {
-    if (
-      !confirm(
-        `Are you sure you want to delete the ${type} "${name}"?\nThis action cannot be undone.`,
-      )
-    )
-      return;
-
-    setDeletingId(id);
-    try {
-      const url = `/api/${type}s/${id}`;
-      const response = await fetch(url, { method: "DELETE" });
-
-      if (response.ok) {
-        toast.success(
-          `${type.charAt(0).toUpperCase() + type.slice(1)} deleted successfully`,
-        );
-        fetchData();
-      } else {
-        const data = await response.json();
-        toast.error(data.error || `Failed to delete ${type}`);
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error(`An unexpected error occurred while deleting ${type}`);
-    } finally {
-      setDeletingId(null);
-    }
-  };
+  ) =>
+    requestDelete({ url: `/api/${type}s/${id}`, noun: type, name, onDeleted: fetchData });
+  const deletingId = checkingUrl?.split("/").pop() ?? null;
 
   // Search narrows the tree and opens every branch that has a match.
   const query = search.trim().toLowerCase();
@@ -380,16 +355,11 @@ export default function AcademicUnitsPage() {
                     >
                       <Pencil />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive hover:text-destructive"
-                      disabled={deletingId === school.id}
-                      onClick={() => handleDelete("school", school.id, school.name)}
-                      aria-label={`Delete ${school.name}`}
-                    >
-                      <Trash2 />
-                    </Button>
+                    <RowActionsMenu
+                      label={school.name}
+                      busy={deletingId === school.id}
+                      onDelete={() => handleDelete("school", school.id, school.name)}
+                    />
                   </div>
                 )}
               </div>
@@ -448,16 +418,12 @@ export default function AcademicUnitsPage() {
                                 >
                                   <Pencil />
                                 </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="size-8 text-destructive hover:text-destructive"
-                                  disabled={deletingId === dept.id}
-                                  onClick={() => handleDelete("department", dept.id, dept.name)}
-                                  aria-label={`Delete ${dept.name}`}
-                                >
-                                  <Trash2 />
-                                </Button>
+                                <RowActionsMenu
+                                  label={dept.name}
+                                  className="size-8"
+                                  busy={deletingId === dept.id}
+                                  onDelete={() => handleDelete("department", dept.id, dept.name)}
+                                />
                               </div>
                             )}
                           </div>
@@ -515,16 +481,12 @@ export default function AcademicUnitsPage() {
                                           >
                                             <Pencil className="size-3.5" />
                                           </Button>
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="size-7 text-destructive hover:text-destructive"
-                                            disabled={deletingId === prog.id}
-                                            onClick={() => handleDelete("programme", prog.id, prog.name)}
-                                            aria-label={`Delete ${prog.name}`}
-                                          >
-                                            <Trash2 className="size-3.5" />
-                                          </Button>
+                                          <RowActionsMenu
+                                            label={prog.name}
+                                            className="size-7"
+                                            busy={deletingId === prog.id}
+                                            onDelete={() => handleDelete("programme", prog.id, prog.name)}
+                                          />
                                         </span>
                                       )}
                                     </li>
@@ -812,6 +774,7 @@ export default function AcademicUnitsPage() {
           </form>
         </DialogContent>
       </Dialog>
+      {deleteDialog}
     </div>
   );
 }

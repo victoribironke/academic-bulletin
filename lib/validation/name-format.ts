@@ -235,6 +235,16 @@ export function formatStaffNameShort(staff: {
 }
 
 /**
+ * The name typed to confirm deleting a staff record, e.g. "Adebayo Okafor".
+ */
+export function staffConfirmationName(staff: {
+  surname: string;
+  firstName: string;
+}): string {
+  return `${toTitleCase(staff.firstName)} ${toTitleCase(staff.surname)}`.trim();
+}
+
+/**
  * Gets the display string for an academic rank
  */
 export function getAcademicRankDisplay(rank: string): string {

@@ -22,7 +22,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CalendarClock, Pencil, Plus, Power, Trash2 } from "lucide-react";
+import { CalendarClock, Loader2, Pencil, Plus, Power, Trash2 } from "lucide-react";
+import { useDeleteRecord } from "@/components/shared/delete-record-dialog";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableCard } from "@/components/shared/table-toolbar";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/shared/states";
@@ -179,30 +180,14 @@ export default function ReviewCyclesPage() {
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (
-      !confirm(
-        `Are you sure you want to delete the review cycle "${name}"?\nAll associated submissions will also be deleted. This action cannot be undone.`,
-      )
-    )
-      return;
-
-    try {
-      const url = `/api/cycles/${id}`;
-      const response = await fetch(url, { method: "DELETE" });
-
-      if (response.ok) {
-        toast.success("Review cycle deleted successfully");
-        fetchData();
-      } else {
-        const data = await response.json();
-        toast.error(data.error || "Failed to delete review cycle");
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error("An unexpected error occurred");
-    }
-  };
+  const { requestDelete, dialog: deleteDialog, checkingUrl } = useDeleteRecord();
+  const handleDelete = (id: string, name: string) =>
+    requestDelete({
+      url: `/api/cycles/${id}`,
+      noun: "review cycle",
+      name,
+      onDeleted: fetchData,
+    });
 
   if (!userLoading && !canManage) return null; // Prevent flicker while redirecting
 
@@ -305,9 +290,14 @@ export default function ReviewCyclesPage() {
                         size="icon"
                         className="text-destructive hover:text-destructive"
                         onClick={() => handleDelete(cycle.id, cycle.name)}
+                        disabled={checkingUrl === `/api/cycles/${cycle.id}`}
                         aria-label={`Delete ${cycle.name}`}
                       >
-                        <Trash2 />
+                        {checkingUrl === `/api/cycles/${cycle.id}` ? (
+                          <Loader2 className="animate-spin" />
+                        ) : (
+                          <Trash2 />
+                        )}
                       </Button>
                     </div>
                   </TableCell>
@@ -394,6 +384,7 @@ export default function ReviewCyclesPage() {
           </form>
         </DialogContent>
       </Dialog>
+      {deleteDialog}
     </div>
   );
 }
