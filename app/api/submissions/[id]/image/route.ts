@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fileUrl, putFile } from "@/lib/storage";
-import { checkProfessionalImageFile } from "@/lib/grace";
+import { checkProfessionalImage } from "@/lib/grace";
 import { getApiUser, requireSubmissionWriteAccess } from "@/lib/api-auth";
 import { aiRateLimitResponse } from "@/lib/rate-limit";
 import {
-  optimizePortrait,
-  PortraitOptimizationError,
-} from "@/lib/images/optimize-portrait";
-
-// Vercel rejects request bodies over 4.5MB, so cap uploads at 4MB.
-const MAX_FILE_SIZE = 4 * 1024 * 1024;
-const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+  checkPhotoUpload,
+  PHOTO_TOO_LARGE,
+  photoRequestTooLarge,
+  readUploadForm,
+} from "@/lib/images/photo-upload";
 
 // The photo check calls Gemini, which can take a while.
 export const maxDuration = 60;
@@ -33,61 +31,39 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const formData = await request.formData();
-    const file = formData.get("image") as File | null;
-    const role = formData.get("role") as string | null; // "dean" or "hod"
-
-    if (!file) {
-      return NextResponse.json(
-        { error: "No image file provided" },
-        { status: 400 },
-      );
+    if (photoRequestTooLarge(request)) {
+      return NextResponse.json({ error: PHOTO_TOO_LARGE }, { status: 413 });
+    }
+    const formData = await readUploadForm(request);
+    if (!formData) {
+      return NextResponse.json({ error: "The upload couldn't be read." }, { status: 400 });
     }
 
-    if (!role || !["dean", "hod"].includes(role)) {
+    const role = formData.get("role"); // "dean" or "hod"
+    if (role !== "dean" && role !== "hod") {
       return NextResponse.json(
         { error: "role must be 'dean' or 'hod'" },
         { status: 400 },
       );
     }
 
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return NextResponse.json(
-        { error: `Invalid file type. Allowed: ${ALLOWED_TYPES.join(", ")}` },
-        { status: 400 },
-      );
+    // A non-image is refused here, before it costs an AI review.
+    const checked = await checkPhotoUpload(formData.get("image"));
+    if (!checked.ok) {
+      return NextResponse.json({ error: checked.error }, { status: checked.status });
     }
-
-    if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json(
-        { error: "File too large. Maximum size is 4MB." },
-        { status: 400 },
-      );
-    }
+    const { optimized } = checked.photo;
 
     // The photo review is an AI call; it's limited per person.
     const limited = await aiRateLimitResponse("imageReview", user!.id);
     if (limited) return limited;
 
-    const imageCheck = await checkProfessionalImageFile(file);
+    const imageCheck = await checkProfessionalImage(checked.photo);
     if (!imageCheck.ok) {
       return NextResponse.json(
         { error: imageCheck.message },
         { status: imageCheck.status },
       );
-    }
-
-    let optimized;
-    try {
-      optimized = await optimizePortrait(
-        Buffer.from(await file.arrayBuffer()),
-      );
-    } catch (error) {
-      const message =
-        error instanceof PortraitOptimizationError
-          ? error.message
-          : "The image could not be optimized.";
-      return NextResponse.json({ error: message }, { status: 400 });
     }
 
     const filePath = `submissions/${id}/${role}.${optimized.extension}`;

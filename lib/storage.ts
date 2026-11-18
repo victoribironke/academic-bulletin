@@ -99,24 +99,17 @@ export async function getFile(
 }
 
 /**
- * Loads a photo for the Word/PDF exports: app file URLs come from the bucket,
- * anything else (older external links) is fetched. Null when unavailable.
+ * Loads a photo for the Word/PDF exports from the bucket. Only photos uploaded
+ * to the app are loaded; the server never fetches any other address it's
+ * given. Null when unavailable.
  */
 export async function loadPhoto(
   url?: string | null,
 ): Promise<{ data: Buffer; contentType: string } | null> {
-  if (!url) return null;
+  const key = url ? fileKeyFromUrl(url) : null;
+  if (!key) return null;
   try {
-    const key = fileKeyFromUrl(url);
-    if (key) return await getFile(key);
-    if (!/^https?:\/\//i.test(url)) return null;
-
-    const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-    if (!response.ok) return null;
-    return {
-      data: Buffer.from(await response.arrayBuffer()),
-      contentType: response.headers.get("content-type") || "",
-    };
+    return await getFile(key);
   } catch {
     return null;
   }

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { after, NextRequest } from "next/server";
 
 const authState = vi.hoisted(() => ({ userId: null as string | null }));
@@ -64,6 +64,10 @@ import { DELETE as deleteCycle } from "@/app/api/cycles/[id]/route";
 import { GET as listArchive } from "@/app/api/archive/route";
 import { POST as restoreArchived } from "@/app/api/archive/[id]/restore/route";
 import { confirmationMatches } from "@/lib/archive";
+import { GET as readStoredFile } from "@/app/api/files/[...key]/route";
+import { POST as uploadStaffPhoto } from "@/app/api/staff/[id]/image/route";
+import { POST as uploadSubmissionPhoto } from "@/app/api/submissions/[id]/image/route";
+import sharp from "sharp";
 import { POST as bulkImportCourses } from "@/app/api/courses/bulk/route";
 import { POST as bulkImportMasterCourses } from "@/app/api/master-courses/bulk/route";
 import { GET as listSubmissions } from "@/app/api/submissions/route";
@@ -3669,5 +3673,199 @@ describe("Deleting into the Archive", () => {
       departmentId: ids.departmentA,
       academicRank: "LECTURER_I",
     });
+  });
+});
+
+// Photos reach only signed-in users, an upload must really be an image of
+// 4MB or less before it costs an AI review, and a bulletin's dean and HOD
+// photos must be ones uploaded to the app.
+describe("Photos", () => {
+  const staffId = "test-photo-staff";
+  const cycleId = "test-photo-cycle";
+  const submissionId = "test-photo-submission";
+  const routeParams = (id: string) => ({ params: Promise.resolve({ id }) });
+
+  const upload = (path: string, file: File, fields: Record<string, string> = {}) => {
+    const form = new FormData();
+    form.append("image", file);
+    for (const [name, value] of Object.entries(fields)) form.append(name, value);
+    return new NextRequest(`http://localhost${path}`, { method: "POST", body: form });
+  };
+  const staffUpload = (file: File) =>
+    uploadStaffPhoto(upload(`/api/staff/${staffId}/image`, file), routeParams(staffId));
+  const deanUpload = (file: File) =>
+    uploadSubmissionPhoto(
+      upload(`/api/submissions/${submissionId}/image`, file, { role: "dean" }),
+      routeParams(submissionId),
+    );
+  // An AI photo review is counted before it runs, so no count means no review.
+  const reviewsStarted = async () =>
+    (
+      await prisma.apiRateLimit.aggregate({
+        where: { key: { startsWith: `imageReview:${ids.hod}:` } },
+        _sum: { count: true },
+      })
+    )._sum.count ?? 0;
+
+  const savePhotos = (programmeInfo: object) =>
+    updateSubmission(
+      new NextRequest(`http://localhost/api/submissions/${submissionId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: { programmeInfo } }),
+      }),
+      routeParams(submissionId),
+    );
+  const savedPhotos = async () =>
+    (await prisma.submissionContent.findUnique({ where: { submissionId } }))?.programmeInfo;
+
+  beforeAll(async () => {
+    await prisma.staff.create({
+      data: {
+        id: staffId,
+        title: "DR",
+        gender: "MALE",
+        surname: "Photo",
+        firstName: "Test",
+        highestQualification: "PHD",
+        academicRank: "LECTURER_I",
+        departmentId: ids.departmentA,
+      },
+    });
+    await prisma.reviewCycle.create({
+      data: { id: cycleId, name: "Photo Cycle", createdById: ids.super },
+    });
+    await prisma.submission.create({
+      data: {
+        id: submissionId,
+        title: "Photo Submission",
+        programmeId: ids.programmeA,
+        createdById: ids.hod,
+        cycleId,
+      },
+    });
+  });
+
+  beforeEach(async () => {
+    // With no AI key the review answers "not configured", so a photo that
+    // passes the file checks stops there and never reaches storage.
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    await prisma.apiRateLimit.deleteMany({});
+    authState.userId = ids.hod;
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("serves stored photos only to signed-in users", async () => {
+    authState.userId = null;
+    const key = ["submissions", submissionId, "dean.jpg"];
+    const signedOut = await readStoredFile(
+      new NextRequest(`http://localhost/api/files/${key.join("/")}`),
+      { params: Promise.resolve({ key }) },
+    );
+    expect(signedOut.status).toBe(401);
+
+    authState.userId = ids.hod;
+    const escape = await readStoredFile(
+      new NextRequest("http://localhost/api/files/x"),
+      { params: Promise.resolve({ key: ["..", "secret"] }) },
+    );
+    expect(escape.status).toBe(404);
+  });
+
+  it("refuses a file that isn't an image before any AI review", async () => {
+    const fakes = [
+      new File(["just some text"], "photo.jpg", { type: "image/jpeg" }),
+      new File([Buffer.from("GIF89a\x01\x00\x01\x00")], "photo.png", { type: "image/png" }),
+      new File(["<svg xmlns='http://www.w3.org/2000/svg'/>"], "photo.webp", { type: "image/webp" }),
+    ];
+    for (const file of fakes) {
+      const response = await staffUpload(file);
+      expect(response.status).toBe(400);
+      expect((await response.json()).error).toBe("This file isn't a JPG, PNG or WEBP image.");
+    }
+
+    // A JPEG's first bytes followed by junk still fails: it must decode.
+    const broken = new File(
+      [Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(2000, 7)])],
+      "photo.jpg",
+      { type: "image/jpeg" },
+    );
+    expect((await staffUpload(broken)).status).toBe(400);
+    expect((await deanUpload(fakes[0])).status).toBe(400);
+
+    expect(await reviewsStarted()).toBe(0);
+    const staff = await prisma.staff.findUnique({ where: { id: staffId } });
+    expect(staff?.imageUrl).toBeNull();
+  });
+
+  it("refuses a photo over 4MB", async () => {
+    const oversized = new File(
+      [Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(4 * 1024 * 1024)])],
+      "photo.jpg",
+      { type: "image/jpeg" },
+    );
+    const response = await staffUpload(oversized);
+    expect(response.status).toBe(413);
+    expect((await response.json()).error).toBe("File too large. Maximum size is 4MB.");
+    expect(await reviewsStarted()).toBe(0);
+  });
+
+  it("sends a real image on to the AI review, labelled as what it really is", async () => {
+    const png = await sharp({
+      create: { width: 30, height: 40, channels: 3, background: "#777777" },
+    })
+      .png()
+      .toBuffer();
+
+    // A PNG the browser calls a JPEG is still accepted as a PNG.
+    for (const file of [
+      new File([new Uint8Array(png)], "photo.png", { type: "image/png" }),
+      new File([new Uint8Array(png)], "photo.jpg", { type: "image/jpeg" }),
+    ]) {
+      const response = await staffUpload(file);
+      expect(response.status).toBe(503);
+      expect((await response.json()).error).toMatch(/not configured/);
+    }
+    expect(await reviewsStarted()).toBe(2);
+  });
+
+  it("saves only dean and HOD photos that were uploaded to the app", async () => {
+    const appPhoto = `/api/files/submissions/${submissionId}/dean.jpg?v=1`;
+
+    for (const outside of [
+      "https://example.com/dean.jpg",
+      "http://169.254.169.254/latest/meta-data/",
+      "/api/files/../../secret",
+      "data:image/png;base64,AAAA",
+    ]) {
+      const refused = await savePhotos({ deanImageUrl: outside });
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toMatchObject({ code: "PHOTO_NOT_UPLOADED" });
+    }
+    expect(await savedPhotos()).toBeUndefined();
+
+    expect((await savePhotos({ deanImageUrl: appPhoto, hodImageUrl: "" })).status).toBe(200);
+    expect(await savedPhotos()).toMatchObject({ deanImageUrl: appPhoto });
+
+    // An older record keeps an address it already had, so it can still be
+    // saved, but that address can't be swapped for another outside one.
+    const older = "https://old-storage.example/object/public/hod.jpg";
+    await prisma.submissionContent.update({
+      where: { submissionId },
+      data: { programmeInfo: { deanImageUrl: appPhoto, hodImageUrl: older } },
+    });
+    expect((await savePhotos({ deanImageUrl: appPhoto, hodImageUrl: older })).status).toBe(200);
+    const swapped = await savePhotos({
+      deanImageUrl: appPhoto,
+      hodImageUrl: "https://example.com/other.jpg",
+    });
+    expect(swapped.status).toBe(400);
+    expect((await swapped.json()).error).toBe(
+      "The HOD's photo has to be uploaded here. Upload it again, then save.",
+    );
+    expect(await savedPhotos()).toMatchObject({ hodImageUrl: older });
   });
 });

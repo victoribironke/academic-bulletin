@@ -4,7 +4,7 @@
  * Two checks:
  *  - runGraceCheck: scores a course description / philosophy against the
  *    five GRACE pillars.
- *  - checkProfessionalImageFile: decides whether a photo is fit for the bulletin.
+ *  - checkProfessionalImage: decides whether a photo is fit for the bulletin.
  *
  * Server-only: never import this from a client component (it reads the API key).
  */
@@ -379,10 +379,14 @@ export type ImageCheckFailure = {
   message: string;
 };
 
-/** Asks Claude whether a photo is professional enough for the bulletin. */
-export async function checkProfessionalImageFile(
-  file: File,
-): Promise<{ ok: true } | ImageCheckFailure> {
+/**
+ * Asks Claude whether a photo is professional enough for the bulletin.
+ * `type` is what the bytes are (see checkPhotoUpload), not the browser's label.
+ */
+export async function checkProfessionalImage(photo: {
+  bytes: Buffer;
+  type: string;
+}): Promise<{ ok: true } | ImageCheckFailure> {
   const ai = getClient();
   if (!ai) {
     return {
@@ -393,7 +397,7 @@ export async function checkProfessionalImageFile(
     };
   }
 
-  const mediaType = IMAGE_MEDIA_TYPES.find((t) => t === file.type);
+  const mediaType = IMAGE_MEDIA_TYPES.find((t) => t === photo.type);
   if (!mediaType) {
     return {
       ok: false,
@@ -403,7 +407,7 @@ export async function checkProfessionalImageFile(
   }
 
   try {
-    const data = Buffer.from(await file.arrayBuffer()).toString("base64");
+    const data = photo.bytes.toString("base64");
     const response = await ai.messages.parse({
       model: GRACE_MODEL,
       max_tokens: 4000,

@@ -1,7 +1,7 @@
 /**
  * Security headers sent on every route (see next.config.ts). The content
- * policy allows only what the app loads: its own scripts, styles, fonts and
- * data, and photos over HTTPS. Sign-in leaves for Google's sign-in page.
+ * policy allows only what the app loads: its own scripts, styles, fonts,
+ * data and photos. Sign-in leaves for Google's sign-in page.
  *
  * Kept free of Next.js imports so next.config.ts can load it and it can be
  * unit tested.
@@ -26,9 +26,9 @@ export function contentSecurityPolicy({
     // until the app moves to per-request nonces. No other origin may run code.
     "script-src": ["'self'", "'unsafe-inline'", ...(development ? ["'unsafe-eval'"] : [])],
     "style-src": ["'self'", "'unsafe-inline'"],
-    // Photos are served by the app (/api/files); older records may still link
-    // to other HTTPS hosts.
-    "img-src": ["'self'", "data:", "blob:", "https:"],
+    // Photos are served by the app (/api/files); no other host's images load.
+    // data: and blob: are images the page builds itself.
+    "img-src": ["'self'", "data:", "blob:"],
     "font-src": ["'self'", "data:"],
     "connect-src": ["'self'"],
     "frame-src": ["'none'"],

@@ -12,6 +12,7 @@ import { AUTOSAVE_COALESCE_MINUTES, recordActivity } from "@/lib/activity-log";
 import { getSubmissionWorkflow } from "@/lib/submissions/phase-owners";
 import { workflowHistoryConflict } from "@/lib/submissions/workflow-history";
 import { inUseResponse, requireTypedConfirmation } from "@/lib/archive";
+import { photoNotUploadedHere } from "@/lib/images/photo-urls";
 
 /** Content columns that aren't anything a person wrote. */
 const BOOKKEEPING_FIELDS = new Set([
@@ -194,6 +195,24 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         { error: gate.message },
         { status: gate.status },
       );
+    }
+
+    // Dean and HOD photos must be ones uploaded to the app.
+    if (content?.programmeInfo !== undefined) {
+      const saved = await prisma.submissionContent.findUnique({
+        where: { submissionId: id },
+        select: { programmeInfo: true },
+      });
+      const photo = photoNotUploadedHere(content.programmeInfo, saved?.programmeInfo);
+      if (photo) {
+        return NextResponse.json(
+          {
+            error: `The ${photo} has to be uploaded here. Upload it again, then save.`,
+            code: "PHOTO_NOT_UPLOADED",
+          },
+          { status: 400 },
+        );
+      }
     }
 
     // Update submission

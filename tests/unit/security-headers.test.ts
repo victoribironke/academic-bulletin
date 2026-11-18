@@ -39,6 +39,8 @@ describe("security headers", () => {
     expect(policy["default-src"]).toEqual(["'self'"]);
     expect(policy["script-src"]).toEqual(["'self'", "'unsafe-inline'"]);
     expect(policy["connect-src"]).toEqual(["'self'"]);
+    // Photos come only from the app, never from another host.
+    expect(policy["img-src"]).toEqual(["'self'", "data:", "blob:"]);
     expect(policy["frame-ancestors"]).toEqual(["'none'"]);
     expect(policy["frame-src"]).toEqual(["'none'"]);
     expect(policy["object-src"]).toEqual(["'none'"]);
