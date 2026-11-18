@@ -1,8 +1,9 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense } from "react";
+import { useFormStatus } from "react-dom";
 import { useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { signInWithGoogle } from "@/app/actions/auth";
 import { BrandedShell } from "@/components/auth/branded-shell";
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -13,11 +14,11 @@ const ERROR_MESSAGES: Record<string, string> = {
   sign_in_failed: "Sign-in didn't complete. Please try again.",
 };
 
-function LoginError({ localError }: { localError: string }) {
+function LoginError() {
   const searchParams = useSearchParams();
   const code = searchParams.get("error");
-  const message =
-    localError || (code ? (ERROR_MESSAGES[code] ?? ERROR_MESSAGES.sign_in_failed) : "");
+  // Auth.js's own error codes (e.g. "Configuration") fall back to the generic message.
+  const message = code ? (ERROR_MESSAGES[code] ?? ERROR_MESSAGES.sign_in_failed) : "";
   if (!message) return null;
 
   return (
@@ -53,29 +54,21 @@ function GoogleIcon() {
   );
 }
 
+function GoogleButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="mt-8 inline-flex h-11 w-full items-center justify-center gap-3 rounded-md border border-input bg-background px-4 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+    >
+      <GoogleIcon />
+      {pending ? "Redirecting to Google..." : "Sign in with Google"}
+    </button>
+  );
+}
+
 export default function LoginPage() {
-  const [isPending, setIsPending] = useState(false);
-  const [localError, setLocalError] = useState("");
-
-  const handleGoogleSignIn = async () => {
-    setIsPending(true);
-    setLocalError("");
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-        // Always show the account picker so staff can choose which account to use.
-        queryParams: { prompt: "select_account" },
-      },
-    });
-    if (error) {
-      setLocalError(ERROR_MESSAGES.sign_in_failed);
-      setIsPending(false);
-    }
-    // On success the browser is redirected to Google.
-  };
-
   return (
     <BrandedShell>
       <div className="space-y-2 text-center">
@@ -88,18 +81,12 @@ export default function LoginPage() {
       </div>
 
       <Suspense fallback={null}>
-        <LoginError localError={localError} />
+        <LoginError />
       </Suspense>
 
-      <button
-        type="button"
-        onClick={handleGoogleSignIn}
-        disabled={isPending}
-        className="mt-8 inline-flex h-11 w-full items-center justify-center gap-3 rounded-md border border-input bg-background px-4 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
-      >
-        <GoogleIcon />
-        {isPending ? "Redirecting to Google..." : "Sign in with Google"}
-      </button>
+      <form action={signInWithGoogle}>
+        <GoogleButton />
+      </form>
 
       <p className="mt-6 text-center text-xs text-muted-foreground">
         Use the Google account whose email address an administrator added for
