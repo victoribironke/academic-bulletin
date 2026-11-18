@@ -32,6 +32,7 @@ import {
   parseStructuredText,
 } from "./document-utils";
 import { validateBulletinData } from "./validation";
+import { loadPhoto } from "@/lib/storage";
 
 const NAVY = "123B66";
 const GOLD = "C99A2E";
@@ -169,25 +170,20 @@ function docxTable(
 }
 
 async function fetchImage(url?: string): Promise<EmbeddedImage | null> {
-  if (!url) return null;
-  try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-    if (!response.ok) return null;
-    const contentType = response.headers.get("content-type") || "";
-    const type: ImageType | null = /png/i.test(contentType)
-      ? "png"
-      : /jpe?g/i.test(contentType)
-        ? "jpg"
-        : /gif/i.test(contentType)
-          ? "gif"
-          : /bmp/i.test(contentType)
-            ? "bmp"
-            : null;
-    if (!type) return null;
-    return { data: Buffer.from(await response.arrayBuffer()), type };
-  } catch {
-    return null;
-  }
+  const photo = await loadPhoto(url);
+  if (!photo) return null;
+  const { contentType } = photo;
+  const type: ImageType | null = /png/i.test(contentType)
+    ? "png"
+    : /jpe?g/i.test(contentType)
+      ? "jpg"
+      : /gif/i.test(contentType)
+        ? "gif"
+        : /bmp/i.test(contentType)
+          ? "bmp"
+          : null;
+  if (!type) return null;
+  return { data: photo.data, type };
 }
 
 async function loadStaffPhotos(data: BulletinData): Promise<Map<string, EmbeddedImage>> {
