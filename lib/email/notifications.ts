@@ -9,6 +9,7 @@
  *  - HODs/coordinators: review decisions on their bulletins, with remarks.
  *
  * New users get one "you've been added" email when an admin creates them.
+ * Admins get a security notice whenever their two-step verification changes.
  */
 import prisma from "@/lib/prisma";
 import { getSiteUrl } from "@/lib/site-url";
@@ -472,4 +473,80 @@ export async function sendAccessGrantedEmail(opts: {
     subject: "Your Academic Bulletin access",
     ...content,
   });
+}
+
+export type TwoStepNotice =
+  | { kind: "enabled" }
+  | { kind: "recovery_code_used"; codesLeft: number }
+  | { kind: "recovery_codes_renewed" }
+  | { kind: "reset" }
+  | { kind: "locked" };
+
+const noticeTime = new Intl.DateTimeFormat("en-GB", {
+  dateStyle: "long",
+  timeStyle: "short",
+  timeZone: "Africa/Lagos",
+});
+
+/**
+ * Tells someone their two-step verification changed, so a change they didn't
+ * make doesn't go unnoticed. Returns whether the email was sent. Never throws.
+ */
+export async function sendTwoStepNoticeEmail(opts: {
+  to: string;
+  firstName: string;
+  notice: TwoStepNotice;
+  at?: Date;
+}): Promise<boolean> {
+  if (!isEmailConfigured()) return false;
+
+  const notTheirs =
+    "If this wasn't you, tell a Super Administrator straight away.";
+  const { subject, heading, intro } = (() => {
+    switch (opts.notice.kind) {
+      case "enabled":
+        return {
+          subject: "Two-step verification is on",
+          heading: "Two-step verification is on",
+          intro: `Hello ${opts.firstName}, an authenticator app was set up for your Academic Bulletin account. You'll enter a code from it when you sign in. ${notTheirs}`,
+        };
+      case "recovery_code_used":
+        return {
+          subject: "A recovery code was used to sign in",
+          heading: "A recovery code was used to sign in",
+          intro: `Hello ${opts.firstName}, someone signed in to your Academic Bulletin account with one of your recovery codes. You have ${opts.notice.codesLeft} left. ${notTheirs}`,
+        };
+      case "recovery_codes_renewed":
+        return {
+          subject: "New recovery codes for your account",
+          heading: "You have new recovery codes",
+          intro: `Hello ${opts.firstName}, new recovery codes were made for your Academic Bulletin account, and the old ones no longer work. ${notTheirs}`,
+        };
+      case "reset":
+        return {
+          subject: "Your two-step verification was reset",
+          heading: "Your two-step verification was reset",
+          intro: `Hello ${opts.firstName}, a Super Administrator reset two-step verification on your Academic Bulletin account. Next time you sign in, you'll set up your authenticator app again. ${notTheirs}`,
+        };
+      case "locked":
+        return {
+          subject: "Too many wrong sign-in codes",
+          heading: "Too many wrong sign-in codes",
+          intro: `Hello ${opts.firstName}, too many wrong codes were entered for your Academic Bulletin account, so code entry is paused for a while. If this wasn't you, someone may know your Google password: change it, then tell a Super Administrator.`,
+        };
+    }
+  })();
+
+  const content = renderEmail({
+    heading,
+    intro,
+    details: [
+      ["Account", opts.to],
+      ["When", noticeTime.format(opts.at ?? new Date())],
+    ],
+    link: `${getSiteUrl()}/login`,
+    linkLabel: "Open the Academic Bulletin",
+  });
+
+  return sendEmail({ to: [opts.to], subject, ...content });
 }

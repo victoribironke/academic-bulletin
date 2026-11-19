@@ -3,8 +3,10 @@ import { auth } from "@/auth";
 import { wwwRedirectTarget } from "@/lib/canonical-host";
 
 /**
- * Sends www visitors to the main address, signed-out visitors to /login and
- * signed-in ones away from it.
+ * Sends www visitors to the main address, signed-out visitors to /login,
+ * admins who still need an authenticator code to /verify, and signed-in
+ * people away from /login. Apart from the www redirect this only steers
+ * pages; every API route checks access itself.
  */
 export const proxy = auth((request) => {
   const { pathname, search, origin } = request.nextUrl;
@@ -22,12 +24,22 @@ export const proxy = auth((request) => {
 
   const signedIn = Boolean(request.auth?.user?.id);
   const isLoginRoute = pathname.startsWith("/login");
+  const isVerifyRoute = pathname === "/verify";
 
-  if (!signedIn && !isLoginRoute) {
-    return NextResponse.redirect(new URL("/login", origin));
+  if (!signedIn) {
+    return isLoginRoute ? NextResponse.next() : NextResponse.redirect(new URL("/login", origin));
   }
-  // Signed-in users have no reason to see the login page.
-  if (signedIn && isLoginRoute) {
+
+  if (request.auth?.mfa === "pending") {
+    if (isVerifyRoute) return NextResponse.next();
+    const verify = new URL("/verify", origin);
+    if (!isLoginRoute && pathname !== "/") verify.searchParams.set("next", `${pathname}${search}`);
+    return NextResponse.redirect(verify);
+  }
+
+  // Signed-in users have no reason to see the login page. /verify decides
+  // for itself from the database, so it's never redirected here.
+  if (isLoginRoute) {
     return NextResponse.redirect(new URL("/dashboard", origin));
   }
   return NextResponse.next();

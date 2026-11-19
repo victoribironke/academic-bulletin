@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import prisma from "@/lib/prisma";
 import { randomUUID } from "node:crypto";
-import { getSessionUserId } from "@/auth";
+import { getApiUser } from "@/lib/api-auth";
 import { sendAccessGrantedEmail } from "@/lib/email/notifications";
 import { recordActivity } from "@/lib/activity-log";
 import { isPrivilegedRole, isUniversityEmail, UNIVERSITY_DOMAIN } from "@/lib/sign-in-access";
@@ -18,7 +18,8 @@ const USER_ROLES = [
 
 export async function adminCreateUser(prevState: any, formData: FormData) {
   // 1. Verify Requesting User's Permissions
-  const currentUserId = await getSessionUserId();
+  // An admin counts only once this sign-in's authenticator code is checked.
+  const currentUserId = (await getApiUser())?.id;
   if (!currentUserId) {
     return {
       error: "Authentication required. Please refresh the page and sign in again.",

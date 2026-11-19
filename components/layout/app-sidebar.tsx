@@ -14,6 +14,7 @@ import {
   LibraryBig,
   ScrollText,
   LogOut,
+  ShieldCheck,
   Network,
   UserCog,
   Users,
@@ -44,6 +45,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { usePermission, useUser } from "@/contexts/user-context";
 import { getRoleDisplayName, type Permission } from "@/lib/auth";
 import { logOut } from "@/app/actions/auth";
+import { TwoStepSettingsDialog } from "@/components/auth/two-step-settings-dialog";
 import type { UserRole } from "@prisma/client";
 
 type NavItem = {
@@ -170,6 +172,7 @@ function useActiveCycleName(): string | null {
 function NavUser() {
   const { currentUser, isLoading } = useUser();
   const { isMobile } = useSidebar();
+  const [twoStepOpen, setTwoStepOpen] = useState(false);
 
   const handleLogout = async () => {
     await logOut();
@@ -227,6 +230,12 @@ function NavUser() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            {(currentUser.role === "ADMIN" || currentUser.role === "SUPER_ADMIN") && (
+              <DropdownMenuItem onSelect={() => setTwoStepOpen(true)}>
+                <ShieldCheck className="size-4" />
+                Two-step verification
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               onSelect={handleLogout}
               className="text-destructive focus:text-destructive"
@@ -236,6 +245,11 @@ function NavUser() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <TwoStepSettingsDialog
+          open={twoStepOpen}
+          onOpenChange={setTwoStepOpen}
+          email={currentUser.email}
+        />
       </SidebarMenuItem>
     </SidebarMenu>
   );
