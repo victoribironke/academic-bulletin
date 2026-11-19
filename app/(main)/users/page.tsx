@@ -33,6 +33,12 @@ import {
 } from "@/components/shared/table-pagination";
 import { CreateUserDialog } from "@/components/users/create-user-dialog";
 import { EditUserDialog } from "@/components/users/edit-user-dialog";
+import {
+  formatExceptionDate,
+  hasActiveException,
+  SignInExceptionDialog,
+} from "@/components/users/sign-in-exception-dialog";
+import { isPrivilegedRole, isUniversityEmail } from "@/lib/sign-in-access";
 import { cn } from "@/lib/utils";
 
 interface School {
@@ -67,6 +73,9 @@ interface User {
     | "ADMIN"
     | "SUPER_ADMIN";
   isActive: boolean;
+  signInExceptionUntil: string | null;
+  signInExceptionReason: string | null;
+  signInExceptionGrantedBy: { firstName: string; lastName: string } | null;
   schoolId: string | null;
   departmentId: string | null;
   school?: School | null;
@@ -101,6 +110,20 @@ function RolePill({ role }: { role: string }) {
       {getRoleDisplayName(role as User["role"])}
     </span>
   );
+}
+
+/** Says when a personal (non-university) account can sign in. */
+function PersonalAccountNote({ user }: { user: User }) {
+  if (isUniversityEmail(user.email)) return null;
+  const [text, tone] = isPrivilegedRole(user.role)
+    ? ["Personal account · can't sign in as an admin", "text-destructive"]
+    : hasActiveException(user)
+      ? [
+          `Personal account · exception until ${formatExceptionDate(user.signInExceptionUntil!)}`,
+          "text-amber-700 dark:text-amber-400",
+        ]
+      : ["Personal account · can't sign in without an exception", "text-destructive"];
+  return <p className={cn("truncate text-xs", tone)}>{text}</p>;
 }
 
 function initials(first: string, last: string) {
@@ -396,6 +419,7 @@ export default function UsersPage() {
                             {user.firstName} {user.lastName}
                           </p>
                           <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+                          <PersonalAccountNote user={user} />
                         </div>
                       </div>
                     </TableCell>
@@ -425,9 +449,15 @@ export default function UsersPage() {
                             </SelectItem>
                             <SelectItem value="HOD">{getRoleDisplayName("HOD")}</SelectItem>
                             <SelectItem value="DEAN">{getRoleDisplayName("DEAN")}</SelectItem>
-                            <SelectItem value="ADMIN">{getRoleDisplayName("ADMIN")}</SelectItem>
+                            {/* Admin roles need a babcock.edu.ng account. */}
+                            <SelectItem value="ADMIN" disabled={!isUniversityEmail(user.email)}>
+                              {getRoleDisplayName("ADMIN")}
+                            </SelectItem>
                             {isSuperAdmin && (
-                              <SelectItem value="SUPER_ADMIN">
+                              <SelectItem
+                                value="SUPER_ADMIN"
+                                disabled={!isUniversityEmail(user.email)}
+                              >
                                 {getRoleDisplayName("SUPER_ADMIN")}
                               </SelectItem>
                             )}
@@ -470,6 +500,11 @@ export default function UsersPage() {
                             onSuccess={reload}
                           />
                         )}
+                        {isSuperAdmin &&
+                          !isUniversityEmail(user.email) &&
+                          !isPrivilegedRole(user.role) && (
+                            <SignInExceptionDialog user={user} onSuccess={reload} />
+                          )}
                         {isSuperAdmin && (
                           <Button
                             variant="outline"

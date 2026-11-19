@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { getSessionUserId } from "@/auth";
 import { sendAccessGrantedEmail } from "@/lib/email/notifications";
 import { recordActivity } from "@/lib/activity-log";
+import { isPrivilegedRole, isUniversityEmail, UNIVERSITY_DOMAIN } from "@/lib/sign-in-access";
 
 const USER_ROLES = [
   "PROGRAMME_COORDINATOR",
@@ -74,6 +75,13 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
   if (role === "SUPER_ADMIN" && requestingUser.role !== "SUPER_ADMIN") {
     return {
       error: "Only Super Administrators can create other Super Administrators.",
+    };
+  }
+
+  // Admin roles belong to university accounts only.
+  if (isPrivilegedRole(role) && !isUniversityEmail(email)) {
+    return {
+      error: `Academic Planning Admin and Super Administrator accounts must use a ${UNIVERSITY_DOMAIN} email address.`,
     };
   }
 
@@ -168,7 +176,13 @@ export async function adminCreateUser(prevState: any, formData: FormData) {
     });
 
     revalidatePath("/users");
-    return { success: true as const, email, emailSent };
+    return {
+      success: true as const,
+      email,
+      emailSent,
+      // A personal account can't sign in until a Super Admin grants an exception.
+      needsSignInException: !isUniversityEmail(email),
+    };
   } catch (error) {
     console.error("Admin user creation failed:", error);
     return { error: "An unexpected error occurred during user creation." };

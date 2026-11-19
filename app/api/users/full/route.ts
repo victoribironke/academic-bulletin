@@ -16,6 +16,9 @@ export async function GET() {
         lastName: true,
         role: true,
         isActive: true,
+        signInExceptionUntil: true,
+        signInExceptionReason: true,
+        signInExceptionGrantedBy: { select: { firstName: true, lastName: true } },
         schoolId: true,
         departmentId: true,
         school: {

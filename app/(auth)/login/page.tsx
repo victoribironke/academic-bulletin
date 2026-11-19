@@ -11,6 +11,10 @@ const ERROR_MESSAGES: Record<string, string> = {
     "This Google account doesn't have access. Ask an administrator to add your email address, then try again.",
   account_deactivated:
     "This account has been deactivated. Contact an administrator for assistance.",
+  personal_account:
+    "Sign in with your babcock.edu.ng Google account. A personal Google account works only while a Super Administrator has given it a sign-in exception.",
+  personal_account_admin:
+    "Academic Planning Admin and Super Administrator accounts must sign in with a babcock.edu.ng Google account.",
   sign_in_failed: "Sign-in didn't complete. Please try again.",
 };
 
@@ -89,8 +93,8 @@ export default function LoginPage() {
       </form>
 
       <p className="mt-6 text-center text-xs text-muted-foreground">
-        Use the Google account whose email address an administrator added for
-        you.
+        Use your babcock.edu.ng Google account, with the email address an
+        administrator added for you.
       </p>
     </BrandedShell>
   );

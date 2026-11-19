@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Edit2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { isUniversityEmail } from "@/lib/sign-in-access";
 
 export function EditUserDialog({
   user,
@@ -210,9 +211,17 @@ export function EditUserDialog({
                   </SelectItem>
                   <SelectItem value="HOD">Head of Department</SelectItem>
                   <SelectItem value="DEAN">Dean</SelectItem>
-                  <SelectItem value="ADMIN">Academic Planning</SelectItem>
+                  {/* Admin roles need a babcock.edu.ng account. */}
+                  <SelectItem value="ADMIN" disabled={!isUniversityEmail(user.email)}>
+                    Academic Planning
+                  </SelectItem>
                   {allowSuperAdmin && (
-                    <SelectItem value="SUPER_ADMIN">Super Administrator</SelectItem>
+                    <SelectItem
+                      value="SUPER_ADMIN"
+                      disabled={!isUniversityEmail(user.email)}
+                    >
+                      Super Administrator
+                    </SelectItem>
                   )}
                 </SelectContent>
               </Select>

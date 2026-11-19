@@ -192,6 +192,14 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // A personal (non-babcock.edu.ng) Google account signs in only while a
+  // Super Admin's exception lasts, and never in an admin role.
+  signInExceptionUntil       DateTime?
+  signInExceptionReason      String?
+  signInExceptionGrantedById String?
+  signInExceptionGrantedBy   User?     @relation("SignInExceptionGrants", fields: [signInExceptionGrantedById], references: [id], onDelete: SetNull)
+  signInExceptionsGranted    User[]    @relation("SignInExceptionGrants")
+
   // Foreign Keys (optional - user may be linked to school/department)
   schoolId     String?
   departmentId String?

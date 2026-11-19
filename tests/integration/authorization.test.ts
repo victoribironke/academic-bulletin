@@ -67,6 +67,10 @@ import { confirmationMatches } from "@/lib/archive";
 import { GET as readStoredFile } from "@/app/api/files/[...key]/route";
 import { POST as uploadStaffPhoto } from "@/app/api/staff/[id]/image/route";
 import { POST as uploadSubmissionPhoto } from "@/app/api/submissions/[id]/image/route";
+import {
+  DELETE as deleteSignInException,
+  PUT as putSignInException,
+} from "@/app/api/users/[id]/sign-in-exception/route";
 import sharp from "sharp";
 import { POST as bulkImportCourses } from "@/app/api/courses/bulk/route";
 import { POST as bulkImportMasterCourses } from "@/app/api/master-courses/bulk/route";
@@ -166,21 +170,21 @@ beforeAll(async () => {
     data: [
       {
         id: ids.super,
-        email: `${ids.super}@example.edu`,
+        email: `${ids.super}@babcock.edu.ng`,
         firstName: "Super",
         lastName: "Admin",
         role: "SUPER_ADMIN",
       },
       {
         id: ids.admin,
-        email: `${ids.admin}@example.edu`,
+        email: `${ids.admin}@babcock.edu.ng`,
         firstName: "Academic",
         lastName: "Admin",
         role: "ADMIN",
       },
       {
         id: ids.dean,
-        email: `${ids.dean}@example.edu`,
+        email: `${ids.dean}@babcock.edu.ng`,
         firstName: "Test",
         lastName: "Dean",
         role: "DEAN",
@@ -188,7 +192,7 @@ beforeAll(async () => {
       },
       {
         id: ids.hod,
-        email: `${ids.hod}@example.edu`,
+        email: `${ids.hod}@babcock.edu.ng`,
         firstName: "Test",
         lastName: "Hod",
         role: "HOD",
@@ -197,7 +201,7 @@ beforeAll(async () => {
       },
       {
         id: ids.coordinator,
-        email: `${ids.coordinator}@example.edu`,
+        email: `${ids.coordinator}@babcock.edu.ng`,
         firstName: "Programme",
         lastName: "Coordinator",
         role: "PROGRAMME_COORDINATOR",
@@ -206,7 +210,7 @@ beforeAll(async () => {
       },
       {
         id: ids.inactive,
-        email: `${ids.inactive}@example.edu`,
+        email: `${ids.inactive}@babcock.edu.ng`,
         firstName: "Inactive",
         lastName: "User",
         role: "HOD",
@@ -787,6 +791,8 @@ describe("route authorization", () => {
       email: "invited.user@example.edu",
       // Resend isn't configured in tests, so no access email goes out.
       emailSent: false,
+      // Not a babcock.edu.ng address, so it needs a sign-in exception.
+      needsSignInException: true,
     });
     // Only the user record is created; a Google sign-in with the same email
     // is matched to it.
@@ -1832,7 +1838,7 @@ describe("daily summary emails", () => {
       const deanEmails = sent.filter((m) => m.subject.includes("School Board review"));
       expect(deanEmails.map((m) => m.to[0]).sort()).toEqual(
         [
-          `${ids.dean}@example.edu`,
+          `${ids.dean}@babcock.edu.ng`,
           "invited.user@example.edu",
         ].sort(),
       );
@@ -1842,7 +1848,7 @@ describe("daily summary emails", () => {
         m.subject.includes("Academic Planning"),
       );
       expect(adminEmails.map((m) => m.to[0]).sort()).toEqual(
-        [`${ids.admin}@example.edu`, `${ids.super}@example.edu`].sort(),
+        [`${ids.admin}@babcock.edu.ng`, `${ids.super}@babcock.edu.ng`].sort(),
       );
 
       // The department's HOD and every assigned programme coordinator get the
@@ -1850,8 +1856,8 @@ describe("daily summary emails", () => {
       const hodEmails = sent.filter((m) => m.subject.includes("your bulletin"));
       expect(hodEmails.map((m) => m.to[0]).sort()).toEqual(
         [
-          `${ids.hod}@example.edu`,
-          `${ids.coordinator}@example.edu`,
+          `${ids.hod}@babcock.edu.ng`,
+          `${ids.coordinator}@babcock.edu.ng`,
           "second.coordinator@example.edu",
         ].sort(),
       );
@@ -2614,7 +2620,7 @@ describe("phase owners and separation of duties", () => {
     await prisma.user.create({
       data: {
         id: secondAdmin,
-        email: `${secondAdmin}@example.edu`,
+        email: `${secondAdmin}@babcock.edu.ng`,
         firstName: "Second",
         lastName: "Admin",
         role: "ADMIN",
@@ -3025,18 +3031,19 @@ describe("workflow ledger", () => {
 describe("Google sign-in", () => {
   it("admits only verified emails an administrator added, in any letter case", async () => {
     const hod = await prisma.user.findUniqueOrThrow({ where: { id: ids.hod } });
+    const hd = "babcock.edu.ng";
     expect(
-      await allowGoogleSignIn({ email: hod.email.toUpperCase(), email_verified: true }),
+      await allowGoogleSignIn({ email: hod.email.toUpperCase(), email_verified: true, hd }),
     ).toBe(true);
-    expect(await allowGoogleSignIn({ email: hod.email, email_verified: false })).toBe(
+    expect(await allowGoogleSignIn({ email: hod.email, email_verified: false, hd })).toBe(
       "/login?error=not_authorized",
     );
     expect(
-      await allowGoogleSignIn({ email: "nobody@example.edu", email_verified: true }),
+      await allowGoogleSignIn({ email: "nobody@babcock.edu.ng", email_verified: true, hd }),
     ).toBe("/login?error=not_authorized");
 
     const inactive = await prisma.user.findUniqueOrThrow({ where: { id: ids.inactive } });
-    expect(await allowGoogleSignIn({ email: inactive.email, email_verified: true })).toBe(
+    expect(await allowGoogleSignIn({ email: inactive.email, email_verified: true, hd })).toBe(
       "/login?error=account_deactivated",
     );
   });
@@ -3867,5 +3874,237 @@ describe("Photos", () => {
       "The HOD's photo has to be uploaded here. Upload it again, then save.",
     );
     expect(await savedPhotos()).toMatchObject({ hodImageUrl: older });
+  });
+});
+
+// Staff sign in with their babcock.edu.ng account. A personal Google account
+// gets in only during a Super Admin's logged, time-boxed exception, and can
+// never hold an admin role.
+describe("University sign-in and exceptions", () => {
+  const hd = "babcock.edu.ng";
+  const personalId = "test-personal-hod";
+  const personalEmail = "personal.hod@gmail.com";
+  const legacyAdminId = "test-personal-super";
+  const legacyAdminEmail = "personal.super@gmail.com";
+  const routeParams = (id: string) => ({ params: Promise.resolve({ id }) });
+  const daysFromNow = (days: number) =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Lagos" }).format(
+      new Date(Date.now() + days * 86_400_000),
+    );
+  const grant = (id: string, body: object) =>
+    putSignInException(
+      new NextRequest(`http://localhost/api/users/${id}/sign-in-exception`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+      routeParams(id),
+    );
+  const end = (id: string) =>
+    deleteSignInException(
+      new NextRequest(`http://localhost/api/users/${id}/sign-in-exception`, { method: "DELETE" }),
+      routeParams(id),
+    );
+  const actions = async (entityId: string) =>
+    (
+      await prisma.activityLog.findMany({
+        where: { entityId, action: { startsWith: "SIGN_IN" } },
+        orderBy: { createdAt: "asc" },
+      })
+    ).map((entry) => entry.action);
+
+  beforeAll(async () => {
+    await prisma.user.createMany({
+      data: [
+        {
+          id: personalId,
+          email: personalEmail,
+          firstName: "Personal",
+          lastName: "Hod",
+          role: "HOD",
+          schoolId: ids.schoolA,
+          departmentId: ids.departmentA,
+        },
+        // A personal Super Admin from before sign-in was limited.
+        {
+          id: legacyAdminId,
+          email: legacyAdminEmail,
+          firstName: "Personal",
+          lastName: "Super",
+          role: "SUPER_ADMIN",
+          signInExceptionUntil: new Date(Date.now() + 86_400_000),
+        },
+      ],
+    });
+  });
+
+  it("admits a university address only when Google says it is a university account", async () => {
+    const hod = await prisma.user.findUniqueOrThrow({ where: { id: ids.hod } });
+    expect(await allowGoogleSignIn({ email: hod.email, email_verified: true, hd })).toBe(true);
+    expect(await allowGoogleSignIn({ email: hod.email, email_verified: true })).toBe(
+      "/login?error=personal_account",
+    );
+  });
+
+  it("lets a personal account in only during its exception, and logs each sign-in", async () => {
+    const google = { email: personalEmail, email_verified: true };
+    expect(await allowGoogleSignIn(google)).toBe("/login?error=personal_account");
+
+    authState.userId = ids.super;
+    const granted = await grant(personalId, { reason: "Awaiting a university account", until: daysFromNow(10) });
+    expect(granted.status).toBe(200);
+    expect(await granted.json()).toMatchObject({ signInExceptionReason: "Awaiting a university account" });
+
+    expect(await allowGoogleSignIn(google)).toBe(true);
+    const signedIn = Date.now();
+    const token = await refreshSessionToken({}, google, signedIn);
+    expect(token).toMatchObject({ userId: personalId });
+    expect(
+      await refreshSessionToken(token!, undefined, signedIn + RECHECK_MS + 1),
+    ).toMatchObject({ userId: personalId });
+
+    // Ending it signs them out at the next session re-check.
+    expect((await end(personalId)).status).toBe(200);
+    expect(await refreshSessionToken(token!, undefined, signedIn + RECHECK_MS + 1)).toBeNull();
+    expect(await allowGoogleSignIn(google)).toBe("/login?error=personal_account");
+    expect((await end(personalId)).status).toBe(409);
+
+    // An exception that has run out also ends the session.
+    await prisma.user.update({
+      where: { id: personalId },
+      data: { signInExceptionUntil: new Date(signedIn + 60_000) },
+    });
+    expect(await refreshSessionToken(token!, undefined, signedIn + RECHECK_MS + 1)).toBeNull();
+
+    expect(await actions(personalId)).toEqual([
+      "SIGN_IN_EXCEPTION_GRANTED",
+      "SIGN_IN_VIA_EXCEPTION",
+      "SIGN_IN_EXCEPTION_ENDED",
+    ]);
+    const grantEntry = await prisma.activityLog.findFirstOrThrow({
+      where: { entityId: personalId, action: "SIGN_IN_EXCEPTION_GRANTED" },
+    });
+    expect(grantEntry.actorId).toBe(ids.super);
+    expect(grantEntry.metadata).toMatchObject({
+      email: personalEmail,
+      reason: "Awaiting a university account",
+    });
+  });
+
+  it("never lets a personal account act as an admin, exception or not", async () => {
+    const google = { email: legacyAdminEmail, email_verified: true };
+    expect(await allowGoogleSignIn(google)).toBe("/login?error=personal_account_admin");
+
+    // A session from before the change ends at its next re-check.
+    const start = Date.now();
+    const token = { userId: legacyAdminId, checkedAt: start };
+    expect(await refreshSessionToken(token, undefined, start + RECHECK_MS + 1)).toBeNull();
+  });
+
+  it("lets only a Super Admin grant an exception, for a personal non-admin account, up to 90 days", async () => {
+    const body = { reason: "Visiting examiner", until: daysFromNow(30) };
+
+    authState.userId = ids.admin;
+    expect((await grant(personalId, body)).status).toBe(403);
+    expect((await end(personalId)).status).toBe(403);
+
+    authState.userId = ids.super;
+    expect((await grant(ids.hod, body)).status).toBe(400);
+    expect((await grant(legacyAdminId, body)).status).toBe(400);
+    expect((await grant(personalId, { ...body, reason: "  " })).status).toBe(400);
+    expect((await grant(personalId, { ...body, until: daysFromNow(-1) })).status).toBe(400);
+    const tooLong = await grant(personalId, { ...body, until: daysFromNow(91) });
+    expect(tooLong.status).toBe(400);
+    expect((await tooLong.json()).error).toMatch(/at most 90 days/);
+    expect((await grant(personalId, { ...body, until: daysFromNow(90) })).status).toBe(200);
+
+    const saved = await prisma.user.findUniqueOrThrow({ where: { id: personalId } });
+    expect(saved.signInExceptionGrantedById).toBe(ids.super);
+    expect(saved.signInExceptionUntil!.getTime()).toBeGreaterThan(Date.now() + 89 * 86_400_000);
+  });
+
+  it("keeps admin roles off personal accounts when adding or changing users", async () => {
+    authState.userId = ids.super;
+    const form = new FormData();
+    form.set("firstName", "Gmail");
+    form.set("lastName", "Admin");
+    form.set("email", "gmail.admin@gmail.com");
+    form.set("role", "ADMIN");
+    expect(await adminCreateUser(null, form)).toEqual({
+      error:
+        "Academic Planning Admin and Super Administrator accounts must use a babcock.edu.ng email address.",
+    });
+    expect(await prisma.user.count({ where: { email: "gmail.admin@gmail.com" } })).toBe(0);
+
+    for (const role of ["ADMIN", "SUPER_ADMIN"]) {
+      const refused = await updateUser(
+        new NextRequest(`http://localhost/api/users/${personalId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role }),
+        }),
+        routeParams(personalId),
+      );
+      expect(refused.status).toBe(403);
+      expect((await refused.json()).error).toMatch(/must use a babcock\.edu\.ng email address/);
+    }
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: personalId } })).role).toBe("HOD");
+    expect(
+      await prisma.activityLog.count({
+        where: { entityId: personalId, action: "USER_UPDATE_REFUSED" },
+      }),
+    ).toBe(2);
+  });
+
+  it("gives existing personal accounts outside the admin roles 30 days at rollout, once", async () => {
+    const migration = readFileSync(
+      join(process.cwd(), "prisma/migrations/20261119090000_add_sign_in_exceptions/migration.sql"),
+      "utf8",
+    );
+    const run = async () => {
+      const client = new PgClient({ connectionString: process.env.DATABASE_URL });
+      await client.connect();
+      try {
+        await client.query(migration);
+      } finally {
+        await client.end();
+      }
+    };
+    await prisma.user.createMany({
+      data: [
+        { id: "rollout-dean", email: "rollout.dean@yahoo.com", firstName: "Rollout", lastName: "Dean", role: "DEAN", schoolId: ids.schoolA },
+        { id: "rollout-inactive", email: "rollout.inactive@gmail.com", firstName: "Rollout", lastName: "Inactive", role: "HOD", isActive: false, departmentId: ids.departmentA },
+        { id: "rollout-admin", email: "rollout.admin@gmail.com", firstName: "Rollout", lastName: "Admin", role: "ADMIN" },
+      ],
+    });
+    const universityBefore = await prisma.user.findUniqueOrThrow({ where: { id: ids.hod } });
+    const personalBefore = await prisma.user.findUniqueOrThrow({ where: { id: personalId } });
+
+    await run();
+    await run();
+
+    const dean = await prisma.user.findUniqueOrThrow({ where: { id: "rollout-dean" } });
+    const days = (dean.signInExceptionUntil!.getTime() - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(29.9);
+    expect(days).toBeLessThanOrEqual(30);
+    expect(dean.signInExceptionReason).toBe(
+      "Existing account when sign-in was limited to babcock.edu.ng accounts",
+    );
+    expect(await actions("rollout-dean")).toEqual(["SIGN_IN_EXCEPTION_GRANTED"]);
+    const logged = await prisma.activityLog.findFirstOrThrow({ where: { entityId: "rollout-dean" } });
+    expect(Math.abs(logged.createdAt.getTime() - Date.now())).toBeLessThan(60_000);
+
+    // Not inactive accounts, admins, university accounts, or anyone who
+    // already has an exception.
+    for (const id of ["rollout-inactive", "rollout-admin"]) {
+      expect((await prisma.user.findUniqueOrThrow({ where: { id } })).signInExceptionUntil).toBeNull();
+      expect(await actions(id)).toEqual([]);
+    }
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: ids.hod } })).signInExceptionUntil).toEqual(
+      universityBefore.signInExceptionUntil,
+    );
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: personalId } })).signInExceptionUntil).toEqual(
+      personalBefore.signInExceptionUntil,
+    );
   });
 });

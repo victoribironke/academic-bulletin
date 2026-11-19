@@ -4,6 +4,7 @@ import { getSessionUserId } from "@/auth";
 import { requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
 import { requireTypedConfirmation } from "@/lib/archive";
+import { isPrivilegedRole, isUniversityEmail, UNIVERSITY_DOMAIN } from "@/lib/sign-in-access";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -196,6 +197,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // 4. Only SUPER_ADMIN can assign SUPER_ADMIN role
     if (role === "SUPER_ADMIN" && requestingUser.role !== "SUPER_ADMIN") {
       return refuse("Only Super Administrators can assign the Super Admin role.");
+    }
+
+    // Admin roles belong to university accounts only.
+    if (role !== undefined && isPrivilegedRole(role) && !isUniversityEmail(targetUser.email)) {
+      return refuse(
+        `Academic Planning Admin and Super Administrator accounts must use a ${UNIVERSITY_DOMAIN} email address.`,
+      );
     }
 
     // 5. Only SUPER_ADMIN can toggle active status

@@ -46,14 +46,18 @@ export function CreateUserDialog({
   const [selectedProgrammes, setSelectedProgrammes] = useState<string[]>([]);
   const [addedEmail, setAddedEmail] = useState<string | null>(null);
   const [emailSent, setEmailSent] = useState(false);
+  const [needsException, setNeedsException] = useState(false);
   const [state, formAction, isPending] = useActionState(
     async (prev: unknown, formData: FormData) => {
       const result = await adminCreateUser(prev, formData);
       if ("success" in result && result.success) {
         setAddedEmail(result.email);
         setEmailSent(result.emailSent);
+        setNeedsException(result.needsSignInException);
         toast.success("User added", {
-          description: `${result.email} can now sign in with Google.`,
+          description: result.needsSignInException
+            ? `${result.email} is a personal account. It can sign in once a Super Administrator gives it a sign-in exception.`
+            : `${result.email} can now sign in with Google.`,
         });
         onSuccess?.();
       } else if ("error" in result && result.error) {
@@ -69,6 +73,7 @@ export function CreateUserDialog({
     if (!isOpen) {
       setAddedEmail(null);
       setEmailSent(false);
+      setNeedsException(false);
       setSelectedSchool("none");
       setSelectedDepartment("none");
       setSelectedRole("HOD");
@@ -109,6 +114,14 @@ export function CreateUserDialog({
               </DialogDescription>
             </DialogHeader>
 
+            {needsException && (
+              <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                This is a personal Google account, so it can&apos;t sign in until
+                a Super Administrator gives it a sign-in exception from the
+                Users page.
+              </p>
+            )}
+
             <DialogFooter>
               <Button onClick={() => handleOpenChange(false)}>Done</Button>
             </DialogFooter>
@@ -118,8 +131,10 @@ export function CreateUserDialog({
             <DialogHeader>
               <DialogTitle>Create New User</DialogTitle>
               <DialogDescription>
-                Add the email address this person will sign in with. It can be
-                a school or personal Google account.
+                Add the babcock.edu.ng address this person will sign in with.
+                A personal Google account can&apos;t hold an admin role, and
+                signs in only while a Super Administrator&apos;s sign-in
+                exception lasts.
               </DialogDescription>
             </DialogHeader>
 
