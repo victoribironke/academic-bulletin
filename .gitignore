@@ -71,8 +71,6 @@ prisma/migrations/*
 !prisma/migrations/20261118120000_add_archived_records/migration.sql
 !prisma/migrations/20261119090000_add_sign_in_exceptions/
 !prisma/migrations/20261119090000_add_sign_in_exceptions/migration.sql
-!prisma/migrations/20261119150000_add_two_step_verification/
-!prisma/migrations/20261119150000_add_two_step_verification/migration.sql
 
 # local
 *.log

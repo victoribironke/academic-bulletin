@@ -40,13 +40,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         setCurrentUser(fullUser);
       } else {
         setCurrentUser(null);
-        const data = await response.json().catch(() => ({}));
-        if (data?.code === "MFA_REQUIRED") {
-          // An admin whose sign-in needs its authenticator code (again).
-          const here = `${window.location.pathname}${window.location.search}`;
-          window.location.assign(`/verify?next=${encodeURIComponent(here)}`);
-          return;
-        }
         if (response.status === 401 || response.status === 403) {
           // Clears the session cookie and returns to /login.
           await logOut();

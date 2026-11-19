@@ -10,6 +10,7 @@ datasource db {
   provider = "postgresql"
 }
 
+
 // ============================================================================
 // ENUMS
 // ============================================================================
@@ -182,14 +183,14 @@ model Programme {
 // ============================================================================
 
 model User {
-  id        String   @id
-  email     String   @unique
-  firstName String
-  lastName  String
-  role      UserRole @default(HOD)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id
+  email        String   @unique
+  firstName    String
+  lastName     String
+  role         UserRole @default(HOD)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // A personal (non-babcock.edu.ng) Google account signs in only while a
   // Super Admin's exception lasts, and never in an admin role.
@@ -198,17 +199,6 @@ model User {
   signInExceptionGrantedById String?
   signInExceptionGrantedBy   User?     @relation("SignInExceptionGrants", fields: [signInExceptionGrantedById], references: [id], onDelete: SetNull)
   signInExceptionsGranted    User[]    @relation("SignInExceptionGrants")
-
-  // Two-step verification (authenticator app) for Academic Planning Admins
-  // and Super Admins. The secret is encrypted with MFA_ENCRYPTION_KEY; until
-  // mfaEnabledAt is set it belongs to a set-up nobody has confirmed yet.
-  // mfaLastUsedStep is the last accepted 30-second step, so a code can't be
-  // used twice.
-  mfaSecret        String?
-  mfaEnabledAt     DateTime?
-  mfaLastUsedStep  Int?
-  mfaRecoveryCodes MfaRecoveryCode[]
-  mfaVerifications MfaVerification[]
 
   // Foreign Keys (optional - user may be linked to school/department)
   schoolId     String?
@@ -219,19 +209,19 @@ model User {
   department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
 
   // Submissions created by this user
-  submissions          Submission[]
+  submissions      Submission[]
   // Phase transitions performed by this user
-  phaseTransitions     PhaseTransition[]
+  phaseTransitions PhaseTransition[]
   // Comments made by this user
-  comments             Comment[]
+  comments         Comment[]
   // Cycles created by this admin
-  reviewCycles         ReviewCycle[]
+  reviewCycles     ReviewCycle[]
   programmeAssignments UserProgramme[]
-  activities           ActivityLog[]
+  activities       ActivityLog[]
   // Records this user deleted into the Archive
-  archivedRecords      ArchivedRecord[]
+  archivedRecords  ArchivedRecord[]
   // Review phases this user owns by name, beyond what their role grants
-  phaseOwnerships      PhaseOwner[]
+  phaseOwnerships  PhaseOwner[]
 
   @@map("users")
 }
@@ -311,11 +301,11 @@ model Staff {
 // ============================================================================
 
 model ReviewCycle {
-  id          String    @id @default(cuid())
-  name        String // e.g., "2025/2026 Bulletin Review"
+  id          String   @id @default(cuid())
+  name        String   // e.g., "2025/2026 Bulletin Review"
   description String?
-  isActive    Boolean   @default(true)
-  startedAt   DateTime  @default(now())
+  isActive    Boolean  @default(true)
+  startedAt   DateTime @default(now())
   closedAt    DateTime?
   createdById String
 
@@ -371,14 +361,14 @@ model SubmissionContent {
 
   // Section 2: Philosophy & Objectives (structured with word count validation)
   philosophy          String? // 150-250 words
-  philosophyGracePass Boolean @default(false)
+  philosophyGracePass Boolean  @default(false)
   philosophyGrace     Json? // { scores: {G,R,A,C,E}, explanation, recommendation }
   mission             String? // Programme mission statement
   vision              String? // Programme vision statement
-  objectives          Json? // Array of objective strings
-  uniqueFeatures      Json? // Array of feature strings
-  employability       String?
-  centurySkills       Json? // Array of 21st century skills
+  objectives     Json? // Array of objective strings
+  uniqueFeatures Json? // Array of feature strings
+  employability  String?
+  centurySkills  Json? // Array of 21st century skills
 
   // Section 3: Admission Requirements (structured)
   utmeRequirements        String?
@@ -446,26 +436,26 @@ model Course {
 // ============================================================================
 
 model CourseDescription {
-  id                    String      @id @default(cuid())
-  learningOutcomes      Json? // Array of learning outcome strings
-  courseContent         String? // Rich text content
-  labWork               String? // Lab work description (if applicable)
+  id               String   @id @default(cuid())
+  learningOutcomes Json? // Array of learning outcome strings
+  courseContent    String? // Rich text content
+  labWork              String? // Lab work description (if applicable)
   entrepreneurialAspect String? // Entrepreneurial/practical aspect of the course
-  gracePass             Boolean     @default(false)
-  graceResult           Json? // { scores: {G,R,A,C,E}, explanation, recommendation, suggestedContent }
-  graceStatus           GraceStatus @default(PENDING)
-  graceContentHash      String?
-  graceCheckedAt        DateTime?
-  createdAt             DateTime    @default(now())
-  updatedAt             DateTime    @updatedAt
+  gracePass        Boolean     @default(false)
+  graceResult      Json? // { scores: {G,R,A,C,E}, explanation, recommendation, suggestedContent }
+  graceStatus      GraceStatus @default(PENDING)
+  graceContentHash String?
+  graceCheckedAt   DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   // Foreign Keys
   submissionId String
   courseId     String @unique
 
   // Relations
-  submission      Submission       @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  course          Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  course     Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
   graceAssessment GraceAssessment? @relation(fields: [graceContentHash], references: [contentHash], onDelete: SetNull)
 
   @@index([submissionId, graceStatus])
@@ -476,37 +466,6 @@ model CourseDescription {
 // Counts calls to the AI endpoints per person in fixed windows, so a person
 // (or a script using their session) can't run up the AI bill. One row per
 // person, endpoint and window; the daily job removes expired rows.
-// One-time codes for signing in without the authenticator app. Only a keyed
-// hash of each code is stored.
-model MfaRecoveryCode {
-  id        String    @id @default(cuid())
-  userId    String
-  codeHash  String
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, codeHash])
-  @@map("mfa_recovery_codes")
-}
-
-// A code accepted for one sign-in (the session's random id). An admin's
-// session works only while its check is under 12 hours old; deleting the
-// rows ends those sessions' admin access at once.
-model MfaVerification {
-  id         String   @id @default(cuid())
-  userId     String
-  sessionId  String   @unique
-  method     String // "AUTHENTICATOR" or "RECOVERY_CODE"
-  verifiedAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@map("mfa_verifications")
-}
-
 model ApiRateLimit {
   key       String   @id // "<limit name>:<user id>:<window number>"
   count     Int      @default(1)
@@ -546,11 +505,11 @@ model GraceAssessment {
   learningOutcomes Json?
   status           GraceStatus @default(PENDING)
   result           Json?
-  error            String?
-  attempts         Int         @default(0)
-  checkedAt        DateTime?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
+  error             String?
+  attempts          Int         @default(0)
+  checkedAt         DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 
   courseDescriptions CourseDescription[]
 
@@ -566,12 +525,12 @@ model GraceAssessment {
 // written in the same transaction as the change. Rows are never updated or
 // deleted; the database refuses both (see the ledger guard migration).
 model PhaseTransition {
-  id             String    @id @default(cuid())
+  id             String   @id @default(cuid())
   fromPhase      Int
   toPhase        Int
   action         String // e.g., "APPROVED", "RETURNED", "ESCALATED"
   remarks        String?
-  transitionedAt DateTime  @default(now())
+  transitionedAt DateTime @default(now())
   // No longer written; daily summaries are tracked in
   // phase_transition_notifications. Kept until a cleanup migration drops it.
   notifiedAt     DateTime?
@@ -659,14 +618,14 @@ model Comment {
 // ============================================================================
 
 model MasterCourse {
-  id                    String          @id @default(cuid())
-  code                  String          @unique // e.g., "COS 101"
-  title                 String // Sentence case enforced programmatically
-  units                 Int
-  type                  CourseType      @default(CORE)
-  ownership             CourseOwnership @default(DEPARTMENT)
-  level                 Int // 100, 200, 300, 400, 500
-  semester              Int // 1 or 2
+  id          String          @id @default(cuid())
+  code        String          @unique // e.g., "COS 101"
+  title       String // Sentence case enforced programmatically
+  units       Int
+  type        CourseType      @default(CORE)
+  ownership   CourseOwnership @default(DEPARTMENT)
+  level       Int // 100, 200, 300, 400, 500
+  semester    Int // 1 or 2
   description           String? // Short Registry summary
   learningOutcomes      Json? // Central starting outcomes for GST/shared courses
   courseContent         String? // Central starting course description/content
@@ -675,9 +634,9 @@ model MasterCourse {
   curriculumSource      String? // e.g. CCMAS 2023 or university-developed
   sourceReference       String? // Official document title, URL, or version
   sourceProgrammes      Json? // Programme names used in the source catalogue
-  discoverable          Boolean         @default(true)
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
+  discoverable Boolean @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   // Ownership - one of these should be set based on ownership type
   ownerDeptId   String?

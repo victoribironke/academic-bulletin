@@ -35,13 +35,7 @@ function createPrismaClient() {
   }
 
   const adapter = new PrismaPg(globalForPrisma.pool);
-  // The encrypted authenticator secret is left out of every user query, so
-  // no API response can carry it; lib/mfa selects it by name when needed.
-  // (Typed as a plain client so transaction clients stay interchangeable.)
-  return new PrismaClient({
-    adapter,
-    omit: { user: { mfaSecret: true } },
-  }) as unknown as PrismaClient;
+  return new PrismaClient({ adapter });
 }
 
 // Lazy singleton — the client is only instantiated on first property access

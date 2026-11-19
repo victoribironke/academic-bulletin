@@ -32,7 +32,6 @@ import {
   useClientPagination,
 } from "@/components/shared/table-pagination";
 import { CreateUserDialog } from "@/components/users/create-user-dialog";
-import { ResetTwoStepDialog } from "@/components/users/reset-two-step-dialog";
 import { EditUserDialog } from "@/components/users/edit-user-dialog";
 import {
   formatExceptionDate,
@@ -77,7 +76,6 @@ interface User {
   signInExceptionUntil: string | null;
   signInExceptionReason: string | null;
   signInExceptionGrantedBy: { firstName: string; lastName: string } | null;
-  mfaEnabledAt: string | null;
   schoolId: string | null;
   departmentId: string | null;
   school?: School | null;
@@ -126,20 +124,6 @@ function PersonalAccountNote({ user }: { user: User }) {
         ]
       : ["Personal account · can't sign in without an exception", "text-destructive"];
   return <p className={cn("truncate text-xs", tone)}>{text}</p>;
-}
-
-/** Whether an admin account has its authenticator app set up. */
-function TwoStepNote({ user }: { user: User }) {
-  if (!isPrivilegedRole(user.role) || !isUniversityEmail(user.email)) return null;
-  return user.mfaEnabledAt ? (
-    <p className="truncate text-xs text-emerald-700 dark:text-emerald-400">
-      Two-step verification on
-    </p>
-  ) : (
-    <p className="truncate text-xs text-amber-700 dark:text-amber-400">
-      Sets up two-step verification at next sign-in
-    </p>
-  );
 }
 
 function initials(first: string, last: string) {
@@ -436,7 +420,6 @@ export default function UsersPage() {
                           </p>
                           <p className="truncate text-xs text-muted-foreground">{user.email}</p>
                           <PersonalAccountNote user={user} />
-                          <TwoStepNote user={user} />
                         </div>
                       </div>
                     </TableCell>
@@ -522,9 +505,6 @@ export default function UsersPage() {
                           !isPrivilegedRole(user.role) && (
                             <SignInExceptionDialog user={user} onSuccess={reload} />
                           )}
-                        {isSuperAdmin && user.mfaEnabledAt && user.id !== currentUser?.id && (
-                          <ResetTwoStepDialog user={user} onSuccess={reload} />
-                        )}
                         {isSuperAdmin && (
                           <Button
                             variant="outline"

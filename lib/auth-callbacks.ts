@@ -1,8 +1,6 @@
-import { randomUUID } from "node:crypto";
 import type { JWT } from "next-auth/jwt";
 import prisma from "@/lib/prisma";
 import { recordActivity } from "@/lib/activity-log";
-import { currentVerification, mfaRequiredFor, mfaStateOf } from "@/lib/mfa/policy";
 import {
   checkSignInAccess,
   isUniversityEmail,
@@ -16,10 +14,9 @@ import {
  */
 
 // How often a signed-in session re-checks that the account still exists, is
-// active, (for a personal account) still has a sign-in exception, and (for an
-// admin) still has a valid two-step check. Deactivating someone, or their
-// exception ending, signs them out within this time. A session waiting for an
-// authenticator code checks on every request instead.
+// active, and (for a personal account) still has a sign-in exception.
+// Deactivating someone, or their exception ending, signs them out within
+// this time.
 export const RECHECK_MS = 5 * 60 * 1000;
 
 type GoogleProfile = {
@@ -80,13 +77,8 @@ export async function allowGoogleSignIn(
 
 /**
  * Builds and refreshes the session token. Returns null to end the session
- * (account removed or deactivated, a personal account that may no longer
- * sign in, or an admin session from before two-step verification).
- *
- * Every sign-in gets a random session id. An admin's session starts as
- * "pending" and becomes "verified" once a code for that session id is on
- * record (see app/api/mfa). Nothing the browser sends can change that: the
- * state is always read back from the database.
+ * (account removed or deactivated, or a personal account that may no longer
+ * sign in).
  */
 export async function refreshSessionToken(
   token: JWT,
@@ -97,35 +89,18 @@ export async function refreshSessionToken(
     // Just signed in: point the session at the app user record.
     const appUser = await prisma.user.findUnique({
       where: { email: normalizeEmail(profile.email) },
-      select: { id: true, role: true },
+      select: { id: true },
     });
     if (!appUser) return null;
-    return {
-      ...token,
-      userId: appUser.id,
-      checkedAt: now,
-      sid: randomUUID(),
-      mfa: mfaRequiredFor(appUser.role) ? "pending" : "none",
-      mfaVerifiedAt: undefined,
-    };
+    return { ...token, userId: appUser.id, checkedAt: now };
   }
 
   if (!token.userId) return null;
-  const due =
-    token.mfa === undefined ||
-    mfaStateOf(token, now) === "pending" ||
-    now - (token.checkedAt ?? 0) > RECHECK_MS;
-  if (!due) return token;
+  if (now - (token.checkedAt ?? 0) <= RECHECK_MS) return token;
 
   const appUser = await prisma.user.findUnique({
     where: { id: token.userId },
-    select: {
-      isActive: true,
-      email: true,
-      role: true,
-      signInExceptionUntil: true,
-      mfaVerifications: currentVerification(token.sid, now),
-    },
+    select: { isActive: true, email: true, role: true, signInExceptionUntil: true },
   });
   if (!appUser?.isActive) return null;
   if (
@@ -134,21 +109,5 @@ export async function refreshSessionToken(
   ) {
     return null;
   }
-
-  if (!mfaRequiredFor(appUser.role)) {
-    return { ...token, checkedAt: now, mfa: "none", mfaVerifiedAt: undefined };
-  }
-  // An admin session from before two-step verification has no session id
-  // to record a code against, so the person signs in again.
-  if (!token.sid) return null;
-
-  const verification = appUser.mfaVerifications[0];
-  return verification
-    ? {
-        ...token,
-        checkedAt: now,
-        mfa: "verified",
-        mfaVerifiedAt: verification.verifiedAt.getTime(),
-      }
-    : { ...token, checkedAt: now, mfa: "pending", mfaVerifiedAt: undefined };
+  return { ...token, checkedAt: now };
 }

@@ -1,16 +1,13 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getSessionAccess } from "@/auth";
-import { MFA_REQUIRED_RESPONSE } from "@/lib/api-auth";
-import { currentVerification, mfaRequiredFor } from "@/lib/mfa/policy";
+import { getSessionUserId } from "@/auth";
 
 export async function GET() {
   try {
-    const access = await getSessionAccess();
-    if (!access) {
+    const userId = await getSessionUserId();
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const userId = access.userId;
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -37,7 +34,6 @@ export async function GET() {
           },
           orderBy: { programme: { name: "asc" } },
         },
-        mfaVerifications: currentVerification(access.sessionId),
       },
     });
 
@@ -55,15 +51,7 @@ export async function GET() {
       );
     }
 
-    // An admin who hasn't entered this sign-in's code is sent to /verify.
-    const { programmeAssignments, mfaVerifications, ...profile } = user;
-    if (
-      mfaRequiredFor(profile.role) &&
-      (access.mfa === "pending" || mfaVerifications.length === 0)
-    ) {
-      return NextResponse.json(MFA_REQUIRED_RESPONSE, { status: 401 });
-    }
-
+    const { programmeAssignments, ...profile } = user;
     return NextResponse.json({
       ...profile,
       programmeIds: programmeAssignments.map(

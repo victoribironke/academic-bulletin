@@ -19,7 +19,6 @@ export async function GET() {
         signInExceptionUntil: true,
         signInExceptionReason: true,
         signInExceptionGrantedBy: { select: { firstName: true, lastName: true } },
-        mfaEnabledAt: true,
         schoolId: true,
         departmentId: true,
         school: {
