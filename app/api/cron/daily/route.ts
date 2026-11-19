@@ -13,16 +13,19 @@ const GRACE_TIME_BUDGET_MS = 30_000;
 /**
  * GET /api/cron/daily
  *
- * The app's single daily job, called by Vercel Cron at 06:00 UTC
- * (07:00 Lagos) - see vercel.json. It does two independent things, so one
- * failing doesn't stop the other:
+ * The app's single daily job, called at 06:00 UTC (07:00 Lagos) by the
+ * `daily-job` service in the Railway project: a scheduled curl that exits
+ * after the call, and marks the run failed when this answers with an error.
+ * It does several independent things, so one failing doesn't stop the rest:
  *
  * 1. Health check: confirms the database answers (reported as keepAlive).
  * 2. Daily summary emails to admins and HODs (lib/email/notifications.ts).
  * 3. GRACE checks still queued, so none waits longer than a day.
  * 4. Removing expired AI rate-limit counts.
  *
- * Protected by CRON_SECRET, which Vercel sends as `Authorization: Bearer ...`.
+ * Protected by CRON_SECRET, sent as `Authorization: Bearer ...`. The daily-job
+ * service reads it from the website service's variable, so the two can't
+ * drift apart.
  */
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;

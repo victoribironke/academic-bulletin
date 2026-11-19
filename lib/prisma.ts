@@ -14,7 +14,7 @@ function createPrismaClient() {
   if (!process.env.DATABASE_URL) {
     throw new Error(
       "[Prisma] DATABASE_URL environment variable is not set. " +
-        "Set it in .env locally or in the Vercel project settings."
+        "Set it in .env locally or in the Railway service's variables."
     );
   }
 

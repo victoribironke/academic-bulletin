@@ -10,7 +10,8 @@ import {
  * file's own bytes decide what it is, and it must decode as an image.
  */
 
-// Vercel rejects request bodies over 4.5MB, so cap uploads at 4MB.
+// Photos are capped at 4MB (set when Vercel rejected bodies over 4.5MB; kept
+// on Railway as a sensible size for a staff or programme photo).
 export const MAX_PHOTO_BYTES = 4 * 1024 * 1024;
 
 export const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
