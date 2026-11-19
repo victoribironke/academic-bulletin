@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { getSessionUserId } from "@/auth";
+import { getSessionAccess } from "@/auth";
 import prisma from "@/lib/prisma";
+import { currentVerification, mfaRequiredFor } from "@/lib/mfa/policy";
 import { canEditSubmissionAtStage } from "@/lib/submissions/workflow";
 import { isNamedPhaseOwner, loadPhaseOwners } from "@/lib/submissions/phase-owners";
 import type { UserRole } from "@prisma/client";
@@ -19,15 +20,32 @@ type AuthGate =
   | { ok: true; user: ApiUser }
   | { ok: false; response: NextResponse };
 
-export async function getApiUser(options?: {
+/** The response for an admin whose sign-in still needs an authenticator code. */
+export const MFA_REQUIRED_RESPONSE = {
+  error: "Enter the code from your authenticator app to continue.",
+  code: "MFA_REQUIRED",
+} as const;
+
+type ApiUserLookup =
+  | { user: ApiUser }
+  | { user: null; reason: "signed_out" | "mfa_required" };
+
+/**
+ * The signed-in user, from the database. An Academic Planning Admin or Super
+ * Admin counts as signed in only once this sign-in has a valid two-step
+ * check on record, so promoting someone, or a Super Admin resetting their
+ * authenticator, takes effect on the very next request.
+ */
+export async function lookupApiUser(options?: {
   includeInactive?: boolean;
-}): Promise<ApiUser | null> {
+}): Promise<ApiUserLookup> {
   try {
-    const userId = await getSessionUserId();
-    if (!userId) return null;
+    const access = await getSessionAccess();
+    if (!access) return { user: null, reason: "signed_out" };
+    if (access.mfa === "pending") return { user: null, reason: "mfa_required" };
 
     const dbUser = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: access.userId },
       select: {
         id: true,
         email: true,
@@ -38,35 +56,51 @@ export async function getApiUser(options?: {
         programmeAssignments: {
           select: { programmeId: true },
         },
+        mfaVerifications: currentVerification(access.sessionId),
       },
     });
 
     if (!dbUser || (!dbUser.isActive && !options?.includeInactive)) {
-      return null;
+      return { user: null, reason: "signed_out" };
+    }
+    const { programmeAssignments, mfaVerifications, ...profile } = dbUser;
+    if (mfaRequiredFor(profile.role) && mfaVerifications.length === 0) {
+      return { user: null, reason: "mfa_required" };
     }
 
-    const { programmeAssignments, ...profile } = dbUser;
     return {
-      ...profile,
-      programmeIds: programmeAssignments.map(
-        (assignment) => assignment.programmeId,
-      ),
+      user: {
+        ...profile,
+        programmeIds: programmeAssignments.map(
+          (assignment) => assignment.programmeId,
+        ),
+      },
     };
   } catch {
-    return null;
+    return { user: null, reason: "signed_out" };
   }
+}
+
+export async function getApiUser(options?: {
+  includeInactive?: boolean;
+}): Promise<ApiUser | null> {
+  return (await lookupApiUser(options)).user;
 }
 
 export async function requireApiUser(
   allowedRoles?: UserRole[],
 ): Promise<AuthGate> {
-  const user = await getApiUser();
-  if (!user) {
+  const lookup = await lookupApiUser();
+  if (!lookup.user) {
     return {
       ok: false,
-      response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+      response:
+        lookup.reason === "mfa_required"
+          ? NextResponse.json(MFA_REQUIRED_RESPONSE, { status: 401 })
+          : NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
     };
   }
+  const user = lookup.user;
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return {

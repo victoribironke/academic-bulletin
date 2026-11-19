@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getSessionUserId } from "@/auth";
-import { requireApiUser } from "@/lib/api-auth";
+import { getApiUser, requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
 import { requireTypedConfirmation } from "@/lib/archive";
 import { isPrivilegedRole, isUniversityEmail, UNIVERSITY_DOMAIN } from "@/lib/sign-in-access";
@@ -132,8 +131,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // 1. Get the requesting user from the session
-    const sessionUserId = await getSessionUserId();
+    // 1. Get the requesting user from the session (an admin needs this
+    // sign-in's authenticator code checked).
+    const sessionUserId = (await getApiUser({ includeInactive: true }))?.id;
 
     if (!sessionUserId) {
       return NextResponse.json(

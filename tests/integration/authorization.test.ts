@@ -1,7 +1,13 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { after, NextRequest } from "next/server";
 
-const authState = vi.hoisted(() => ({ userId: null as string | null }));
+const authState = vi.hoisted(() => ({
+  userId: null as string | null,
+  // This sign-in's id. Unset, each user gets "session-<id>", which the
+  // beforeEach below marks as having passed two-step verification for admins.
+  sessionId: undefined as string | null | undefined,
+  mfa: "verified" as "none" | "pending" | "verified",
+}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 // after() needs a real request scope; workflow emails aren't under test here.
 vi.mock("next/server", async (importOriginal) => ({
@@ -10,14 +16,28 @@ vi.mock("next/server", async (importOriginal) => ({
 }));
 
 // The signed-in user comes from Auth.js; tests set it through authState.
-vi.mock("@/auth", () => ({
-  auth: async () =>
-    authState.userId ? { user: { id: authState.userId } } : null,
-  getSessionUserId: async () => authState.userId,
-  signIn: vi.fn(),
-  signOut: vi.fn(),
-  handlers: {},
-}));
+vi.mock("@/auth", () => {
+  const access = () =>
+    authState.userId
+      ? {
+          userId: authState.userId,
+          sessionId:
+            authState.sessionId === undefined ? `session-${authState.userId}` : authState.sessionId,
+          mfa: authState.mfa,
+        }
+      : null;
+  return {
+    auth: async () => (authState.userId ? { user: { id: authState.userId } } : null),
+    getSessionAccess: async () => access(),
+    getSessionUserId: async () => {
+      const current = access();
+      return current && current.mfa !== "pending" ? current.userId : null;
+    },
+    signIn: vi.fn(),
+    signOut: vi.fn(),
+    handlers: {},
+  };
+});
 
 import prisma from "@/lib/prisma";
 import {
@@ -72,6 +92,15 @@ import {
   PUT as putSignInException,
 } from "@/app/api/users/[id]/sign-in-exception/route";
 import sharp from "sharp";
+import { POST as startTwoStepSetup } from "@/app/api/mfa/setup/route";
+import { POST as confirmTwoStepSetup } from "@/app/api/mfa/setup/confirm/route";
+import { POST as verifyTwoStepCode } from "@/app/api/mfa/verify/route";
+import { POST as renewRecoveryCodes } from "@/app/api/mfa/recovery-codes/route";
+import { GET as readTwoStepStatus } from "@/app/api/mfa/status/route";
+import { DELETE as resetTwoStep } from "@/app/api/users/[id]/mfa/route";
+import { GET as listFullUsers } from "@/app/api/users/full/route";
+import { base32Decode, totpCode, totpStep } from "@/lib/mfa/totp";
+import { MFA_SESSION_MS } from "@/lib/mfa/policy";
 import { POST as bulkImportCourses } from "@/app/api/courses/bulk/route";
 import { POST as bulkImportMasterCourses } from "@/app/api/master-courses/bulk/route";
 import { GET as listSubmissions } from "@/app/api/submissions/route";
@@ -241,8 +270,24 @@ beforeAll(async () => {
   });
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   authState.userId = null;
+  authState.sessionId = undefined;
+  authState.mfa = "verified";
+  // Admins act only from a sign-in that passed two-step verification. Each
+  // admin's default test session ("session-<id>") counts as having passed.
+  const admins = await prisma.user.findMany({
+    where: { role: { in: ["ADMIN", "SUPER_ADMIN"] } },
+    select: { id: true },
+  });
+  await prisma.mfaVerification.createMany({
+    data: admins.map((admin) => ({
+      userId: admin.id,
+      sessionId: `session-${admin.id}`,
+      method: "AUTHENTICATOR",
+    })),
+    skipDuplicates: true,
+  });
 });
 
 afterAll(async () => {
@@ -3305,6 +3350,7 @@ describe("GRACE checks on save and submit", () => {
     expect(await takeRateLimit("graceCheck", ids.hod, now)).toEqual({
       ok: false,
       retryAfterSeconds: 30,
+      count: limit + 1,
     });
     // Someone else, and the next window, are unaffected.
     expect((await takeRateLimit("graceCheck", ids.coordinator, now)).ok).toBe(true);
@@ -4106,5 +4152,360 @@ describe("University sign-in and exceptions", () => {
     expect((await prisma.user.findUniqueOrThrow({ where: { id: personalId } })).signInExceptionUntil).toEqual(
       personalBefore.signInExceptionUntil,
     );
+  });
+});
+
+// Academic Planning Admins and Super Admins enter an authenticator code at
+// every sign-in. Time is fixed here so codes are predictable.
+describe("Two-step verification for admins", () => {
+  const adminId = "mfa-admin";
+  const adminEmail = "mfa-admin@babcock.edu.ng";
+  const start = new Date("2026-11-19T10:00:05.000Z");
+  const routeParams = (id: string) => ({ params: Promise.resolve({ id }) });
+  const call = (handler: (request: NextRequest) => Promise<Response>, path: string, body?: object) =>
+    handler(
+      new NextRequest(`http://localhost${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body ?? {}),
+      }),
+    );
+  const setup = () => startTwoStepSetup();
+  const confirm = (code: string) => call(confirmTwoStepSetup, "/api/mfa/setup/confirm", { code });
+  const verify = (code: string) => call(verifyTwoStepCode, "/api/mfa/verify", { code });
+  const renew = (code: string) => call(renewRecoveryCodes, "/api/mfa/recovery-codes", { code });
+  const reset = (id: string, confirmText?: string) =>
+    resetTwoStep(
+      new NextRequest(`http://localhost/api/users/${id}/mfa`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        ...(confirmText !== undefined && { body: JSON.stringify({ confirm: confirmText }) }),
+      }),
+      routeParams(id),
+    );
+  /** Signs in as the test admin: a new sign-in id, still waiting for a code. */
+  const signIn = (sessionId: string, mfa: "pending" | "verified" = "pending") => {
+    authState.userId = adminId;
+    authState.sessionId = sessionId;
+    authState.mfa = mfa;
+  };
+  const at = (seconds: number) => vi.setSystemTime(new Date(start.getTime() + seconds * 1000));
+  const codeFor = (secret: string, offsetSteps = 0) =>
+    totpCode(base32Decode(secret), totpStep(Date.now()) + offsetSteps);
+  const logged = (action: string) =>
+    prisma.activityLog.count({ where: { entityId: adminId, action } });
+  const storedSecret = async () =>
+    (
+      await prisma.user.findUniqueOrThrow({
+        where: { id: adminId },
+        select: { mfaSecret: true, mfaEnabledAt: true, mfaLastUsedStep: true },
+      })
+    );
+
+  let secret = "";
+  let recoveryCodes: string[] = [];
+
+  beforeAll(async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: start });
+    await prisma.user.create({
+      data: { id: adminId, email: adminEmail, firstName: "Mfa", lastName: "Admin", role: "ADMIN" },
+    });
+  });
+
+  beforeEach(async () => {
+    await prisma.apiRateLimit.deleteMany({});
+    vi.mocked(after).mockClear();
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
+  it("starts every admin sign-in waiting for a code, and keeps admin APIs shut until then", async () => {
+    const hod = await prisma.user.findUniqueOrThrow({ where: { id: ids.hod } });
+    const adminToken = await refreshSessionToken({}, { email: adminEmail }, Date.now());
+    expect(adminToken).toMatchObject({ userId: adminId, mfa: "pending" });
+    expect(adminToken!.sid).toMatch(/^[0-9a-f-]{36}$/);
+    const again = await refreshSessionToken({}, { email: adminEmail }, Date.now());
+    expect(again!.sid).not.toBe(adminToken!.sid);
+    expect(await refreshSessionToken({}, { email: hod.email }, Date.now())).toMatchObject({
+      userId: ids.hod,
+      mfa: "none",
+    });
+
+    // Pending, or "verified" in the cookie with nothing on record: refused.
+    for (const mfa of ["pending", "verified"] as const) {
+      signIn("mfa-unchecked", mfa);
+      expect(await getApiUser()).toBeNull();
+      const gate = await requireApiUser(["ADMIN"]);
+      expect(gate.ok).toBe(false);
+      if (!gate.ok) {
+        expect(gate.response.status).toBe(401);
+        expect(await gate.response.json()).toMatchObject({ code: "MFA_REQUIRED" });
+      }
+      const me = await getCurrentUser();
+      expect(me.status).toBe(401);
+      expect(await me.json()).toMatchObject({ code: "MFA_REQUIRED" });
+      expect((await listFullUsers()).status).toBe(401);
+    }
+
+    // Other roles don't use it.
+    authState.userId = ids.hod;
+    authState.sessionId = null;
+    authState.mfa = "none";
+    expect((await getApiUser())?.id).toBe(ids.hod);
+    expect((await setup()).status).toBe(400);
+  });
+
+  it("sets up the app with a QR code and the first code, and gives ten recovery codes once", async () => {
+    signIn("mfa-sign-in-1");
+    expect(await verify("123456")).toMatchObject({ status: 409 });
+
+    const savedKey = process.env.MFA_ENCRYPTION_KEY;
+    delete process.env.MFA_ENCRYPTION_KEY;
+    try {
+      const unavailable = await setup();
+      expect(unavailable.status).toBe(503);
+      expect(await unavailable.json()).toMatchObject({ code: "MFA_NOT_CONFIGURED" });
+    } finally {
+      process.env.MFA_ENCRYPTION_KEY = savedKey;
+    }
+
+    const first = await (await setup()).json();
+    expect(first.qrCode).toMatch(/^data:image\/svg\+xml;base64,/);
+    expect(first.account).toBe(adminEmail);
+    const firstSecret = first.secret.replace(/ /g, "");
+
+    // Each start makes a new secret; the earlier one stops working.
+    const second = await setup();
+    expect(second.status).toBe(200);
+    secret = (await second.json()).secret.replace(/ /g, "");
+    expect(secret).not.toBe(firstSecret);
+    const stored = await storedSecret();
+    expect(stored.mfaSecret).toMatch(/^v1\./);
+    expect(stored.mfaSecret).not.toContain(secret);
+    expect(stored.mfaEnabledAt).toBeNull();
+
+    expect((await confirm("12345")).status).toBe(400);
+    const stale = await confirm(codeFor(firstSecret));
+    expect(stale.status).toBe(400);
+    expect(await stale.json()).toMatchObject({ code: "WRONG_CODE" });
+
+    const confirmed = await confirm(codeFor(secret));
+    expect(confirmed.status).toBe(200);
+    recoveryCodes = (await confirmed.json()).recoveryCodes;
+    expect(recoveryCodes).toHaveLength(10);
+    for (const code of recoveryCodes) expect(code).toMatch(/^[0-9A-Z]{5}-[0-9A-Z]{5}$/);
+
+    const rows = await prisma.mfaRecoveryCode.findMany({ where: { userId: adminId } });
+    expect(rows).toHaveLength(10);
+    for (const row of rows) expect(recoveryCodes).not.toContain(row.codeHash);
+    expect((await storedSecret()).mfaEnabledAt).toEqual(start);
+    expect(
+      await prisma.mfaVerification.findUnique({ where: { sessionId: "mfa-sign-in-1" } }),
+    ).toMatchObject({ userId: adminId, method: "AUTHENTICATOR" });
+    expect(await logged("MFA_ENABLED")).toBe(1);
+    expect(vi.mocked(after)).toHaveBeenCalled();
+
+    // Until the session cookie catches up, the sign-in still reads as
+    // pending; once it does, this sign-in counts as checked.
+    expect(await getApiUser()).toBeNull();
+    signIn("mfa-sign-in-1", "verified");
+    expect((await getApiUser())?.id).toBe(adminId);
+    // And the set-up can't start again.
+    expect((await setup()).status).toBe(409);
+    expect(await (await readTwoStepStatus()).json()).toMatchObject({ recoveryCodesLeft: 10 });
+
+    // The encrypted secret never leaves the database in a user record.
+    expect(await prisma.user.findUnique({ where: { id: adminId } })).not.toHaveProperty("mfaSecret");
+    authState.userId = ids.super;
+    authState.sessionId = undefined;
+    authState.mfa = "verified";
+    const users = await (await listFullUsers()).json();
+    const listed = users.find((user: { id: string }) => user.id === adminId);
+    expect(listed.mfaEnabledAt).not.toBeNull();
+    expect(JSON.stringify(users)).not.toContain(stored.mfaSecret);
+  });
+
+  it("follows the database for the session state, for 12 hours at most", async () => {
+    const pending = { userId: adminId, sid: "mfa-sign-in-1", mfa: "pending" as const, checkedAt: Date.now() };
+    expect(await refreshSessionToken(pending, undefined, Date.now())).toMatchObject({
+      mfa: "verified",
+      mfaVerifiedAt: start.getTime(),
+    });
+    expect(
+      await refreshSessionToken({ ...pending, sid: "mfa-someone-else" }, undefined, Date.now()),
+    ).toMatchObject({ mfa: "pending" });
+    expect(
+      await refreshSessionToken(pending, undefined, start.getTime() + MFA_SESSION_MS + 1),
+    ).toMatchObject({ mfa: "pending" });
+
+    // An admin session from before two-step verification signs in again.
+    expect(
+      await refreshSessionToken({ userId: adminId, checkedAt: Date.now() }, undefined, Date.now()),
+    ).toBeNull();
+    expect(
+      await refreshSessionToken({ userId: ids.hod, checkedAt: Date.now() }, undefined, Date.now()),
+    ).toMatchObject({ mfa: "none" });
+
+    signIn("mfa-sign-in-1", "verified");
+    at(MFA_SESSION_MS / 1000 + 1);
+    try {
+      expect(await getApiUser()).toBeNull();
+    } finally {
+      at(0);
+    }
+  });
+
+  it("accepts each code once, refuses wrong ones, and limits tries", async () => {
+    signIn("mfa-sign-in-2");
+    // The set-up used this 30-second code already.
+    const reused = await verify(codeFor(secret));
+    expect(reused.status).toBe(400);
+    expect(await reused.json()).toMatchObject({ code: "CODE_ALREADY_USED" });
+
+    at(30);
+    const valid = new Set([-1, 0, 1].map((offset) => codeFor(secret, offset)));
+    const wrong = ["000000", "111111", "222222"].find((code) => !valid.has(code))!;
+    expect(await (await verify(wrong)).json()).toMatchObject({ code: "WRONG_CODE" });
+
+    const ok = await verify(` ${codeFor(secret).slice(0, 3)} ${codeFor(secret).slice(3)} `);
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({ method: "AUTHENTICATOR" });
+    expect(await logged("MFA_VERIFIED")).toBe(1);
+    expect((await storedSecret()).mfaLastUsedStep).toBe(totpStep(Date.now()));
+
+    signIn("mfa-sign-in-3");
+    expect(await (await verify(codeFor(secret))).json()).toMatchObject({ code: "CODE_ALREADY_USED" });
+
+    // Two sign-ins racing with the same new code: only one gets in.
+    await prisma.apiRateLimit.deleteMany({});
+    at(45);
+    const racing = codeFor(secret, 1);
+    const [first, second] = await Promise.all(
+      ["mfa-race-1", "mfa-race-2"].map(async (sessionId) => {
+        signIn(sessionId);
+        return verify(racing);
+      }),
+    );
+    expect([first.status, second.status].sort()).toEqual([200, 400]);
+    expect(
+      await prisma.mfaVerification.count({ where: { sessionId: { in: ["mfa-race-1", "mfa-race-2"] } } }),
+    ).toBe(1);
+
+    // Five tries per five minutes; the first refusal is logged and emailed.
+    signIn("mfa-sign-in-3");
+    await prisma.apiRateLimit.deleteMany({});
+    vi.mocked(after).mockClear();
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      expect((await verify(wrong)).status).toBe(400);
+    }
+    const limited = await verify(codeFor(secret, 1));
+    expect(limited.status).toBe(429);
+    expect(await limited.json()).toMatchObject({ code: "RATE_LIMITED" });
+    expect((await verify(codeFor(secret, 1))).status).toBe(429);
+    expect(await logged("MFA_LOCKED")).toBe(1);
+    expect(vi.mocked(after)).toHaveBeenCalledTimes(1);
+    expect(await prisma.mfaVerification.findUnique({ where: { sessionId: "mfa-sign-in-3" } })).toBeNull();
+  });
+
+  it("lets a recovery code in once, and new codes replace the old ones", async () => {
+    signIn("mfa-sign-in-4");
+    const used = await verify(recoveryCodes[0].toLowerCase().replace("-", " "));
+    expect(used.status).toBe(200);
+    expect(await used.json()).toMatchObject({ method: "RECOVERY_CODE", recoveryCodesLeft: 9 });
+    expect(
+      await prisma.mfaVerification.findUnique({ where: { sessionId: "mfa-sign-in-4" } }),
+    ).toMatchObject({ method: "RECOVERY_CODE" });
+    expect(await logged("MFA_RECOVERY_CODE_USED")).toBe(1);
+
+    signIn("mfa-sign-in-5");
+    expect(await (await verify(recoveryCodes[0])).json()).toMatchObject({ code: "WRONG_CODE" });
+
+    // Making new codes needs a checked sign-in and a current app code.
+    expect(await (await renew(codeFor(secret, 1))).json()).toMatchObject({ code: "MFA_REQUIRED" });
+    signIn("mfa-sign-in-4", "verified");
+    expect((await renew("12")).status).toBe(400);
+    at(90);
+    const renewed = await renew(codeFor(secret));
+    expect(renewed.status).toBe(200);
+    const fresh: string[] = (await renewed.json()).recoveryCodes;
+    expect(fresh).toHaveLength(10);
+    expect(fresh).not.toContain(recoveryCodes[1]);
+    expect(await logged("MFA_RECOVERY_CODES_RENEWED")).toBe(1);
+    expect(await (await readTwoStepStatus()).json()).toMatchObject({ recoveryCodesLeft: 10 });
+
+    signIn("mfa-sign-in-6");
+    expect((await verify(recoveryCodes[1])).status).toBe(400);
+    expect((await verify(fresh[0])).status).toBe(200);
+  });
+
+  it("lets another Super Admin reset it, with the email typed, ending admin access at once", async () => {
+    authState.userId = ids.super;
+    authState.sessionId = undefined;
+    authState.mfa = "verified";
+    const own = await reset(ids.super, `${ids.super}@babcock.edu.ng`);
+    expect(own.status).toBe(403);
+    expect(await own.json()).toMatchObject({ code: "OWN_ACCOUNT" });
+
+    authState.userId = ids.admin;
+    expect((await reset(adminId, adminEmail)).status).toBe(403);
+
+    authState.userId = ids.super;
+    expect(await (await reset(adminId)).json()).toMatchObject({ code: "CONFIRMATION_REQUIRED" });
+    expect((await reset(adminId, "someone@babcock.edu.ng")).status).toBe(400);
+    expect(await storedSecret()).toMatchObject({ mfaEnabledAt: start });
+
+    const done = await reset(adminId, `  ${adminEmail.toUpperCase()} `);
+    expect(done.status).toBe(200);
+    expect((await done.json()).endedSessions).toBeGreaterThanOrEqual(4);
+    expect(await storedSecret()).toEqual({ mfaSecret: null, mfaEnabledAt: null, mfaLastUsedStep: null });
+    expect(await prisma.mfaRecoveryCode.count({ where: { userId: adminId } })).toBe(0);
+    expect(await prisma.mfaVerification.count({ where: { userId: adminId } })).toBe(0);
+    expect(
+      await prisma.activityLog.count({ where: { entityId: adminId, action: "MFA_RESET", actorId: ids.super } }),
+    ).toBe(1);
+    expect(vi.mocked(after)).toHaveBeenCalled();
+    expect((await reset(adminId, adminEmail)).status).toBe(409);
+
+    // Their checked sign-in no longer counts; they set the app up again.
+    signIn("mfa-sign-in-4", "verified");
+    expect(await getApiUser()).toBeNull();
+    expect(
+      await refreshSessionToken(
+        { userId: adminId, sid: "mfa-sign-in-4", mfa: "verified", mfaVerifiedAt: Date.now(), checkedAt: 0 },
+        undefined,
+        Date.now(),
+      ),
+    ).toMatchObject({ mfa: "pending" });
+    expect((await setup()).status).toBe(200);
+  });
+
+  it("adds its columns and tables with a migration that can run twice", async () => {
+    const migration = readFileSync(
+      join(process.cwd(), "prisma/migrations/20261119150000_add_two_step_verification/migration.sql"),
+      "utf8",
+    );
+    const client = new PgClient({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
+    try {
+      await client.query(migration);
+      await client.query(migration);
+      const columns = await client.query(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_name = 'users' AND column_name LIKE 'mfa%' ORDER BY column_name`,
+      );
+      expect(columns.rows.map((row) => row.column_name)).toEqual([
+        "mfaEnabledAt",
+        "mfaLastUsedStep",
+        "mfaSecret",
+      ]);
+      const tables = await client.query(
+        `SELECT to_regclass('mfa_recovery_codes') AS codes, to_regclass('mfa_verifications') AS checks`,
+      );
+      expect(tables.rows[0]).toEqual({ codes: "mfa_recovery_codes", checks: "mfa_verifications" });
+    } finally {
+      await client.end();
+    }
   });
 });
