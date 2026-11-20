@@ -11,7 +11,7 @@ import prisma from "@/lib/prisma";
 import {
   formatStaffName,
   getTitleDisplay,
-  getAcademicRankDisplay,
+  staffRankLabel,
 } from "@/lib/validation/name-format";
 
 // Types
@@ -158,7 +158,7 @@ export async function generateDepartmentBulletin(
         middleName: s.middleName,
       }),
       title: getTitleDisplay(s.title),
-      rank: getAcademicRankDisplay(s.academicRank),
+      rank: staffRankLabel(s),
       qualification: s.highestQualification,
       specialization: s.specialization || undefined,
       email: s.email || undefined,
@@ -318,7 +318,7 @@ export async function generateSchoolBulletin(
           middleName: s.middleName,
         }),
         title: getTitleDisplay(s.title),
-        rank: getAcademicRankDisplay(s.academicRank),
+        rank: staffRankLabel(s),
         qualification: s.highestQualification,
         specialization: s.specialization || undefined,
         email: s.email || undefined,
@@ -475,7 +475,7 @@ export async function generateInstitutionBulletin(): Promise<BulletinData> {
             middleName: s.middleName,
           }),
           title: getTitleDisplay(s.title),
-          rank: getAcademicRankDisplay(s.academicRank),
+          rank: staffRankLabel(s),
           qualification: s.highestQualification,
           specialization: s.specialization || undefined,
           email: s.email || undefined,

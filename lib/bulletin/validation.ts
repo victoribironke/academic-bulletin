@@ -36,6 +36,20 @@ export function validateBulletinProgramme(
       issue(programme, "NO_STAFF", "No staff members have been added."),
     );
   }
+  // Rank OTHER prints the person's job title; without one the bulletin would
+  // list them with no rank at all.
+  const unranked = programme.staff.filter((member) => !cleanText(member.rank));
+  if (unranked.length > 0) {
+    issues.push(
+      issue(
+        programme,
+        "STAFF_RANK_MISSING",
+        `Give a job title to staff listed with rank Other: ${unranked
+          .map((member) => member.fullName)
+          .join(", ")}.`,
+      ),
+    );
+  }
   if (programme.courses.length === 0) {
     issues.push(
       issue(programme, "NO_COURSES", "No courses have been added."),

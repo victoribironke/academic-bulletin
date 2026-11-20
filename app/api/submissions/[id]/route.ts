@@ -11,6 +11,7 @@ import {
 import { AUTOSAVE_COALESCE_MINUTES, recordActivity } from "@/lib/activity-log";
 import { getSubmissionWorkflow } from "@/lib/submissions/phase-owners";
 import { workflowHistoryConflict } from "@/lib/submissions/workflow-history";
+import { unsafeMarkupReason } from "@/lib/html/safe-html";
 import { inUseResponse, requireTypedConfirmation } from "@/lib/archive";
 import { photoNotUploadedHere } from "@/lib/images/photo-urls";
 
@@ -196,6 +197,25 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         { error: gate.message },
         { status: gate.status },
       );
+    }
+
+    // Rich text is shown on reviewers' pages, so it may carry only the
+    // editor's formatting (the page also cleans it before showing it).
+    for (const [key, label] of [
+      ["sectionF", "Programme Regulations"],
+      ["sectionG", "Summary of Changes"],
+    ] as const) {
+      const value = content?.[key]?.content;
+      const reason = typeof value === "string" ? unsafeMarkupReason(value) : null;
+      if (reason) {
+        return NextResponse.json(
+          {
+            error: `${label} contains ${reason}, which can't be saved. Use the editor's formatting only.`,
+            code: "UNSAFE_MARKUP",
+          },
+          { status: 400 },
+        );
+      }
     }
 
     // Dean and HOD photos must be ones uploaded to the app.

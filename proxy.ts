@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { wwwRedirectTarget } from "@/lib/canonical-host";
+import { isCrossSiteWrite } from "@/lib/request-origin";
 
 /**
- * Sends www visitors to the main address, signed-out visitors to /login,
- * admins who still need an authenticator code to /verify, and signed-in
- * people away from /login. Apart from the www redirect this only steers
- * pages; every API route checks access itself.
+ * Sends www visitors to the main address, refuses API writes from other
+ * sites, sends signed-out visitors to /login, admins who still need an
+ * authenticator code to /verify, and signed-in people away from /login.
+ * Every API route still checks access itself.
  */
 export const proxy = auth((request) => {
   const { pathname, search, origin } = request.nextUrl;
@@ -19,8 +20,25 @@ export const proxy = auth((request) => {
   );
   if (wwwTarget) return NextResponse.redirect(wwwTarget, 308);
 
-  // API routes (including Auth.js's own) do their own auth checks.
-  if (pathname.startsWith("/api")) return NextResponse.next();
+  if (pathname.startsWith("/api")) {
+    // A request that changes something must come from this site's own pages
+    // (lib/request-origin.ts), so another site can't make it in someone's name.
+    if (
+      isCrossSiteWrite({
+        method: request.method,
+        origin: request.headers.get("origin"),
+        secFetchSite: request.headers.get("sec-fetch-site"),
+        hosts: [request.headers.get("host"), request.headers.get("x-forwarded-host")],
+      })
+    ) {
+      return NextResponse.json(
+        { error: "Requests from other sites are refused.", code: "CROSS_SITE_REQUEST" },
+        { status: 403 },
+      );
+    }
+    // API routes (including Auth.js's own) do their own auth checks.
+    return NextResponse.next();
+  }
 
   const signedIn = Boolean(request.auth?.user?.id);
   const isLoginRoute = pathname.startsWith("/login");

@@ -4663,3 +4663,324 @@ describe("Two-step verification for admins", () => {
     }
   });
 });
+
+// The brief's proof of Priority 1: on a fresh draft (the same empty baseline
+// as the 43 untouched drafts), reproduce each defect class found in the
+// Nursing Science, Law and Economics test records and show it is refused
+// before the bulletin can advance; then take the clean draft through every
+// phase with the database's ledger guards switched on.
+describe("Priority 1 proof on a fresh draft", () => {
+  const cycleId = "proof-cycle";
+  const draftId = "proof-draft";
+  const outsideId = "proof-outside-draft";
+  const guardMigration = join(
+    process.cwd(),
+    "prisma/migrations/20261105140100_ledger_guards/migration.sql",
+  );
+  const sql = async (text: string) => {
+    const client = new PgClient({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
+    try {
+      await client.query(text);
+    } finally {
+      await client.end();
+    }
+  };
+  const removeGuards = () =>
+    sql(`
+      DROP TRIGGER IF EXISTS phase_transitions_append_only ON "phase_transitions";
+      DROP TRIGGER IF EXISTS submissions_state_requires_ledger ON "submissions";
+      DROP FUNCTION IF EXISTS phase_transitions_append_only();
+      DROP FUNCTION IF EXISTS submissions_state_requires_ledger();
+      DROP FUNCTION IF EXISTS ledger_maintenance_enabled();
+    `);
+
+  const act = (userId: string, action: string, extra: object = {}, id = draftId) => {
+    authState.userId = userId;
+    return transitionSubmission(
+      new NextRequest(`http://localhost/api/submissions/${id}/transition`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ...extra }),
+      }),
+      { params: Promise.resolve({ id }) },
+    );
+  };
+  const save = (userId: string, content: object) => {
+    authState.userId = userId;
+    return updateSubmission(
+      new NextRequest(`http://localhost/api/submissions/${draftId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      }),
+      { params: Promise.resolve({ id: draftId }) },
+    );
+  };
+  const open = (userId: string, id = draftId) => {
+    authState.userId = userId;
+    return getSubmission(new NextRequest(`http://localhost/api/submissions/${id}`), {
+      params: Promise.resolve({ id }),
+    });
+  };
+  const submitAsDepartment = async () => {
+    const response = await act(ids.hod, "SUBMIT");
+    const body = await response.json();
+    return {
+      status: response.status,
+      code: body.code as string | undefined,
+      reasons: ((body.readiness ?? []) as { code: string; message: string }[]),
+      blockers: body.blockers,
+    };
+  };
+  const state = () =>
+    prisma.submission.findUniqueOrThrow({
+      where: { id: draftId },
+      select: { currentPhase: true, status: true },
+    });
+  const ledgerRows = () => prisma.phaseTransition.count({ where: { submissionId: draftId } });
+
+  beforeAll(async () => {
+    await removeGuards();
+    await prisma.reviewCycle.create({
+      data: { id: cycleId, name: "Priority 1 proof", createdById: ids.super },
+    });
+    await prisma.submission.createMany({
+      data: [
+        { id: draftId, title: "Proof Draft", programmeId: ids.programmeA, createdById: ids.hod, cycleId },
+        { id: outsideId, title: "Other School Draft", programmeId: ids.programmeB, createdById: ids.super, cycleId },
+      ],
+    });
+    // The real database guards: the ledger is append-only, and a bulletin's
+    // phase changes only together with its ledger row.
+    await sql(readFileSync(guardMigration, "utf8"));
+  });
+
+  afterAll(async () => {
+    await removeGuards();
+    await prisma.activityLog.deleteMany({ where: { entityId: { in: [draftId, outsideId] } } });
+    await prisma.staff.deleteMany({ where: { id: "proof-staff-other" } });
+    await prisma.submission.deleteMany({ where: { id: { in: [draftId, outsideId] } } });
+    await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+  });
+
+  it("refuses a blank draft and names every empty required field", async () => {
+    const blank = await submitAsDepartment();
+    expect(blank.status).toBe(409);
+    expect(blank.code).toBe("SUBMISSION_INCOMPLETE");
+    expect(blank.reasons.map((reason) => reason.code)).toEqual(
+      expect.arrayContaining([
+        "NO_COURSES",
+        "MISSING_PHILOSOPHY",
+        "MISSING_MINIMUM_DURATION",
+        "MISSING_MINIMUM_CGPA",
+        "MISSING_TOTAL_UNITS",
+      ]),
+    );
+    expect(await state()).toEqual({ currentPhase: 1, status: "DRAFT" });
+    expect(await ledgerRows()).toBe(0);
+  });
+
+  it("refuses each defect from the test records at Submit, with its reason", async () => {
+    await prepareDraftForSubmit(draftId);
+    const course = await prisma.course.findFirstOrThrow({
+      where: { submissionId: draftId },
+      include: { description: true },
+    });
+    const refusedFor = async (code: string, detail?: string) => {
+      const result = await submitAsDepartment();
+      expect(result.status, code).toBe(409);
+      const reason = result.reasons.find((item) => item.code === code);
+      expect(reason, code).toBeDefined();
+      if (detail) expect(reason?.message).toContain(detail);
+    };
+
+    // Nursing Science: 203 declared units against the course structure.
+    await prisma.submissionContent.update({ where: { submissionId: draftId }, data: { totalUnits: 203 } });
+    await refusedFor("UNIT_TOTAL_MISMATCH", "203");
+    await prisma.submissionContent.update({ where: { submissionId: draftId }, data: { totalUnits: course.units } });
+
+    // A CGPA outside the 5-point scale.
+    await prisma.submissionContent.update({ where: { submissionId: draftId }, data: { minimumCGPA: 7.5 } });
+    await refusedFor("CGPA_OUT_OF_RANGE", "7.5");
+    await prisma.submissionContent.update({ where: { submissionId: draftId }, data: { minimumCGPA: 2.5 } });
+
+    // Law: staff with rank OTHER and no job title.
+    await prisma.staff.create({
+      data: {
+        id: "proof-staff-other",
+        title: "DR",
+        gender: "MALE",
+        surname: "Nameless",
+        firstName: "Rank",
+        highestQualification: "PHD",
+        academicRank: "OTHER",
+        departmentId: ids.departmentA,
+      },
+    });
+    await refusedFor("STAFF_RANK_MISSING", "Nameless");
+    await prisma.staff.delete({ where: { id: "proof-staff-other" } });
+
+    // A philosophy written for another programme.
+    const wrongPhilosophy = [
+      "This philosophy belongs to Test Programme B and the graduates it forms.",
+      ...Array.from({ length: 150 }, (_, index) => `idea${index + 1}`),
+    ].join(" ");
+    const { philosophy, philosophyGrace } = await prisma.submissionContent.findUniqueOrThrow({
+      where: { submissionId: draftId },
+    });
+    await prisma.submissionContent.update({
+      where: { submissionId: draftId },
+      data: { philosophy: wrongPhilosophy },
+    });
+    await refusedFor("PHILOSOPHY_OTHER_PROGRAMME", "Test Programme B");
+    await prisma.submissionContent.update({
+      where: { submissionId: draftId },
+      data: { philosophy, philosophyGrace: philosophyGrace ?? undefined },
+    });
+
+    // Economics: course descriptions that failed GRACE.
+    await prisma.courseDescription.update({
+      where: { courseId: course.id },
+      data: { graceStatus: "NEEDS_REVISION", gracePass: false },
+    });
+    const failing = await submitAsDepartment();
+    expect(failing).toMatchObject({
+      status: 409,
+      code: "GRACE_COMPLIANCE_REQUIRED",
+      blockers: { needsRevision: [course.code] },
+    });
+    await prisma.courseDescription.update({
+      where: { courseId: course.id },
+      data: { graceStatus: "COMPLIANT", gracePass: true },
+    });
+
+    // A course description changed after its GRACE pass (a stale check).
+    await prisma.courseDescription.update({
+      where: { courseId: course.id },
+      data: { courseContent: `${course.description!.courseContent} edited` },
+    });
+    expect(await submitAsDepartment()).toMatchObject({
+      status: 409,
+      blockers: { changed: [course.code] },
+    });
+    await prisma.courseDescription.update({
+      where: { courseId: course.id },
+      data: { courseContent: course.description!.courseContent },
+    });
+
+    // Script stored in the Regulations is refused on save (security test 4).
+    const unsafe = await save(ids.hod, {
+      sectionF: { content: '<p>Rules</p><img src=x onerror="alert(1)">' },
+    });
+    expect(unsafe.status).toBe(400);
+    expect(await unsafe.json()).toMatchObject({ code: "UNSAFE_MARKUP" });
+    expect(
+      (await prisma.submissionContent.findUniqueOrThrow({ where: { submissionId: draftId } }))
+        .sectionF,
+    ).toBeNull();
+    expect(
+      (await save(ids.hod, { sectionF: { content: "<p>Students <strong>must</strong> attend.</p>" } }))
+        .status,
+    ).toBe(200);
+
+    // None of this moved the draft or wrote to the ledger.
+    expect(await state()).toEqual({ currentPhase: 1, status: "DRAFT" });
+    expect(await ledgerRows()).toBe(0);
+  });
+
+  it("lets the clean draft through, and only the right caller in the right school act", async () => {
+    // Opening a bulletin never runs or queues a GRACE check.
+    const checksBefore = await prisma.graceAssessment.count();
+    expect((await open(ids.admin)).status).toBe(200);
+    expect(await prisma.graceAssessment.count()).toBe(checksBefore);
+
+    const submitted = await act(ids.hod, "SUBMIT");
+    expect(submitted.status).toBe(200);
+    expect(await state()).toEqual({ currentPhase: 2, status: "IN_REVIEW" });
+
+    // Wrong school: another school's bulletin can't be read or moved.
+    expect((await open(ids.hod, outsideId)).status).toBe(403);
+    expect((await open(ids.dean, outsideId)).status).toBe(403);
+    expect((await act(ids.hod, "SUBMIT", {}, outsideId)).status).toBe(403);
+    // Wrong role and wrong phase: only the Dean reviews Phase 2.
+    expect((await act(ids.hod, "APPROVE")).status).toBe(403);
+    expect((await act(ids.coordinator, "APPROVE")).status).toBe(403);
+    expect((await act(ids.admin, "APPROVE")).status).toBe(403);
+    expect(await state()).toEqual({ currentPhase: 2, status: "IN_REVIEW" });
+  });
+
+  it("takes it through every phase with no one clearing two gates in a row", async () => {
+    const course = await prisma.course.findFirstOrThrow({ where: { submissionId: draftId } });
+
+    expect((await act(ids.dean, "APPROVE")).status).toBe(200); // 2 -> 3
+    expect((await act(ids.admin, "APPROVE")).status).toBe(200); // 3 -> 4
+
+    // The audit's "one actor cleared five phases": refused at the second gate.
+    const again = await act(ids.admin, "APPROVE");
+    expect(again.status).toBe(403);
+    expect(await again.json()).toMatchObject({ code: "SEPARATION_OF_DUTIES" });
+
+    // Item 2: a failing GRACE result stops every approval, not only Submit.
+    await prisma.courseDescription.update({
+      where: { courseId: course.id },
+      data: { graceStatus: "NEEDS_REVISION", gracePass: false },
+    });
+    const gated = await act(ids.super, "APPROVE");
+    expect(gated.status).toBe(409);
+    expect(await gated.json()).toMatchObject({ code: "GRACE_APPROVAL_BLOCKED" });
+    await prisma.courseDescription.update({
+      where: { courseId: course.id },
+      data: { graceStatus: "COMPLIANT", gracePass: true },
+    });
+
+    expect((await act(ids.super, "APPROVE")).status).toBe(200); // 4 -> 5
+    expect((await act(ids.admin, "APPROVE")).status).toBe(200); // 5 -> 6
+
+    // Senate (Phase 6) closes only with its minute reference.
+    const noMinute = await act(ids.super, "APPROVE");
+    expect(noMinute.status).toBe(400);
+    expect(await noMinute.json()).toMatchObject({ code: "EVIDENCE_REQUIRED" });
+    expect((await act(ids.super, "APPROVE", { reference: "SEN/2026/11/07" })).status).toBe(200); // 6 -> 7
+
+    expect((await act(ids.admin, "APPROVE")).status).toBe(200); // 7 -> 8
+    expect((await act(ids.super, "APPROVE")).status).toBe(200); // 8 -> 9
+    expect((await act(ids.admin, "APPROVE")).status).toBe(200); // 9 -> 10
+    expect(await state()).toEqual({ currentPhase: 10, status: "APPROVED" });
+  });
+
+  it("wrote exactly one permanent ledger row per state change", async () => {
+    const ledger = await prisma.phaseTransition.findMany({
+      where: { submissionId: draftId },
+      orderBy: { transitionedAt: "asc" },
+    });
+    // Submit plus eight approvals; refusals wrote nothing.
+    expect(ledger.map((row) => [row.fromPhase, row.toPhase])).toEqual(
+      Array.from({ length: 9 }, (_, index) => [index + 1, index + 2]),
+    );
+    for (const [index, row] of ledger.entries()) {
+      expect(row.actorRole, `row ${index}`).not.toBeNull();
+      expect(row.contentHash, `row ${index}`).toMatch(/^[0-9a-f]{64}$/);
+      if (index > 0) expect(row.performedById).not.toBe(ledger[index - 1].performedById);
+    }
+    expect(ledger.find((row) => row.fromPhase === 6)?.reference).toBe("SEN/2026/11/07");
+    expect(ledger.every((row) => row.graceOverride === null)).toBe(true);
+
+    // No edit or delete path: the database refuses them.
+    await expect(
+      prisma.phaseTransition.updateMany({ where: { submissionId: draftId }, data: { remarks: "edited" } }),
+    ).rejects.toThrow(/append-only/);
+    await expect(
+      prisma.phaseTransition.deleteMany({ where: { submissionId: draftId } }),
+    ).rejects.toThrow(/append-only/);
+    await expect(prisma.submission.delete({ where: { id: draftId } })).rejects.toThrow(
+      /append-only/,
+    );
+    // And a bulletin's phase can't change without its ledger row.
+    await expect(
+      prisma.submission.update({ where: { id: draftId }, data: { currentPhase: 1, status: "DRAFT" } }),
+    ).rejects.toThrow(/phase_transitions row/);
+    expect(await ledgerRows()).toBe(9);
+    expect(await state()).toEqual({ currentPhase: 10, status: "APPROVED" });
+  });
+});

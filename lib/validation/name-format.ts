@@ -252,6 +252,20 @@ export function getAcademicRankDisplay(rank: string): string {
 }
 
 /**
+ * What the bulletin prints as a staff member's rank. Rank OTHER is for
+ * non-academic staff and prints their job title, never the word "Other";
+ * without a job title it prints nothing, and the validator refuses the
+ * bulletin (STAFF_RANK_MISSING).
+ */
+export function staffRankLabel(staff: {
+  academicRank: string;
+  customJobTitle?: string | null;
+}): string {
+  if (staff.academicRank === "OTHER") return staff.customJobTitle?.trim() ?? "";
+  return getAcademicRankDisplay(staff.academicRank);
+}
+
+/**
  * Gets the display string for an academic qualification
  */
 export function getQualificationDisplay(qualification: string): string {

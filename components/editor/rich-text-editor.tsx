@@ -5,6 +5,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { SafeRichText } from "@/components/shared/safe-rich-text";
 import {
   Bold,
   Italic,
@@ -131,9 +132,10 @@ export function RichTextEditor({
 
 export function RichTextViewer({ content }: { content: string }) {
   return (
-    <div
+    <SafeRichText
       className="prose prose-sm max-w-none p-4"
-      dangerouslySetInnerHTML={{ __html: content || "<p>No content</p>" }}
+      html={content}
+      emptyText="No content"
     />
   );
 }

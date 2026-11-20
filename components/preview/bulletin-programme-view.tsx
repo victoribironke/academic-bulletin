@@ -2,7 +2,8 @@
 
 import React from "react";
 import { Separator } from "@/components/ui/separator";
-import { departmentLabel } from "@/lib/bulletin/document-utils";
+import { cleanText, departmentLabel } from "@/lib/bulletin/document-utils";
+import { SafeRichText } from "@/components/shared/safe-rich-text";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BulletinProgramme, BulletinCourse } from "@/lib/bulletin/generation";
 
@@ -434,7 +435,10 @@ export function BulletinProgrammeView({
               <div key={course.code} className="mb-4">
                 <h3 className="font-semibold">{course.code} - {course.title} ({course.units} Units)</h3>
                 {course.description?.courseContent && (
-                  <div className="mt-1 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: course.description.courseContent }} />
+                  // Plain text, exactly as the Word and PDF exports print it.
+                  <p className="mt-1 text-sm whitespace-pre-line">
+                    {cleanText(course.description.courseContent)}
+                  </p>
                 )}
                 {course.description?.learningOutcomes && course.description.learningOutcomes.length > 0 && (
                   <div className="mt-2 text-sm text-muted-foreground">
@@ -481,14 +485,14 @@ export function BulletinProgrammeView({
           {programme.content?.sectionF?.content && (
             <div className="mb-4">
               <h3 className="font-semibold mb-2">Programme Regulations</h3>
-              <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: programme.content.sectionF.content }} />
+              <SafeRichText className="prose prose-sm max-w-none" html={programme.content.sectionF.content} />
             </div>
           )}
 
           {programme.content?.sectionG?.content && (
             <div className="mb-4">
               <h3 className="font-semibold mb-2">Summary of Changes</h3>
-              <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: programme.content.sectionG.content }} />
+              <SafeRichText className="prose prose-sm max-w-none" html={programme.content.sectionG.content} />
             </div>
           )}
         </section>

@@ -50,9 +50,77 @@ export function philosophyGraceIsCurrent(content: SubmitReadinessContent): boole
   return Boolean(hash) && result?.contentHash === hash;
 }
 
+/** Words in a programme name that don't tell programmes apart. */
+const GENERIC_NAME_WORDS = new Set([
+  "and", "of", "the", "in", "for", "with", "&", "science", "sciences", "studies",
+  "education", "technology", "engineering", "management", "arts", "art",
+  "programme", "program", "bachelor", "bsc", "b.sc", "ba", "b.a", "hons",
+  "honours", "general", "applied",
+]);
+
+function nameWords(name: string): string[] {
+  return name.toLowerCase().split(/[^a-z.&]+/).filter(Boolean);
+}
+
+function escapeForRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function mentions(text: string, phrase: string): boolean {
+  const words = phrase.trim().split(/\s+/).map(escapeForRegExp).join("\\s+");
+  return new RegExp(`(^|[^a-z])${words}([^a-z]|$)`, "i").test(text);
+}
+
+/**
+ * A philosophy copied from another programme names that programme and not its
+ * own. Returns the other programme's name in that case, else null. Kept
+ * conservative so honest text passes: a mention of another field (Law naming
+ * "information technology" as an area of law) is fine when the philosophy
+ * also names its own programme, and very short names (e.g. "Law") are only
+ * checked as the programme's own.
+ */
+export function philosophyNamesOtherProgramme(
+  philosophy: string | null | undefined,
+  ownName: string,
+  otherNames: string[],
+): string | null {
+  const text = cleanText(philosophy ?? undefined).replace(/\s+/g, " ");
+  if (!text) return null;
+
+  const ownWords = nameWords(ownName);
+  const ownWordSet = new Set(ownWords);
+  // Words of three letters or more ("Law" counts, the "A" in "Programme A" doesn't).
+  const distinctive = ownWords.filter(
+    (word) => word.length >= 3 && !GENERIC_NAME_WORDS.has(word),
+  );
+
+  for (const other of otherNames) {
+    const words = nameWords(other);
+    if (words.length === 0 || other.trim().length < 6) continue;
+    if (other.trim().toLowerCase() === ownName.trim().toLowerCase()) continue;
+    // "Economics" inside "Agricultural Economics ..." is the programme's own field.
+    if (words.every((word) => ownWordSet.has(word))) continue;
+    if (!mentions(text, other.trim())) continue;
+
+    // It names another programme. It still names itself if it uses a word of
+    // its own name that the other name doesn't share ("Agricultural" can't
+    // tell Agricultural Economics from Agricultural Engineering), or failing
+    // that, its full name.
+    const otherWords = new Set(words);
+    const telling = distinctive.filter((word) => !otherWords.has(word));
+    const namesItself =
+      telling.length > 0
+        ? telling.some((word) => mentions(text, word))
+        : mentions(text, ownName.trim());
+    if (!namesItself) return other.trim();
+  }
+  return null;
+}
+
 export function submitReadinessIssues(
   programme: BulletinProgramme,
   content: SubmitReadinessContent,
+  otherProgrammeNames: string[] = [],
 ): SubmitReadinessIssue[] {
   // Everything the export refuses to print, the workflow refuses to send.
   const issues: SubmitReadinessIssue[] = validateBulletinProgramme(programme)
@@ -65,6 +133,17 @@ export function submitReadinessIssues(
       issues.push({
         code: "PHILOSOPHY_LENGTH",
         message: `The programme philosophy has ${words} words; it must have ${PHILOSOPHY_WORD_RANGE.min} to ${PHILOSOPHY_WORD_RANGE.max}.`,
+      });
+    }
+    const otherProgramme = philosophyNamesOtherProgramme(
+      content?.philosophy,
+      programme.name,
+      otherProgrammeNames,
+    );
+    if (otherProgramme) {
+      issues.push({
+        code: "PHILOSOPHY_OTHER_PROGRAMME",
+        message: `The programme philosophy names ${otherProgramme} but not ${programme.name}. Check it was written for this programme.`,
       });
     }
     if (GRACE_SUBMISSION_REQUIRED && !philosophyGraceIsCurrent(content)) {
@@ -128,6 +207,16 @@ export async function getSubmitReadinessIssues(
       },
     },
   });
-  const data = await generateDepartmentBulletin(submission.programmeId, submissionId);
-  return submitReadinessIssues(data.programmes[0], submission.content);
+  const [data, programmes] = await Promise.all([
+    generateDepartmentBulletin(submission.programmeId, submissionId),
+    prisma.programme.findMany({
+      where: { id: { not: submission.programmeId } },
+      select: { name: true },
+    }),
+  ]);
+  return submitReadinessIssues(
+    data.programmes[0],
+    submission.content,
+    programmes.map((programme) => programme.name),
+  );
 }
