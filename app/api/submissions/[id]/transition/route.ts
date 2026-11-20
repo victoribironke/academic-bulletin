@@ -23,6 +23,12 @@ import {
   hasCourseGraceBlockers,
 } from "@/lib/courses/grace-compliance";
 import { takeRateLimit } from "@/lib/rate-limit";
+import {
+  type GraceOverrideRecord,
+  decideGraceApproval,
+  getGraceGate,
+  readGraceOverride,
+} from "@/lib/submissions/grace-gate";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -33,7 +39,7 @@ export const maxDuration = 60;
 const SUBMIT_GRACE_BUDGET_MS = 30_000;
 
 /**
- * Submit is one of the moments queued GRACE checks run: when it is refused
+ * Submit and Approve are moments queued GRACE checks run: when one is refused
  * because course checks are still waiting, it starts them on the server after
  * responding, so trying again shortly can succeed. It counts against the same
  * per-person limit as running the queue from the page.
@@ -164,6 +170,41 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // No bulletin is approved on with a failing or out-of-date GRACE result,
+    // unless an allowed role overrides it with a reason (kept in the ledger).
+    let graceOverride: GraceOverrideRecord | null = null;
+    if (action === "APPROVE") {
+      const graceGate = await getGraceGate(id);
+      const decision = decideGraceApproval({
+        role: user.role,
+        gate: graceGate,
+        override: readGraceOverride(body),
+      });
+      if (!decision.ok) {
+        const startedChecks =
+          decision.code === "GRACE_APPROVAL_BLOCKED" &&
+          (await startWaitingGraceChecks(id, user.id, graceGate.courses));
+        return NextResponse.json(
+          {
+            error: decision.error,
+            code: decision.code,
+            issues: [
+              ...graceGate.issues,
+              ...(startedChecks
+                ? [
+                    "GRACE checks have started for the courses still waiting. Try approving again in a few minutes.",
+                  ]
+                : []),
+            ],
+            blockers: graceGate.courses,
+            ...(startedChecks && { gracePending: true }),
+          },
+          { status: decision.status },
+        );
+      }
+      graceOverride = decision.override;
+    }
+
     if (action === "SUBMIT") {
       const gate = await requireSubmissionWriteAccess(user, id);
       if (!gate.ok) {
@@ -220,6 +261,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           reference: requiredEvidence ? reference : null,
           actorRole: user.role,
           contentHash: await bulletinContentHash(tx, id),
+          ...(graceOverride && { graceOverride }),
           performedById: user.id,
         },
         include: {
@@ -255,7 +297,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           action: `SUBMISSION_${action}`,
           entityType: "SUBMISSION",
           entityId: id,
-          description: `${action.charAt(0)}${action.slice(1).toLowerCase()} action recorded for ${updated.programme.name}.`,
+          description: graceOverride
+            ? `Approved ${updated.programme.name} past GRACE results that hadn't passed (override): ${graceOverride.reason}`
+            : `${action.charAt(0)}${action.slice(1).toLowerCase()} action recorded for ${updated.programme.name}.`,
           metadata: {
             transitionId: transition.id,
             fromPhase,
@@ -263,6 +307,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             status: newStatus,
             ...(remarks?.trim() && { remarks: remarks.trim() }),
             ...(requiredEvidence && { reference }),
+            ...(graceOverride && { graceOverride }),
           },
         },
         tx,

@@ -13,6 +13,11 @@ import {
   type PhaseOwnerRule,
   type SubmissionAction,
 } from "@/lib/submissions/workflow";
+import {
+  type GraceGateSummary,
+  getGraceGate,
+  summarizeGraceGate,
+} from "@/lib/submissions/grace-gate";
 
 /** The phase-owner table, or today's owners while the table has no rows. */
 export async function loadPhaseOwners(): Promise<PhaseOwnerRule[]> {
@@ -55,6 +60,8 @@ export type SubmissionWorkflow = {
   clearedPreviousGate: boolean;
   /** Evidence an approval at this phase needs, e.g. the Senate minute reference. */
   requiredEvidence: string | null;
+  /** The GRACE gate on Approve, when this person can approve now. */
+  graceGate: GraceGateSummary | null;
 };
 
 export async function getSubmissionWorkflow(
@@ -71,11 +78,15 @@ export async function getSubmissionWorkflow(
   const previousActor = await previousGateActorId(submission.id, submission.currentPhase);
   const blocked = allowed.some((action) => clearedPreviousGate(action, user.id, previousActor));
 
+  const actions = blocked
+    ? allowed.filter((action) => !PHASE_CLEARING_ACTIONS.includes(action))
+    : allowed;
   return {
-    actions: blocked
-      ? allowed.filter((action) => !PHASE_CLEARING_ACTIONS.includes(action))
-      : allowed,
+    actions,
     clearedPreviousGate: blocked,
     requiredEvidence: PHASE_REQUIRED_EVIDENCE[submission.currentPhase] ?? null,
+    graceGate: actions.includes("APPROVE")
+      ? summarizeGraceGate(await getGraceGate(submission.id), user.role)
+      : null,
   };
 }

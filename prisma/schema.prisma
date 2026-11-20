@@ -582,6 +582,9 @@ model PhaseTransition {
   // Fingerprint of the bulletin's content at this moment: the text version
   // that was sent on, approved or returned
   contentHash    String?
+  // Set when an approval went ahead although GRACE results hadn't passed:
+  // the reason given and the results it covered (lib/submissions/grace-gate.ts)
+  graceOverride  Json?
 
   // Foreign Keys
   submissionId  String

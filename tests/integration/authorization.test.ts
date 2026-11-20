@@ -56,6 +56,8 @@ import { DELETE as deleteUser, PATCH as updateUser } from "@/app/api/users/[id]/
 import { adminCreateUser } from "@/app/actions/admin";
 import { GET as listCourses } from "@/app/api/courses/route";
 import { POST as transitionSubmission } from "@/app/api/submissions/[id]/transition/route";
+import { getSubmissionWorkflow } from "@/lib/submissions/phase-owners";
+import { PHILOSOPHY_GRACE_MESSAGE } from "@/lib/submissions/grace-gate";
 import {
   DELETE as deleteSubmission,
   GET as getSubmission,
@@ -1223,6 +1225,149 @@ describe("route authorization", () => {
     }
   });
 
+  it("refuses approval past GRACE results that haven't passed, except a logged override", async () => {
+    const cycleId = "grace-approval-cycle";
+    const submissionId = "grace-approval-submission";
+    await prisma.reviewCycle.create({
+      data: { id: cycleId, name: "GRACE Approval Cycle", createdById: ids.super },
+    });
+    await prisma.submission.create({
+      data: {
+        id: submissionId,
+        title: "GRACE Approval Submission",
+        programmeId: ids.programmeA,
+        createdById: ids.hod,
+        cycleId,
+      },
+    });
+    await prepareDraftForSubmit(submissionId);
+
+    const transition = (userId: string, action: string, extra: object = {}) => {
+      authState.userId = userId;
+      return transitionSubmission(
+        new NextRequest(`http://localhost/api/submissions/${submissionId}/transition`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, ...extra }),
+        }),
+        { params: Promise.resolve({ id: submissionId }) },
+      );
+    };
+    const phase = async () =>
+      (
+        await prisma.submission.findUniqueOrThrow({
+          where: { id: submissionId },
+          select: { currentPhase: true },
+        })
+      ).currentPhase;
+    const reason = "Senate needs this bulletin before the GRACE rerun can finish.";
+
+    try {
+      expect((await transition(ids.hod, "SUBMIT")).status).toBe(200);
+      expect(await phase()).toBe(2);
+
+      // A result that fails after Submit (or a bulletin that reached review
+      // before Submit checked) must not be approved on.
+      await prisma.courseDescription.updateMany({
+        where: { submissionId },
+        data: { graceStatus: "NEEDS_REVISION", gracePass: false },
+      });
+      await prisma.submissionContent.update({
+        where: { submissionId },
+        data: { philosophyGracePass: false },
+      });
+
+      const blocked = await transition(ids.dean, "APPROVE");
+      expect(blocked.status).toBe(409);
+      const blockedBody = await blocked.json();
+      expect(blockedBody).toMatchObject({
+        code: "GRACE_APPROVAL_BLOCKED",
+        blockers: { needsRevision: ["RDY 101"] },
+      });
+      expect(blockedBody.issues).toContain(PHILOSOPHY_GRACE_MESSAGE);
+      expect(await phase()).toBe(2);
+
+      // The page is told the same, and who may override.
+      const submission = { id: submissionId, currentPhase: 2, status: "IN_REVIEW" as const };
+      expect(
+        (await getSubmissionWorkflow({ id: ids.dean, role: "DEAN" }, submission)).graceGate,
+      ).toMatchObject({ blocked: true, canOverride: false });
+      expect(
+        (await getSubmissionWorkflow({ id: ids.super, role: "SUPER_ADMIN" }, submission))
+          .graceGate,
+      ).toMatchObject({ blocked: true, canOverride: true });
+
+      // The Dean can't override, whatever the reason.
+      const deanOverride = await transition(ids.dean, "APPROVE", { graceOverride: { reason } });
+      expect(deanOverride.status).toBe(403);
+      expect(await deanOverride.json()).toMatchObject({ code: "GRACE_OVERRIDE_NOT_ALLOWED" });
+
+      // Super Admin needs to override deliberately, with a real reason.
+      expect((await transition(ids.super, "APPROVE")).status).toBe(409);
+      const shortReason = await transition(ids.super, "APPROVE", {
+        graceOverride: { reason: "ok" },
+      });
+      expect(shortReason.status).toBe(400);
+      expect(await shortReason.json()).toMatchObject({
+        code: "GRACE_OVERRIDE_REASON_REQUIRED",
+      });
+      expect(await phase()).toBe(2);
+      expect(
+        await prisma.phaseTransition.count({ where: { submissionId, action: "APPROVE" } }),
+      ).toBe(0);
+
+      const overridden = await transition(ids.super, "APPROVE", {
+        graceOverride: { reason: `  ${reason}  ` },
+      });
+      expect(overridden.status).toBe(200);
+      expect(await phase()).toBe(3);
+      const ledger = await prisma.phaseTransition.findFirstOrThrow({
+        where: { submissionId, action: "APPROVE" },
+      });
+      expect(ledger).toMatchObject({
+        fromPhase: 2,
+        toPhase: 3,
+        actorRole: "SUPER_ADMIN",
+        performedById: ids.super,
+        graceOverride: {
+          reason,
+          courses: { needsRevision: ["RDY 101"] },
+          philosophy: true,
+        },
+      });
+      const activity = await prisma.activityLog.findFirstOrThrow({
+        where: { entityId: submissionId, action: "SUBMISSION_APPROVE" },
+      });
+      expect(activity.description).toContain("override");
+      expect(activity.description).toContain(reason);
+
+      // An override covers one approval only: the next phase is gated again.
+      const nextPhase = await transition(ids.admin, "APPROVE");
+      expect(nextPhase.status).toBe(409);
+      expect(await phase()).toBe(3);
+
+      // Once the results pass, approval needs no override and records none.
+      await prisma.courseDescription.updateMany({
+        where: { submissionId },
+        data: { graceStatus: "COMPLIANT", gracePass: true },
+      });
+      await prisma.submissionContent.update({
+        where: { submissionId },
+        data: { philosophyGracePass: true },
+      });
+      const clean = await transition(ids.admin, "APPROVE");
+      expect(clean.status).toBe(200);
+      const cleanLedger = await prisma.phaseTransition.findFirstOrThrow({
+        where: { submissionId, action: "APPROVE", fromPhase: 3 },
+      });
+      expect(cleanLedger.graceOverride).toBeNull();
+    } finally {
+      await prisma.activityLog.deleteMany({ where: { entityId: submissionId } });
+      await prisma.submission.deleteMany({ where: { id: submissionId } });
+      await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+    }
+  });
+
   it("blocks transition attempts outside the user's academic unit", async () => {
     const outsideSubmission = await prisma.submission.create({
       data: {
@@ -2196,6 +2341,7 @@ describe("HOD browsing within their school", () => {
       canEdit: false,
       clearedPreviousGate: false,
       requiredEvidence: null,
+      graceGate: null,
     });
     const submit = await transitionSubmission(
       new NextRequest(`http://localhost/api/submissions/${sibling.submission}/transition`, {
@@ -2446,8 +2592,16 @@ describe("server-side refusals", () => {
         await prisma.phaseTransition.count({ where: { submissionId: submission.id } }),
       ).toBe(0);
 
-      // The right caller at the right phase still goes through.
+      // The right caller at the right phase gets as far as the GRACE gate:
+      // the unchecked course stops the approval until it has a passing result.
       authState.userId = ids.admin;
+      const unchecked = await transition(submission.id, "APPROVE");
+      expect(unchecked.status).toBe(409);
+      expect(await unchecked.json()).toMatchObject({
+        code: "GRACE_APPROVAL_BLOCKED",
+        blockers: { missing: ["PGT 101"] },
+      });
+      await prisma.course.deleteMany({ where: { submissionId: submission.id } });
       expect((await transition(submission.id, "APPROVE")).status).toBe(200);
       expect(
         await prisma.submission.findUniqueOrThrow({

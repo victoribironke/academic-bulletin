@@ -78,7 +78,11 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { PhaseTracker } from "@/components/shared/phase-tracker";
 import { EmptyState } from "@/components/shared/states";
 import { cn } from "@/lib/utils";
-import { GRACE_SUBMISSION_REQUIRED } from "@/lib/grace-config";
+import {
+  GRACE_OVERRIDE_REASON_LENGTH,
+  GRACE_SUBMISSION_REQUIRED,
+} from "@/lib/grace-config";
+import { Checkbox } from "@/components/ui/checkbox";
 import { PhotoUploadGuidance } from "@/components/shared/photo-upload-guidance";
 
 interface Submission {
@@ -458,6 +462,9 @@ export default function SubmissionDetailPage({
   const [reviewRemarks, setReviewRemarks] = useState("");
   // Evidence some phases need to close, e.g. the Senate minute reference
   const [reviewReference, setReviewReference] = useState("");
+  // Approving past GRACE results that haven't passed (allowed roles only)
+  const [graceOverrideOn, setGraceOverrideOn] = useState(false);
+  const [graceOverrideReason, setGraceOverrideReason] = useState("");
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [submitBlockers, setSubmitBlockers] = useState<string[] | null>(null);
 
@@ -494,6 +501,14 @@ export default function SubmissionDetailPage({
   // read-only browsing) and who cleared the last gate.
   const workflowActions = submission?.workflow?.actions ?? [];
   const requiredEvidence = submission?.workflow?.requiredEvidence ?? null;
+  // GRACE results that stop Approve, and whether this person may override them
+  const graceGate = submission?.workflow?.graceGate ?? null;
+  const approvingWithOverride = Boolean(graceGate?.canOverride && graceOverrideOn);
+  const graceOverrideReasonOk =
+    graceOverrideReason.trim().length >= GRACE_OVERRIDE_REASON_LENGTH.min &&
+    graceOverrideReason.trim().length <= GRACE_OVERRIDE_REASON_LENGTH.max;
+  const approvalStoppedByGrace =
+    Boolean(graceGate?.blocked) && !(approvingWithOverride && graceOverrideReasonOk);
   const canEdit = Boolean(currentUser && submission?.workflow?.canEdit);
   const canComment =
     (hasPermission("comment:submission") || hasPermission("review:submission")) &&
@@ -856,6 +871,11 @@ export default function SubmissionDetailPage({
           remarks,
           ...(action === "APPROVE" &&
             requiredEvidence && { reference: reviewReference.trim() }),
+          ...(action === "APPROVE" &&
+            graceGate?.blocked &&
+            approvingWithOverride && {
+              graceOverride: { reason: graceOverrideReason.trim() },
+            }),
         }),
       });
 
@@ -878,10 +898,19 @@ export default function SubmissionDetailPage({
         setReviewAction(null);
         setReviewRemarks("");
         setReviewReference("");
+        setGraceOverrideOn(false);
+        setGraceOverrideReason("");
         fetchSubmission();
       } else {
         const data = await response.json().catch(() => ({}));
-        if (Array.isArray(data.issues) && data.issues.length > 0) {
+        if (
+          typeof data.code === "string" &&
+          data.code.startsWith("GRACE_") &&
+          action === "APPROVE"
+        ) {
+          // The approve dialog lists what hasn't passed; refresh it.
+          fetchSubmission();
+        } else if (Array.isArray(data.issues) && data.issues.length > 0) {
           setSubmitBlockers(data.issues);
         }
         toast.error(data.error || "Failed to complete action");
@@ -897,6 +926,8 @@ export default function SubmissionDetailPage({
   const openReview = (action: "APPROVE" | "REJECT" | "RETURN") => {
     setReviewRemarks("");
     setReviewReference("");
+    setGraceOverrideOn(false);
+    setGraceOverrideReason("");
     setReviewAction(action);
   };
 
@@ -2252,6 +2283,62 @@ export default function SubmissionDetailPage({
                   : "The bulletin goes back one phase with your remarks, and the department is emailed."}
             </DialogDescription>
           </DialogHeader>
+          {reviewAction === "APPROVE" && graceGate?.blocked && (
+            <div
+              role="alert"
+              className="space-y-3 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm"
+            >
+              <p className="font-medium text-destructive">
+                GRACE results that haven&apos;t passed for the text as it stands
+              </p>
+              <ul className="space-y-1">
+                {graceGate.issues.map((issue) => (
+                  <li key={issue} className="flex gap-2">
+                    <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
+                    <span>{issue}</span>
+                  </li>
+                ))}
+              </ul>
+              {graceGate.canOverride ? (
+                <div className="space-y-2 border-t border-destructive/20 pt-3">
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id="grace-override"
+                      checked={graceOverrideOn}
+                      onCheckedChange={(checked) => setGraceOverrideOn(checked === true)}
+                      className="mt-0.5"
+                    />
+                    <Label htmlFor="grace-override" className="leading-snug font-normal">
+                      Approve anyway as a logged override
+                    </Label>
+                  </div>
+                  {graceOverrideOn && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="grace-override-reason">Reason for the override *</Label>
+                      <Textarea
+                        id="grace-override-reason"
+                        rows={3}
+                        maxLength={GRACE_OVERRIDE_REASON_LENGTH.max}
+                        value={graceOverrideReason}
+                        onChange={(e) => setGraceOverrideReason(e.target.value)}
+                        placeholder="Why this bulletin should move on before these results pass"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        At least {GRACE_OVERRIDE_REASON_LENGTH.min} characters. It is kept
+                        permanently in the workflow record, with the results listed above.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-muted-foreground">
+                  It can&apos;t be approved until these pass. Send it back for
+                  corrections, or ask a Super Administrator to approve it with a
+                  logged override.
+                </p>
+              )}
+            </div>
+          )}
           {reviewAction === "APPROVE" && requiredEvidence && (
             <div className="space-y-2">
               <Label htmlFor="review-reference">{requiredEvidence} *</Label>
@@ -2298,7 +2385,8 @@ export default function SubmissionDetailPage({
                 (reviewAction !== "APPROVE" && !reviewRemarks.trim()) ||
                 (reviewAction === "APPROVE" &&
                   Boolean(requiredEvidence) &&
-                  !reviewReference.trim())
+                  !reviewReference.trim()) ||
+                (reviewAction === "APPROVE" && approvalStoppedByGrace)
               }
               className={
                 reviewAction === "APPROVE"
@@ -2309,9 +2397,11 @@ export default function SubmissionDetailPage({
             >
               {isTransitioning && <Loader2 className="animate-spin" />}
               {reviewAction === "APPROVE"
-                ? submission.currentPhase === 2
-                  ? "Approve and send"
-                  : "Approve"
+                ? graceGate?.blocked && approvingWithOverride
+                  ? "Approve with override"
+                  : submission.currentPhase === 2
+                    ? "Approve and send"
+                    : "Approve"
                 : reviewAction === "REJECT"
                   ? "Send back for corrections"
                   : "Return"}

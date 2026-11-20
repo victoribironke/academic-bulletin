@@ -147,6 +147,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           canEdit: false,
           clearedPreviousGate: false,
           requiredEvidence: null,
+          graceGate: null,
         },
       });
     }
