@@ -85,3 +85,5 @@ updates-2-feb-2026.md
 # local test database (scripts/test-with-postgres.mjs)
 /.test-postgres/
 /tmp/
+!prisma/migrations/20261120090000_add_grace_override_to_ledger/
+!prisma/migrations/20261120090000_add_grace_override_to_ledger/migration.sql
