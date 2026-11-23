@@ -55,9 +55,9 @@ export function HelpButton() {
               <li>Address comments, update content, and resubmit if returned.</li>
             </ol>
             <p className="text-muted-foreground">
-              Department submissions go directly to School Board Review. A Dean&apos;s
-              approval sends them directly to Academic Planning; Academic
-              Planning controls the later stages.
+              Department submissions go to School Board Harmonisation, where
+              the Dean reviews them. The Dean&apos;s approval sends them to
+              Academic Planning Vetting; DAP controls the later phases.
             </p>
           </section>
 
@@ -143,9 +143,11 @@ export function HelpButton() {
           <section className="space-y-2">
             <h3 className="font-semibold text-base">Review And Release Stages</h3>
             <p className="text-muted-foreground">
-              Typical stages are departmental preparation and review, school
-              approval, planning checks, corrections, and final publication
-              handoff. Status badges on submissions show the current phase.
+              The ten phases are Departmental Drafting, School Board
+              Harmonisation, Academic Planning Vetting, Departmental Revision,
+              Consolidation and Sign-off, Senate Approval, Copy-Editing,
+              Typesetting and Proofs, Digital Publication, and Errata and
+              Archiving. Status badges on submissions show the current phase.
             </p>
           </section>
 

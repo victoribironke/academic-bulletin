@@ -106,7 +106,7 @@ const ACTION_STYLES: Record<
     className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
   },
   REJECT: {
-    label: "Sent back for corrections",
+    label: "Revision requested",
     icon: CircleX,
     className: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
   },
@@ -250,7 +250,7 @@ export default function DashboardPage() {
     { name: "Draft", value: stats.submissions.draft, color: STATUS_COLORS.draft },
     { name: "In Review", value: stats.submissions.inReview, color: STATUS_COLORS.inReview },
     {
-      name: "Corrections Required",
+      name: "Revision requested",
       value: stats.submissions.correctionsRequired,
       color: STATUS_COLORS.correctionsRequired,
     },
@@ -370,7 +370,7 @@ export default function DashboardPage() {
           tone="primary"
         />
         <StatCard
-          title="Corrections required"
+          title="Revision requested"
           value={stats.submissions.correctionsRequired}
           hint="Returned to the department"
           icon={TriangleAlert}

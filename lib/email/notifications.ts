@@ -134,7 +134,7 @@ const DIGEST_LOOKBACK_DAYS = 7;
 
 const DECISION_LABELS: Record<string, string> = {
   APPROVE: "Approved",
-  REJECT: "Corrections requested",
+  REJECT: "Revision requested",
   RETURN: "Returned to the previous phase",
 };
 

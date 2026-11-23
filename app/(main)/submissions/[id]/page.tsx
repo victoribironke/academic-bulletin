@@ -69,8 +69,10 @@ import {
   Trash2,
 } from "lucide-react";
 import {
-  PHASE_NAMES as phaseNames,
+  REQUEST_REVISION_LABEL,
   TOTAL_PHASES,
+  approveActionLabel,
+  phaseHeading,
 } from "@/lib/submissions/phases";
 import type { SubmissionWorkflow } from "@/lib/submissions/phase-owners";
 import { PageHeader } from "@/components/shared/page-header";
@@ -524,8 +526,15 @@ export default function SubmissionDetailPage({
     submission?.currentPhase === 1
       ? "Submit to School"
       : submission?.currentPhase === 2
-        ? "Resubmit to Academic Planning"
-        : "Submit corrections";
+        ? "Resubmit to DAP Vetting"
+        : "Resubmit revision";
+  // Q6: buttons say what they do.
+  const returnActionLabel =
+    submission?.currentPhase === 2
+      ? "Return to Departmental Drafting"
+      : submission?.currentPhase === 3
+        ? "Return to School Board"
+        : "Return to the previous phase";
 
   // Puts freshly loaded submission data (or a local unsaved draft) into the form.
   const applySubmissionData = useCallback((data: Submission) => {
@@ -886,15 +895,12 @@ export default function SubmissionDetailPage({
         const messages: Record<string, string> = {
           SUBMIT:
             submission.currentPhase === 1
-              ? "Submission sent to the School"
+              ? "Sent to the School Board"
               : submission.currentPhase === 2
-                ? "Submission sent to Academic Planning"
-                : "Corrections submitted",
-          APPROVE:
-            submission.currentPhase === 2
-              ? "Submission sent to Academic Planning"
-              : "Submission approved",
-          REJECT: "Sent back to the department for corrections",
+                ? "Sent to DAP Vetting"
+                : "Revision resubmitted",
+          APPROVE: `Done: ${approveActionLabel(submission.currentPhase).replace(/^Approve/, "approved")}`,
+          REJECT: "Revision requested from the department",
           RETURN: "Returned to the previous phase for changes",
         };
         toast.success(messages[action] || "Action completed");
@@ -1164,13 +1170,13 @@ export default function SubmissionDetailPage({
 
       <PhaseTracker currentPhase={submission.currentPhase} status={submission.status} />
 
-      {/* Corrections requested: show the reviewer's remarks up front */}
+      {/* Revision requested: show the reviewer's remarks up front */}
       {submission.status === "CORRECTIONS_REQUIRED" && latestSendBack && (
         <Alert className="border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
           <AlertTriangle className="size-4" />
           <AlertDescription className="text-inherit">
             <p className="font-medium">
-              Corrections requested by {latestSendBack.performedBy.firstName}{" "}
+              Revision requested by {latestSendBack.performedBy.firstName}{" "}
               {latestSendBack.performedBy.lastName} on{" "}
               {new Date(latestSendBack.transitionedAt).toLocaleDateString()}
             </p>
@@ -1285,11 +1291,7 @@ export default function SubmissionDetailPage({
                   {canReturn && (
                     <Button variant="outline" onClick={() => openReview("RETURN")}>
                       <RotateCcw className="mr-2 h-4 w-4" />
-                      {submission.currentPhase === 2
-                        ? "Request departmental corrections"
-                        : submission.currentPhase === 3
-                          ? "Return to School"
-                          : "Return to previous phase"}
+                      {returnActionLabel}
                     </Button>
                   )}
                   {canReject && (
@@ -1299,7 +1301,7 @@ export default function SubmissionDetailPage({
                       onClick={() => openReview("REJECT")}
                     >
                       <XCircle className="mr-2 h-4 w-4" />
-                      Send to Department for corrections
+                      {REQUEST_REVISION_LABEL}
                     </Button>
                   )}
                   {canApprove && (
@@ -1308,9 +1310,7 @@ export default function SubmissionDetailPage({
                       onClick={() => openReview("APPROVE")}
                     >
                       <CheckCircle className="mr-2 h-4 w-4" />
-                      {submission.currentPhase === 2
-                        ? "Approve and send to Academic Planning"
-                        : "Approve phase"}
+                      {approveActionLabel(submission.currentPhase)}
                     </Button>
                   )}
                 </>
@@ -1719,7 +1719,7 @@ export default function SubmissionDetailPage({
                           : !["DRAFT", "CORRECTIONS_REQUIRED"].includes(
                                 submission.status,
                               )
-                            ? "Staff entries can only be changed while the submission is a draft or has been returned for corrections."
+                            ? "Staff entries can only be changed while the submission is a draft or has been returned for revision."
                             : "Your role does not have permission to edit staff entries."
                       }
                     />
@@ -2285,24 +2285,18 @@ export default function SubmissionDetailPage({
           <DialogHeader>
             <DialogTitle>
               {reviewAction === "APPROVE"
-                ? submission.currentPhase === 2
-                  ? "Approve and send to Academic Planning"
-                  : `Approve phase ${submission.currentPhase}`
+                ? approveActionLabel(submission.currentPhase)
                 : reviewAction === "REJECT"
-                  ? "Send to Department for corrections"
-                  : submission.currentPhase === 2
-                    ? "Request departmental corrections"
-                    : submission.currentPhase === 3
-                      ? "Return to School"
-                      : "Return to the previous phase"}
+                  ? REQUEST_REVISION_LABEL
+                  : returnActionLabel}
             </DialogTitle>
             <DialogDescription>
               {reviewAction === "APPROVE"
                 ? submission.currentPhase >= TOTAL_PHASES - 1
                   ? "This gives the bulletin its final approval. The department will be emailed."
-                  : `The bulletin moves on to phase ${submission.currentPhase + 1}: ${phaseNames[submission.currentPhase + 1]}.`
+                  : `The bulletin moves on to ${phaseHeading(submission.currentPhase + 1)}.`
                 : reviewAction === "REJECT"
-                  ? "The bulletin goes back to the department as Corrections Required. They'll be emailed your remarks."
+                  ? "The bulletin goes back to the department marked Revision requested. They'll be emailed your remarks."
                   : "The bulletin goes back one phase with your remarks, and the department is emailed."}
             </DialogDescription>
           </DialogHeader>
@@ -2355,9 +2349,9 @@ export default function SubmissionDetailPage({
                 </div>
               ) : (
                 <p className="text-muted-foreground">
-                  It can&apos;t be approved until these pass. Send it back for
-                  corrections, or ask a Super Administrator to approve it with a
-                  logged override.
+                  It can&apos;t be approved until these pass. Request a revision,
+                  or ask a Super Administrator to approve it with a logged
+                  override.
                 </p>
               )}
             </div>
@@ -2422,11 +2416,9 @@ export default function SubmissionDetailPage({
               {reviewAction === "APPROVE"
                 ? graceGate?.blocked && approvingWithOverride
                   ? "Approve with override"
-                  : submission.currentPhase === 2
-                    ? "Approve and send"
-                    : "Approve"
+                  : approveActionLabel(submission.currentPhase)
                 : reviewAction === "REJECT"
-                  ? "Send back for corrections"
+                  ? REQUEST_REVISION_LABEL
                   : "Return"}
             </Button>
           </DialogFooter>

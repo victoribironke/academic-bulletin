@@ -33,6 +33,11 @@ export function PhaseTracker({
             <>
               Phase {currentPhase} of {TOTAL_PHASES}:{" "}
               <span className="text-primary">{current?.name}</span>
+              {current && (
+                <span className="ml-1 text-xs font-normal text-muted-foreground">
+                  ({current.owner})
+                </span>
+              )}
             </>
           )}
         </p>
@@ -94,6 +99,10 @@ export function PhaseTracker({
                 )}
               >
                 {phase.short}
+              </span>
+              {/* Q6: who owns each step. */}
+              <span className="mt-0.5 px-0.5 text-center text-[10px] leading-tight text-muted-foreground/80">
+                {phase.owner}
               </span>
             </li>
           );
