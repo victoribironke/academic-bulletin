@@ -32,6 +32,8 @@ import {
   readGraceOverride,
 } from "@/lib/submissions/grace-gate";
 import { refuseIfArchived } from "@/lib/cycles/archive";
+import { formatDateTime } from "@/lib/dates/format";
+import { REQUEST_REVISION_LABEL } from "@/lib/submissions/phases";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -97,7 +99,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Get current submission
     const submission = await prisma.submission.findUnique({
       where: { id },
-      select: { currentPhase: true, status: true, submittedAt: true },
+      select: { currentPhase: true, status: true, submittedAt: true, openedByDeanAt: true },
     });
 
     if (!submission) {
@@ -120,6 +122,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json(
         { error: "This action is not available to your role at the current phase." },
         { status: 403 },
+      );
+    }
+
+    // D5: a recall works only until the Dean opens the programme.
+    if (action === "RECALL" && submission.openedByDeanAt) {
+      return NextResponse.json(
+        {
+          error: `The Dean opened this programme on ${formatDateTime(submission.openedByDeanAt)}, so it can no longer be recalled. If it needs changes, ask the Dean to use "${REQUEST_REVISION_LABEL}".`,
+          code: "OPENED_BY_DEAN",
+        },
+        { status: 409 },
       );
     }
 
@@ -308,6 +321,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           status: newStatus,
           ...(action === "SUBMIT" &&
             !submission.submittedAt && { submittedAt: new Date() }),
+          // D5: each submission starts unopened by the Dean.
+          ...(action === "SUBMIT" && { openedByDeanAt: null }),
           ...(newStatus === "APPROVED" && { approvedAt: new Date() }),
         },
         include: {
@@ -325,7 +340,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           description: [
             graceOverride
               ? `Approved ${updated.programme.name} past GRACE results that hadn't passed (override): ${graceOverride.reason}`
-              : `${action.charAt(0)}${action.slice(1).toLowerCase()} action recorded for ${updated.programme.name}.`,
+              : action === "RECALL"
+                ? `Recalled ${updated.programme.name} from the Dean before it was opened; it is a draft again.`
+                : `${action.charAt(0)}${action.slice(1).toLowerCase()} action recorded for ${updated.programme.name}.`,
             phaseOverride
               ? `Phase override: acted on Phase ${fromPhase}, which the ${phaseOverride.role.replaceAll("_", " ").toLowerCase()} role does not own. Reason: ${phaseOverride.reason}`
               : "",

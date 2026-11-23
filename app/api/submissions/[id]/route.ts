@@ -9,13 +9,14 @@ import {
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
 import { AUTOSAVE_COALESCE_MINUTES, recordActivity } from "@/lib/activity-log";
-import { getSubmissionWorkflow } from "@/lib/submissions/phase-owners";
+import { getSubmissionWorkflow, loadPhaseOwners } from "@/lib/submissions/phase-owners";
 import { workflowHistoryConflict } from "@/lib/submissions/workflow-history";
 import { unsafeMarkupReason } from "@/lib/html/safe-html";
 import { inUseResponse, requireDeleteConfirmation } from "@/lib/archive";
 import { photoNotUploadedHere } from "@/lib/images/photo-urls";
 import { isValidMinimumCgpa, minimumCgpaRuleMessage } from "@/lib/submissions/cgpa-rule";
 import { refuseIfArchived } from "@/lib/cycles/archive";
+import { RECALL_PHASE, isPhaseOwner } from "@/lib/submissions/workflow";
 
 /** Content columns that aren't anything a person wrote. */
 const BOOKKEEPING_FIELDS = new Set([
@@ -173,6 +174,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           override: null,
         },
       });
+    }
+
+    // D5: the Dean's first look at School Board Harmonisation ends the
+    // department's chance to recall the programme.
+    if (
+      submission.currentPhase === RECALL_PHASE &&
+      submission.status === "IN_REVIEW" &&
+      !submission.openedByDeanAt &&
+      isPhaseOwner({ role: auth.user.role, userId: auth.user.id }, RECALL_PHASE, await loadPhaseOwners())
+    ) {
+      const openedAt = new Date();
+      await prisma.submission.update({ where: { id }, data: { openedByDeanAt: openedAt } });
+      await recordActivity({
+        actorId: auth.user.id,
+        action: "SUBMISSION_OPENED_BY_DEAN",
+        entityType: "SUBMISSION",
+        entityId: id,
+        description: `Opened ${submission.programme.name} at School Board Harmonisation; the department can no longer recall it.`,
+      });
+      submission.openedByDeanAt = openedAt;
     }
 
     // What this person may do now, worked out from the phase owners, so the

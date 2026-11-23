@@ -117,6 +117,12 @@ const ACTION_STYLES: Record<
     icon: Undo2,
     className: "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
   },
+  // D5: a recall is the department's own step back, not a revision request.
+  RECALL: {
+    label: "Recalled by the department",
+    icon: Undo2,
+    className: "bg-muted text-muted-foreground",
+  },
 };
 
 const STATUS_COLORS = {

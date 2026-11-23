@@ -50,6 +50,7 @@ import {
   CheckCircle,
   XCircle,
   RotateCcw,
+  Undo2,
   MessageSquare,
   Clock,
   Loader2,
@@ -71,6 +72,7 @@ import {
   Trash2,
 } from "lucide-react";
 import {
+  RECALL_LABEL,
   REQUEST_REVISION_LABEL,
   TOTAL_PHASES,
   approveActionLabel,
@@ -162,6 +164,8 @@ interface Submission {
   workflow?: SubmissionWorkflow & { canEdit: boolean };
   /** Task A2: set when the draft's cycle is in the Archive. */
   cycle?: { name: string; isTest: boolean; archivedAt: string | null } | null;
+  /** D5: when the Dean first opened it at School Board Harmonisation. */
+  openedByDeanAt?: string | null;
 }
 
 interface Comment {
@@ -547,6 +551,8 @@ export default function SubmissionDetailPage({
   const canApprove = workflowActions.includes("APPROVE");
   const canReturn = workflowActions.includes("RETURN");
   const canReject = workflowActions.includes("REJECT");
+  // D5: the department can take it back until the Dean opens it.
+  const canRecall = workflowActions.includes("RECALL");
   const submitActionLabel =
     submission?.currentPhase === 1
       ? "Submit to School"
@@ -928,6 +934,7 @@ export default function SubmissionDetailPage({
           APPROVE: `Done: ${approveActionLabel(submission.currentPhase).replace(/^Approve/, "approved")}`,
           REJECT: "Revision requested from the department",
           RETURN: "Returned to the previous phase for changes",
+          RECALL: "Recalled from the Dean. It's a draft again; submit it when it's ready.",
         };
         toast.success(messages[action] || "Action completed");
         setReviewAction(null);
@@ -1398,6 +1405,30 @@ export default function SubmissionDetailPage({
               />
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {canRecall &&
+                (submission.openedByDeanAt ? (
+                  <p className="max-w-sm text-xs text-muted-foreground">
+                    The Dean opened this programme on {formatDate(submission.openedByDeanAt)}, so it can no longer be
+                    recalled. If it needs changes, ask the Dean to use &quot;{REQUEST_REVISION_LABEL}&quot;.
+                  </p>
+                ) : (
+                  <Button
+                    variant="outline"
+                    disabled={isTransitioning}
+                    onClick={() => {
+                      if (
+                        confirm(
+                          `${RECALL_LABEL}? ${submission.programme.name} goes back to Draft so you can keep working on it; submit it again when it's ready.`,
+                        )
+                      ) {
+                        void handleTransition("RECALL");
+                      }
+                    }}
+                  >
+                    <Undo2 className="mr-2 h-4 w-4" />
+                    {RECALL_LABEL}
+                  </Button>
+                ))}
               {(canReturn || canReject || canApprove) &&
                 submission.status === "IN_REVIEW" && (
                 <>

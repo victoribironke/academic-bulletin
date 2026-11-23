@@ -31,7 +31,11 @@ describe("phase overrides (D4)", () => {
       viaOverride: true,
     });
     expect(getWorkflowAccess({ role: "ADMIN", currentPhase: 3, currentStatus: "IN_REVIEW" }).viaOverride).toBe(false);
-    expect(getWorkflowAccess({ role: "HOD", currentPhase: 2, currentStatus: "IN_REVIEW" }).actions).toEqual([]);
+    // D5: the department's only action at Phase 2 is a recall, never an override.
+    expect(getWorkflowAccess({ role: "HOD", currentPhase: 2, currentStatus: "IN_REVIEW" })).toEqual({
+      actions: ["RECALL"],
+      viaOverride: false,
+    });
     expect(getWorkflowAccess({ role: "DEAN", currentPhase: 3, currentStatus: "IN_REVIEW" }).actions).toEqual([]);
   });
 

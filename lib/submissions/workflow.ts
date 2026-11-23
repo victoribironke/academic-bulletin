@@ -1,7 +1,14 @@
 import type { SubmissionStatus, UserRole } from "@prisma/client";
 import { TOTAL_PHASES } from "@/lib/submissions/phases";
 
-export type SubmissionAction = "SUBMIT" | "APPROVE" | "REJECT" | "RETURN";
+export type SubmissionAction = "SUBMIT" | "APPROVE" | "REJECT" | "RETURN" | "RECALL";
+
+/**
+ * D5: the department takes back a programme it submitted, while it waits at
+ * School Board Harmonisation and the Dean hasn't opened it. It goes back to
+ * Draft (never "Revision requested") and is logged as a recall.
+ */
+export const RECALL_PHASE = 2;
 
 export type WorkflowTransition =
   | { ok: true; phase: number; status: SubmissionStatus }
@@ -97,6 +104,17 @@ export function getWorkflowAccess({
     currentStatus === "REJECTED"
   ) {
     return none;
+  }
+
+  // D5: the department that owns Phase 1 may recall a programme waiting at
+  // Phase 2 (whether the Dean has opened it is checked when it's tried).
+  if (
+    currentPhase === RECALL_PHASE &&
+    currentStatus === "IN_REVIEW" &&
+    !isPhaseOwner({ role, userId }, currentPhase, owners) &&
+    isPhaseOwner({ role, userId }, RECALL_PHASE - 1, owners)
+  ) {
+    return { actions: ["RECALL"], viaOverride: false };
   }
 
   const isSuperAdmin = role === "SUPER_ADMIN";
@@ -215,11 +233,22 @@ export function resolveWorkflowTransition(input: {
     };
   }
 
+  if (action === "RECALL") {
+    if (currentPhase !== RECALL_PHASE || currentStatus !== "IN_REVIEW") {
+      return {
+        ok: false,
+        statusCode: 409,
+        message: "Only a programme waiting for the Dean at School Board Harmonisation can be recalled.",
+      };
+    }
+    return { ok: true, phase: RECALL_PHASE - 1, status: "DRAFT" };
+  }
+
   if (!["APPROVE", "REJECT", "RETURN"].includes(action)) {
     return {
       ok: false,
       statusCode: 400,
-      message: "Invalid action. Use APPROVE, REJECT, RETURN, or SUBMIT.",
+      message: "Invalid action. Use APPROVE, REJECT, RETURN, RECALL, or SUBMIT.",
     };
   }
 

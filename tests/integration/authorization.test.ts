@@ -6142,3 +6142,73 @@ describe("the Registry search box (K0)", () => {
     expect((await codes("q=KZ")).sort()).toEqual(["KZQ 112", "KZR 113"]);
   });
 });
+
+describe("recall until the Dean opens it (D5)", () => {
+  const cycleId = "d5-cycle";
+  const params = (id: string) => ({ params: Promise.resolve({ id }) });
+  const open = (id: string) => getSubmission(new NextRequest(`http://localhost/api/submissions/${id}`), params(id));
+  const recall = (id: string) =>
+    transitionSubmission(
+      new NextRequest(`http://localhost/api/submissions/${id}/transition`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "RECALL" }),
+      }),
+      params(id),
+    );
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.create({ data: { id: cycleId, name: "D5 cycle", createdById: ids.super } });
+    await prisma.programme.create({ data: { id: "d5-prog", name: "D5 Programme", code: "TSA-D5-PRG", departmentId: ids.departmentA } });
+    await prisma.submission.createMany({
+      data: [
+        { id: "d5-early", title: "D5 early", programmeId: ids.programmeA, createdById: ids.hod, cycleId, status: "IN_REVIEW", currentPhase: 2 },
+        { id: "d5-late", title: "D5 late", programmeId: "d5-prog", createdById: ids.hod, cycleId, status: "IN_REVIEW", currentPhase: 2 },
+      ],
+    });
+  });
+
+  afterAll(async () => {
+    await prisma.submission.deleteMany({ where: { cycleId } });
+    await prisma.programme.deleteMany({ where: { id: "d5-prog" } });
+    await prisma.reviewCycle.delete({ where: { id: cycleId } });
+  });
+
+  it("lets the department recall it before the Dean opens it, back to Draft and logged as a recall", async () => {
+    authState.userId = ids.hod;
+    const seen = await (await open("d5-early")).json();
+    expect(seen.openedByDeanAt).toBeNull();
+    expect(seen.workflow.actions).toEqual(["RECALL"]);
+
+    const response = await recall("d5-early");
+    expect(response.status).toBe(200);
+    expect(await prisma.submission.findUniqueOrThrow({ where: { id: "d5-early" } })).toMatchObject({
+      currentPhase: 1,
+      status: "DRAFT",
+    });
+    const step = await prisma.phaseTransition.findFirstOrThrow({ where: { submissionId: "d5-early" }, orderBy: { transitionedAt: "desc" } });
+    expect(step).toMatchObject({ action: "RECALL", fromPhase: 2, toPhase: 1, performedById: ids.hod });
+    const logged = await prisma.activityLog.findFirstOrThrow({ where: { entityId: "d5-early", action: "SUBMISSION_RECALL" } });
+    expect(logged.description).toMatch(/^Recalled .* from the Dean before it was opened/);
+  });
+
+  it("refuses a recall once the Dean has opened it, and says why", async () => {
+    authState.userId = ids.dean;
+    const seen = await (await open("d5-late")).json();
+    expect(seen.openedByDeanAt).not.toBeNull();
+    const openedAt = (await prisma.submission.findUniqueOrThrow({ where: { id: "d5-late" } })).openedByDeanAt;
+    expect(openedAt).not.toBeNull();
+    expect(await prisma.activityLog.count({ where: { entityId: "d5-late", action: "SUBMISSION_OPENED_BY_DEAN" } })).toBe(1);
+    // Opening it again doesn't move the time.
+    await open("d5-late");
+    expect((await prisma.submission.findUniqueOrThrow({ where: { id: "d5-late" } })).openedByDeanAt).toEqual(openedAt);
+
+    authState.userId = ids.hod;
+    const refused = await recall("d5-late");
+    expect(refused.status).toBe(409);
+    const body = await refused.json();
+    expect(body.code).toBe("OPENED_BY_DEAN");
+    expect(body.error).toMatch(/^The Dean opened this programme on .*, so it can no longer be recalled\. .*"Request revision"/);
+    expect(await prisma.submission.findUniqueOrThrow({ where: { id: "d5-late" } })).toMatchObject({ currentPhase: 2, status: "IN_REVIEW" });
+  });
+});

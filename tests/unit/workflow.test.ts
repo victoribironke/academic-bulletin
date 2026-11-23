@@ -123,13 +123,14 @@ describe("submission workflow", () => {
         currentStatus: "IN_REVIEW",
       }),
     ).toEqual([]);
+    // D5: the department may only recall it, never approve or return it.
     expect(
       getAllowedWorkflowActions({
         role: "HOD",
         currentPhase: 2,
         currentStatus: "IN_REVIEW",
       }),
-    ).toEqual([]);
+    ).toEqual(["RECALL"]);
   });
 
   it("assigns correction editing and resubmission to the owner of that stage", () => {

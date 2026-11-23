@@ -75,6 +75,9 @@ export function phaseHeading(phase: number): string {
 /** The button that sends a programme back to its department (Q6). */
 export const REQUEST_REVISION_LABEL = "Request revision";
 
+/** D5: the department takes a submitted programme back before the Dean opens it. */
+export const RECALL_LABEL = "Recall from the Dean";
+
 /**
  * The approve button names what it does (Q6): "Approve to DAP Vetting",
  * "Approve for Senate", rather than "Approve phase".
