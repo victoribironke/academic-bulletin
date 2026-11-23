@@ -14,6 +14,9 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
+
+/** The app's database client; scripts pass their own (scripts/archive-cycle.ts). */
+type Database = typeof prisma;
 import { recordActivity } from "@/lib/activity-log";
 import { confirmationMatches } from "@/lib/archive";
 
@@ -88,13 +91,16 @@ export type CycleArchiveSummary = {
 };
 
 /** What moves with the cycle: shown before archiving and after. */
-export async function cycleArchiveSummary(cycleId: string): Promise<CycleArchiveSummary> {
-  const drafts = await prisma.submission.findMany({ where: { cycleId }, select: { id: true } });
+export async function cycleArchiveSummary(
+  cycleId: string,
+  db: Database = prisma,
+): Promise<CycleArchiveSummary> {
+  const drafts = await db.submission.findMany({ where: { cycleId }, select: { id: true } });
   const draftIds = drafts.map((draft) => draft.id);
   const [comments, transitions, logEntries] = await Promise.all([
-    prisma.comment.count({ where: { submission: { cycleId } } }),
-    prisma.phaseTransition.count({ where: { submission: { cycleId } } }),
-    prisma.activityLog.count({ where: { entityId: { in: [cycleId, ...draftIds] } } }),
+    db.comment.count({ where: { submission: { cycleId } } }),
+    db.phaseTransition.count({ where: { submission: { cycleId } } }),
+    db.activityLog.count({ where: { entityId: { in: [cycleId, ...draftIds] } } }),
   ]);
   return { drafts: draftIds.length, comments, transitions, logEntries };
 }
@@ -117,21 +123,19 @@ export type ArchiveCycleResult =
  * Closes the cycle, tags it TEST if asked, and archives it with everything
  * in it. Refuses a cycle already archived.
  */
-export async function archiveCycle(input: {
-  cycleId: string;
-  actorId: string;
-  isTest: boolean;
-  now?: Date;
-}): Promise<ArchiveCycleResult> {
+export async function archiveCycle(
+  input: { cycleId: string; actorId: string; isTest: boolean; now?: Date },
+  db: Database = prisma,
+): Promise<ArchiveCycleResult> {
   const now = input.now ?? new Date();
-  const cycle = await prisma.reviewCycle.findUnique({ where: { id: input.cycleId } });
+  const cycle = await db.reviewCycle.findUnique({ where: { id: input.cycleId } });
   if (!cycle) return { ok: false, status: 404, code: "NOT_FOUND", message: "Review cycle not found." };
   if (cycle.archivedAt) {
     return { ok: false, status: 409, code: "ALREADY_ARCHIVED", message: `${cycle.name} is already in the Archive.` };
   }
 
-  const summary = await cycleArchiveSummary(cycle.id);
-  await prisma.$transaction(async (tx) => {
+  const summary = await cycleArchiveSummary(cycle.id, db);
+  await db.$transaction(async (tx) => {
     await tx.reviewCycle.update({
       where: { id: cycle.id },
       data: {
@@ -163,15 +167,18 @@ export async function archiveCycle(input: {
  * Brings an archived cycle back, closed: its drafts show again and can be
  * edited once the cycle is reopened. The TEST tag stays.
  */
-export async function restoreCycle(input: { cycleId: string; actorId: string }): Promise<ArchiveCycleResult> {
-  const cycle = await prisma.reviewCycle.findUnique({ where: { id: input.cycleId } });
+export async function restoreCycle(
+  input: { cycleId: string; actorId: string },
+  db: Database = prisma,
+): Promise<ArchiveCycleResult> {
+  const cycle = await db.reviewCycle.findUnique({ where: { id: input.cycleId } });
   if (!cycle) return { ok: false, status: 404, code: "NOT_FOUND", message: "Review cycle not found." };
   if (!cycle.archivedAt) {
     return { ok: false, status: 409, code: "NOT_ARCHIVED", message: `${cycle.name} isn't in the Archive.` };
   }
 
-  const summary = await cycleArchiveSummary(cycle.id);
-  await prisma.$transaction(async (tx) => {
+  const summary = await cycleArchiveSummary(cycle.id, db);
+  await db.$transaction(async (tx) => {
     await tx.reviewCycle.update({
       where: { id: cycle.id },
       data: { archivedAt: null, archivedById: null },
