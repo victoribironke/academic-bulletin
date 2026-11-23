@@ -307,11 +307,19 @@ export default function ActivityLogPage() {
       ) : data.items.length === 0 ? (
         <EmptyState
           icon={ScrollText}
-          title={hasFilters ? "No activities match these filters" : "No activity recorded yet"}
+          title={
+            hasFilters
+              ? "No activities match these filters"
+              : data.cycle?.mode === "all"
+                ? "No activity recorded yet"
+                : "No activity in this view yet"
+          }
           description={
             hasFilters
               ? "Change or clear the filters to see other activity."
-              : "Important actions will appear here automatically."
+              : data.cycle?.mode === "all"
+                ? "Important actions will appear here automatically."
+                : "Earlier activity belongs to other cycles: choose one, or All cycles, in the cycle list above."
           }
         />
       ) : (
