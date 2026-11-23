@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { SiteHeader } from "@/components/layout/site-header";
 import { HelpButton } from "@/components/layout/help-button";
+import { CountdownBar } from "@/components/calendar/countdown";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { UserProvider } from "@/contexts/user-context";
 
@@ -20,6 +21,8 @@ export default async function MainLayout({
         <AppSidebar />
         <SidebarInset>
           <SiteHeader />
+          {/* C3: everyone's own deadline, on every page. */}
+          <CountdownBar />
           <main className="flex-1 p-4 md:p-6">
             <div className="mx-auto w-full max-w-7xl">{children}</div>
           </main>

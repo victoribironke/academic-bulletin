@@ -181,6 +181,107 @@ model Programme {
   @@map("programmes")
 }
 
+// ============================================================================
+// CYCLE CALENDAR (task C1, work order section 4)
+// Dates are calendar dates in the cycle's time zone (West Africa Time); a
+// deadline is the end of the cycle's due time (11:59 pm) on its date.
+// ============================================================================
+
+model CyclePhase {
+  id              String    @id @default(cuid())
+  cycleId         String
+  phase           Int
+  name            String
+  label           String
+  /// PROGRAMME (phases 1 to 5, programme by programme) or CYCLE (6 to 10)
+  scope           String
+  /// HOD, DEAN, DAP_OFFICER, REGISTRY or PRESS
+  desk            String
+  opensAt         DateTime? @db.Date
+  formalOpensAt   DateTime? @db.Date
+  targetAt        DateTime? @db.Date
+  dueAt           DateTime? @db.Date
+  /// Phases 7 to 9 are re-planned from the Senate vote (task C7).
+  anchor          String?
+  baselineOpensAt DateTime? @db.Date
+  baselineDueAt   DateTime? @db.Date
+  hardStop        Boolean   @default(false)
+
+  cycle ReviewCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleId, phase])
+  @@map("cycle_phases")
+}
+
+model CycleCheckpoint {
+  id       String    @id @default(cuid())
+  cycleId  String
+  phase    Int
+  code     String
+  name     String
+  /// CHECKPOINT (work is checked) or MILESTONE (a date to know)
+  type     String    @default("CHECKPOINT")
+  dueAt    DateTime  @db.Date
+  targetAt DateTime? @db.Date
+  sections Int[]     @default([])
+  requires String[]  @default([])
+  /// Desks it applies to; empty means the phase's desk.
+  desks    String[]  @default([])
+  hardStop Boolean   @default(false)
+
+  cycle ReviewCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleId, code])
+  @@map("cycle_checkpoints")
+}
+
+/// A later date for one department, programme or person. It always takes
+/// precedence over the cycle's date (task C1).
+model CycleExtension {
+  id             String   @id @default(cuid())
+  cycleId        String
+  /// DEPARTMENT, PROGRAMME or USER
+  scope          String
+  targetId       String
+  /// The phase whose due date moves, or a checkpoint code.
+  phase          Int?
+  checkpointCode String?
+  newDueAt       DateTime @db.Date
+  reason         String
+  approvedById   String
+  createdAt      DateTime @default(now())
+
+  cycle ReviewCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@index([cycleId, targetId])
+  @@map("cycle_extensions")
+}
+
+model CycleHoliday {
+  id      String   @id @default(cuid())
+  cycleId String
+  date    DateTime @db.Date
+  name    String
+
+  cycle ReviewCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleId, date])
+  @@map("cycle_holidays")
+}
+
+/// No reminders, and no working days, between these dates (inclusive).
+model CycleQuietPeriod {
+  id       String   @id @default(cuid())
+  cycleId  String
+  fromDate DateTime @db.Date
+  toDate   DateTime @db.Date
+  label    String
+
+  cycle ReviewCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@map("cycle_quiet_periods")
+}
+
 /// An old school, department or programme code kept findable after the code
 /// standard of November 23, 2026 (task A5). Uploads that use it are accepted
 /// with a warning naming the new code until `validUntil` (end of
@@ -341,10 +442,22 @@ model ReviewCycle {
   closedAt    DateTime?
   /// "Submit to School" stays off before this moment (task F0); empty means no limit.
   submissionsOpenAt DateTime?
+  /// Calendar settings (task C1, work order section 4.6).
+  bulletinPeriod    String?
+  timezone          String    @default("Africa/Lagos")
+  defaultDueTime    String    @default("23:59")
+  workingWeek       String[]  @default(["MON", "TUE", "WED", "THU", "FRI"])
+  /// { weekdays: "18:00-08:00", sabbath: "Friday 18:00 to Saturday 19:00" }
+  quietHours        Json?
   createdById String
 
-  createdBy   User         @relation(fields: [createdById], references: [id])
-  submissions Submission[]
+  createdBy    User               @relation(fields: [createdById], references: [id])
+  submissions  Submission[]
+  phases       CyclePhase[]
+  checkpoints  CycleCheckpoint[]
+  extensions   CycleExtension[]
+  holidays     CycleHoliday[]
+  quietPeriods CycleQuietPeriod[]
 
   @@map("review_cycles")
 }

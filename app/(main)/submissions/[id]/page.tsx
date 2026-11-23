@@ -88,6 +88,7 @@ import { MINIMUM_CGPA_RANGE, UNIVERSITY_MINIMUM_CGPA } from "@/lib/submissions/c
 import { Checkbox } from "@/components/ui/checkbox";
 import { PhotoUploadGuidance } from "@/components/shared/photo-upload-guidance";
 import { useConfirmDelete } from "@/components/shared/typed-delete-dialog";
+import { ProgrammeCountdown } from "@/components/calendar/countdown";
 
 interface Submission {
   id: string;
@@ -1226,6 +1227,8 @@ export default function SubmissionDetailPage({
       />
 
       <PhaseTracker currentPhase={submission.currentPhase} status={submission.status} />
+      {/* C3: this programme's deadline, next to the phase steps. */}
+      <ProgrammeCountdown submissionId={submission.id} />
 
       {/* D4: overrides are flagged on the programme. */}
       {overrides.length > 0 && (

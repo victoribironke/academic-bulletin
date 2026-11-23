@@ -1,0 +1,51 @@
+{
+  "source": "ABRS HoD Go-Live Work Order v2.1, section 4.6 (November 23, 2026)",
+  "cycle": {
+    "name": "2027-2031 Bulletin Development Cycle",
+    "bulletinPeriod": "2027-2031",
+    "timezone": "Africa/Lagos",
+    "defaultDueTime": "23:59",
+    "workingWeek": ["MON", "TUE", "WED", "THU", "FRI"],
+    "quietPeriods": [{ "from": "2026-12-24", "to": "2027-01-03", "label": "Christmas and New Year" }],
+    "quietHours": { "weekdays": "18:00-08:00", "sabbath": "Friday 18:00 to Saturday 19:00" },
+    "holidays": [
+      { "date": "2026-12-25", "name": "Christmas Day" },
+      { "date": "2027-01-01", "name": "New Year's Day" },
+      { "date": "2027-03-10", "name": "Eid al-Fitr (provisional)" },
+      { "date": "2027-03-26", "name": "Good Friday" },
+      { "date": "2027-03-29", "name": "Easter Monday" },
+      { "date": "2027-05-17", "name": "Eid al-Adha (provisional)" }
+    ]
+  },
+  "phases": [
+    { "no": 1, "name": "Departmental Drafting", "label": "Departmental Drafting", "scope": "PROGRAMME", "desk": "HOD", "opensAt": "2026-11-26", "dueAt": "2027-02-04" },
+    { "no": 2, "name": "School Board Harmonisation", "label": "School Board", "scope": "PROGRAMME", "desk": "DEAN", "opensAt": "2026-12-14", "formalOpensAt": "2027-02-05", "dueAt": "2027-02-25" },
+    { "no": 3, "name": "Academic Planning Vetting", "label": "DAP Vetting", "scope": "PROGRAMME", "desk": "DAP_OFFICER", "opensAt": "2026-12-14", "formalOpensAt": "2027-02-26", "dueAt": "2027-03-25" },
+    { "no": 4, "name": "Departmental Revision", "label": "Revision", "scope": "PROGRAMME", "desk": "HOD", "opensAt": "2026-12-14", "formalOpensAt": "2027-03-30", "dueAt": "2027-04-16" },
+    { "no": 5, "name": "Consolidation and Sign-off", "label": "Consolidation", "scope": "PROGRAMME", "desk": "DAP_OFFICER", "opensAt": "2027-04-19", "dueAt": "2027-05-21" },
+    { "no": 6, "name": "Senate Approval", "label": "Senate Approval", "scope": "CYCLE", "desk": "REGISTRY", "opensAt": "2027-05-24", "targetAt": "2027-06-11", "dueAt": "2027-06-18" },
+    { "no": 7, "name": "Copy-Editing", "label": "Copy-Editing", "scope": "CYCLE", "desk": "PRESS", "anchor": "SENATE_DECISION", "baselineOpensAt": "2027-06-21", "baselineDueAt": "2027-06-22" },
+    { "no": 8, "name": "Typesetting and Proofs", "label": "Typesetting", "scope": "CYCLE", "desk": "PRESS", "anchor": "SENATE_DECISION", "baselineOpensAt": "2027-06-23", "baselineDueAt": "2027-06-25" },
+    { "no": 9, "name": "Digital Publication", "label": "Publication", "scope": "CYCLE", "desk": "PRESS", "anchor": "SENATE_DECISION", "baselineOpensAt": "2027-06-28", "dueAt": "2027-06-30", "hardStop": true },
+    { "no": 10, "name": "Errata and Archiving", "label": "Errata and Archive", "scope": "CYCLE", "desk": "PRESS", "opensAt": "2027-07-01", "dueAt": "2027-08-27" }
+  ],
+  "checkpoints": [
+    { "phase": 1, "code": "CP1", "name": "Course list and profile sections", "dueAt": "2026-12-11", "sections": [1, 2, 3], "requires": ["COURSE_LIST_CONFIRMED"] },
+    { "phase": 1, "code": "SUBMIT_OPEN", "name": "Submissions open", "dueAt": "2026-12-14", "type": "MILESTONE" },
+    { "phase": 1, "code": "CP2", "name": "Lecturers assigned; admission and graduation", "dueAt": "2026-12-18", "sections": [4, 5], "requires": ["ALL_COURSES_ASSIGNED", "V4", "V7"] },
+    { "phase": 1, "code": "CP3", "name": "Course structure; half of course details", "dueAt": "2027-01-15", "sections": [6, 7], "requires": ["V1", "V2", "V3", "V5", "COURSE_DETAILS_50_PERCENT"] },
+    { "phase": 1, "code": "CP4", "name": "All course details", "dueAt": "2027-01-29", "sections": [7], "requires": ["ALL_COURSE_DETAILS", "GRACE_RUN_ALL"] },
+    { "phase": 1, "code": "FINAL", "name": "Submit to School", "dueAt": "2027-02-04", "sections": [8], "requires": ["READINESS_GREEN", "SUBMITTED"] },
+    { "phase": 2, "code": "DCP1", "name": "Dean first pass", "dueAt": "2027-02-12", "requires": ["ALL_SUBMITTED_OPENED", "HARMONISATION_RUN"] },
+    { "phase": 2, "code": "DCP2", "name": "Last day to send back", "dueAt": "2027-02-19", "type": "MILESTONE" },
+    { "phase": 2, "code": "DEAN_FINAL", "name": "Approve to Academic Planning", "dueAt": "2027-02-25", "requires": ["ALL_APPROVED", "SCHOOL_BOARD_EVIDENCE"] },
+    { "phase": 5, "code": "CONSOLIDATED_DRAFT", "name": "Consolidated draft", "dueAt": "2027-04-30" },
+    { "phase": 5, "code": "CONTENT_EDIT", "name": "DAP content edit", "dueAt": "2027-05-14" },
+    { "phase": 5, "code": "CONTENT_SIGNOFF", "name": "Final sign-off by Heads and Deans", "dueAt": "2027-05-19", "desks": ["HOD", "DEAN"] },
+    { "phase": 5, "code": "SENATE_PACK", "name": "Senate pack lodged; copy to Press", "dueAt": "2027-05-21" },
+    { "phase": 6, "code": "PRESS_PROOF_1", "name": "Press proofs round 1", "dueAt": "2027-06-04", "desks": ["PRESS"] },
+    { "phase": 6, "code": "PRESS_PROOF_2", "name": "Press proofs round 2", "dueAt": "2027-06-11", "desks": ["PRESS"] },
+    { "phase": 6, "code": "SENATE_VOTE", "name": "Senate decision recorded", "targetAt": "2027-06-11", "dueAt": "2027-06-18" },
+    { "phase": 9, "code": "DIGITAL_RELEASE", "name": "Digital copies sent out", "dueAt": "2027-06-30", "hardStop": true }
+  ]
+}

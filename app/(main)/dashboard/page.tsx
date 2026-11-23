@@ -52,6 +52,7 @@ import {
   ErrorState,
 } from "@/components/shared/states";
 import { cn } from "@/lib/utils";
+import { DeadlinesPanel } from "@/components/calendar/countdown";
 
 interface DashboardStats {
   submissions: {
@@ -294,6 +295,9 @@ export default function DashboardPage() {
           </>
         }
       />
+
+      {/* C2, C3, T1: your deadline, and the programmes or phases you look after. */}
+      <DeadlinesPanel />
 
       {/* Action required: only shown when something needs attention */}
       {stats.actionRequired.total > 0 && (

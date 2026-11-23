@@ -117,6 +117,8 @@ import { GET as listActivities } from "@/app/api/activity-log/route";
 import { GET as getDashboardStats } from "@/app/api/dashboard/stats/route";
 import { courseGraceContentHash } from "@/lib/courses/grace-compliance";
 import { preloadRegistryCoursesForSubmission } from "@/lib/courses/gst-pool";
+import { GET as getDeadlines } from "@/app/api/calendar/desk/route";
+import { type CalendarSettings, applyCalendarSettings } from "@/lib/calendar/settings";
 import { RECHECK_MS, allowGoogleSignIn, refreshSessionToken } from "@/lib/auth-callbacks";
 import { philosophyGraceHash } from "@/lib/submissions/submit-readiness";
 import { DEFAULT_PHASE_OWNERS } from "@/lib/submissions/workflow";
@@ -5264,5 +5266,94 @@ describe("removed courses stay removed (G6) and General Education is locked (W1)
     const same = (await call(updateCourseRow, gst!.id, "PATCH", { code: "GST 118", units: 2, semester: 1, level: 100 })) as Response;
     expect(same.status).toBe(200);
     expect(await row("GST 118")).toMatchObject({ units: 2 });
+  });
+});
+
+// C1 and C3: the section 4.6 calendar loaded into a cycle, and the deadlines
+// each person sees on launch day (Thursday, November 26, 2026).
+describe("cycle calendar (C1) and countdowns (C3)", () => {
+  const cycleId = "calendar-cycle";
+  const submissionId = "calendar-submission";
+  const settings = JSON.parse(
+    readFileSync(join(process.cwd(), "data/calendar/2027-2031.json"), "utf8"),
+  ) as CalendarSettings;
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.create({
+      data: { id: cycleId, name: "2027-2031 Bulletin Development Cycle (test)", createdById: ids.super, isActive: true },
+    });
+    await prisma.submission.create({
+      data: { id: submissionId, title: "Calendar Bulletin", programmeId: ids.programmeA, createdById: ids.hod, cycleId },
+    });
+  });
+
+  afterAll(async () => {
+    vi.useRealTimers();
+    await prisma.submission.deleteMany({ where: { id: submissionId } });
+    await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+  });
+
+  const deadlinesFor = async (userId: string, query = "") => {
+    authState.userId = userId;
+    const response = await getDeadlines(new NextRequest(`http://localhost/api/calendar/desk${query}`));
+    expect(response.status).toBe(200);
+    return response.json();
+  };
+
+  it("loads the calendar, sets when Submit opens, and can be loaded again without touching extensions", async () => {
+    const loaded = await prisma.$transaction((tx) => applyCalendarSettings(tx, cycleId, settings));
+    expect(loaded).toEqual({ phases: 10, checkpoints: 17, holidays: 6, quietPeriods: 1 });
+    const cycle = await prisma.reviewCycle.findUniqueOrThrow({ where: { id: cycleId } });
+    // F0: midnight WAT on Monday, December 14, 2026.
+    expect(cycle.submissionsOpenAt?.toISOString()).toBe("2026-12-13T23:00:00.000Z");
+    expect(cycle.workingWeek).toEqual(["MON", "TUE", "WED", "THU", "FRI"]);
+
+    await prisma.cycleExtension.create({
+      data: {
+        cycleId,
+        scope: "DEPARTMENT",
+        targetId: ids.departmentB,
+        phase: 1,
+        newDueAt: new Date("2027-02-12T00:00:00Z"),
+        reason: "Test extension",
+        approvedById: ids.admin,
+      },
+    });
+    await prisma.$transaction((tx) => applyCalendarSettings(tx, cycleId, settings));
+    expect(await prisma.cyclePhase.count({ where: { cycleId } })).toBe(10);
+    expect(await prisma.cycleCheckpoint.count({ where: { cycleId } })).toBe(17);
+    expect(await prisma.cycleExtension.count({ where: { cycleId } })).toBe(1);
+  });
+
+  it("shows each person their own deadline on launch day", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-26T08:00:00+01:00"));
+    try {
+      const head = await deadlinesFor(ids.hod);
+      expect(head.cycle.id).toBe(cycleId);
+      expect(head.desk).toMatchObject({
+        label: "Departmental Drafting",
+        headline: "70 days left",
+        nextLine: "Next: CP1 on Friday, December 11, 2026 (15 days)",
+        workingDaysLine: "44 working days left",
+        statusLabel: "On track",
+      });
+      expect(head.phases).toBeUndefined();
+      expect(head.programmes.map((item: { submissionId: string }) => item.submissionId)).toContain(submissionId);
+
+      const dean = await deadlinesFor(ids.dean);
+      expect(dean.desk.label).toBe("School Board Harmonisation");
+
+      const programme = await deadlinesFor(ids.hod, `?submissionId=${submissionId}`);
+      expect(programme.programme).toMatchObject({ label: "Departmental Drafting", headline: "70 days left" });
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // An admin's two-step check runs on the real clock, so the list is read today.
+    const admin = await deadlinesFor(ids.admin);
+    expect(admin.phases).toHaveLength(10);
+    expect(admin.phases[0]).toMatchObject({ name: "Departmental Drafting", due: "Thursday, February 4, 2027" });
+    expect(admin.programmes).toBeUndefined();
   });
 });
