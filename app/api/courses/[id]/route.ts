@@ -20,7 +20,7 @@ import {
 } from "@/lib/api-auth";
 import {
   GENERAL_EDUCATION_LOCKED_MESSAGE,
-  isGeneralEducationMaster,
+  isGeneralEducationCourse,
 } from "@/lib/courses/general-education";
 import { AUTOSAVE_COALESCE_MINUTES, recordActivity } from "@/lib/activity-log";
 import { synchronizeCourseGraceAssessment } from "@/lib/courses/grace-compliance";
@@ -119,7 +119,7 @@ export async function PATCH(
 
     // W1: a General Education row is the General Education desk's. A save
     // that changes nothing is fine; any change from a department is refused.
-    if (isGeneralEducationMaster(existing.masterCourse) && !isAdministrator(user!)) {
+    if (isGeneralEducationCourse(existing) && !isAdministrator(user!)) {
       const asked = { code, title, units, status, semester, level, prerequisites };
       const current = {
         code: existing.code,
@@ -253,7 +253,7 @@ export async function DELETE(
     }
 
     // W1: a department can't remove the General Education block.
-    const generalEducation = isGeneralEducationMaster(existing.masterCourse);
+    const generalEducation = isGeneralEducationCourse(existing);
     if (generalEducation && !isAdministrator(user!)) {
       return NextResponse.json(
         { error: GENERAL_EDUCATION_LOCKED_MESSAGE, code: "GENERAL_EDUCATION_LOCKED" },

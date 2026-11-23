@@ -6,6 +6,7 @@ import { calculateSubmissionProgress } from "@/lib/submissions/progress";
 import { recordActivity } from "@/lib/activity-log";
 import { TOTAL_PHASES } from "@/lib/submissions/phases";
 import { NOT_IN_ARCHIVED_CYCLE } from "@/lib/cycles/archive";
+import { isGeneralEducationCourse } from "@/lib/courses/general-education";
 
 const SUBMISSION_STATUSES = [
   "DRAFT",
@@ -171,6 +172,8 @@ export async function GET(request: NextRequest) {
         },
         courses: {
           select: {
+            code: true,
+            masterCourse: { select: { type: true, ownership: true } },
             description: {
               select: {
                 courseContent: true,
@@ -198,7 +201,10 @@ export async function GET(request: NextRequest) {
           progress: calculateSubmissionProgress({
             content,
             activeStaffCount: departmentCount.staff,
-            courses,
+            courses: courses.map((course) => ({
+              isGeneralEducation: isGeneralEducationCourse(course),
+              description: course.description,
+            })),
           }),
         };
       }),

@@ -31,7 +31,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Save, BookOpen, Import, History, Upload } from "lucide-react";
+import { Loader2, Save, BookOpen, Import, History, Upload, Lock } from "lucide-react";
+import { GENERAL_EDUCATION_LABEL } from "@/lib/courses/general-education";
 import {
   MAX_COURSE_UNITS,
   MIN_COURSE_UNITS,
@@ -878,12 +879,22 @@ export function CourseTable({
                     }
                     createEmptyRow={() => createEmptyCourse(level)}
                     disabled={disabled}
-                    isRowLocked={(row) => !!row.isMandatory} // Lock mandatory rows
-                    isRowEditable={(row) => !row.masterCourseId} // Registry courses are read-only
+                    isRowLocked={(row) => !!row.isMandatory} // W1: the General Education block
+                    lockedRowLabel={GENERAL_EDUCATION_LABEL}
+                    // Registry courses and the General Education block are read-only
+                    isRowEditable={(row) => !row.masterCourseId && !row.isMandatory}
                     onRowUpdate={handleRowUpdate}
                     confirmRemove={confirmRemoveCourse}
                   />
                 </div>
+
+                {(coursesByLevel[level] || []).some((course) => course.isMandatory) && (
+                  <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                    Grey rows are the General Education block: every student takes them, and only
+                    the General Education desk can change them. Their units count in the totals.
+                  </p>
+                )}
 
                 <div className="mt-4 flex justify-end gap-4 text-sm text-muted-foreground">
                   <span>

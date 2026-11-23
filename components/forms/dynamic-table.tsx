@@ -18,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, GripVertical } from "lucide-react";
+import { Plus, Trash2, GripVertical, Lock } from "lucide-react";
 
 export interface Column<T> {
   key: keyof T;
@@ -44,6 +44,8 @@ interface DynamicTableProps<T extends Record<string, unknown>> {
   allowDelete?: boolean;
   allowReorder?: boolean;
   isRowLocked?: (row: T) => boolean;
+  /** Said for a locked row, e.g. "General Education: every student takes this". */
+  lockedRowLabel?: string;
   isRowEditable?: (row: T) => boolean;
   onRowUpdate?: (row: T, key: keyof T, value: unknown) => T;
   /**
@@ -63,6 +65,7 @@ export function DynamicTable<T extends Record<string, unknown>>({
   showRowNumbers = true,
   allowDelete = true,
   isRowLocked,
+  lockedRowLabel = "Locked",
   isRowEditable,
   onRowUpdate,
   confirmRemove,
@@ -263,7 +266,11 @@ export function DynamicTable<T extends Record<string, unknown>>({
                   onDragOver={(e) => handleDragOver(e, rowIndex)}
                   onDragEnd={handleDragEnd}
                   className={
-                    draggedIndex === rowIndex ? "opacity-50 bg-muted" : ""
+                    draggedIndex === rowIndex
+                      ? "opacity-50 bg-muted"
+                      : isRowLocked?.(row)
+                        ? "bg-muted/40 text-muted-foreground"
+                        : ""
                   }
                 >
                   <TableCell className="p-1 cursor-grab">
@@ -294,10 +301,12 @@ export function DynamicTable<T extends Record<string, unknown>>({
                         </Button>
                       )}
                       {isRowLocked?.(row) && (
-                        <div className="w-8 h-8 flex items-center justify-center">
-                          <span className="text-xs text-muted-foreground">
-                            Locked
-                          </span>
+                        <div
+                          className="w-8 h-8 flex items-center justify-center text-muted-foreground"
+                          title={lockedRowLabel}
+                        >
+                          <Lock className="h-4 w-4" aria-hidden="true" />
+                          <span className="sr-only">{lockedRowLabel}</span>
                         </div>
                       )}
                     </TableCell>

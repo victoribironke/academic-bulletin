@@ -34,6 +34,8 @@ interface SubmissionProgressContent {
 }
 
 interface CourseProgressData {
+  /** A General Education row (rule W1): never the Head of Department's progress. */
+  isGeneralEducation?: boolean;
   description?: {
     courseContent?: string | null;
     learningOutcomes?: unknown;
@@ -67,13 +69,15 @@ function section(
 export function calculateSubmissionProgress({
   content,
   activeStaffCount,
-  courses,
+  courses: allCourses,
 }: {
   content?: SubmissionProgressContent | null;
   activeStaffCount: number;
   courses: CourseProgressData[];
 }): SubmissionProgress {
   const programmeInfo = content?.programmeInfo;
+  // W1: the General Education block is the General Education desk's work.
+  const courses = allCourses.filter((course) => !course.isGeneralEducation);
   const completeCourseDescriptions = courses.filter((course) => {
     const description = course.description;
     return (

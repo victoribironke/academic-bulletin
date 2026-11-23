@@ -1,7 +1,12 @@
 import prisma from "@/lib/prisma";
-import { prepareCourseGraceState } from "@/lib/courses/grace-compliance";
 import { titleKey, uniqueTitle } from "@/lib/courses/unique-title";
-import { isGeneralEducationMaster } from "@/lib/courses/general-education";
+import { generalEducationBlockFor, programmeLevels } from "@/lib/courses/general-education";
+import {
+  applyCourseStructure,
+  loadRegistryCourses,
+  planCourseStructure,
+  seedRegistryDescription,
+} from "@/lib/courses/course-structure";
 
 const EDITABLE_SUBMISSION_STATUSES = ["DRAFT", "CORRECTIONS_REQUIRED"] as const;
 
@@ -13,17 +18,26 @@ export type RegistryPreloadResult = {
 };
 
 /**
- * Makes every discoverable Registry course assigned to a programme, plus all
- * university-wide GST courses, available in one submission. Existing local
- * edits are preserved; missing courses receive the Registry values as their
- * starting point.
+ * Makes a draft's Registry courses available in it:
+ * 1. the General Education block of section 6.1 for every level the
+ *    programme runs (rule W1), from the Registry where it has the course and
+ *    from section 6.1 where it doesn't yet; and
+ * 2. every discoverable Registry course linked to the programme.
+ * Existing rows are kept as they are (only linked to the Registry); missing
+ * ones get the Registry values as their starting point.
  */
 export async function preloadRegistryCoursesForSubmission(
   submissionId: string,
 ): Promise<RegistryPreloadResult> {
   const submission = await prisma.submission.findUnique({
     where: { id: submissionId },
-    select: { id: true, programmeId: true, status: true, dismissedRegistryCourseIds: true },
+    select: {
+      id: true,
+      programmeId: true,
+      status: true,
+      dismissedRegistryCourseIds: true,
+      programme: { select: { duration: true } },
+    },
   });
 
   if (
@@ -35,20 +49,45 @@ export async function preloadRegistryCoursesForSubmission(
     return { submissionId, available: 0, added: 0, linked: 0 };
   }
 
+  // 1. The General Education block (W1): always present, never dismissed.
+  const levels = programmeLevels(submission.programme.duration);
+  const block = generalEducationBlockFor(levels);
+  const blockCodes = new Set(block.map((course) => course.code));
+  const before = await prisma.course.findMany({
+    where: { submissionId },
+    select: { code: true, title: true, masterCourseId: true },
+  });
+  const blockRegistry = await loadRegistryCourses(prisma, [...blockCodes]);
+  const blockPlan = planCourseStructure({
+    levels,
+    rows: [],
+    registry: blockRegistry,
+    existing: before,
+  });
+  const blockAdded = await applyCourseStructure(prisma, submission, blockPlan);
+  // Block rows already there are linked once their Registry record exists.
+  let blockLinked = 0;
+  for (const course of before) {
+    const master = blockRegistry.get(course.code);
+    if (!blockCodes.has(course.code) || !master || course.masterCourseId === master.id) continue;
+    await prisma.course.update({
+      where: { code_submissionId: { code: course.code, submissionId } },
+      data: { masterCourseId: master.id },
+    });
+    await prisma.programmeCourse.createMany({
+      data: [{ programmeId: submission.programmeId, courseId: master.id, isCore: true }],
+      skipDuplicates: true,
+    });
+    blockLinked += 1;
+  }
+
+  // 2. Registry courses linked to the programme. G6: courses the department
+  // removed stay removed.
   const registryCourses = await prisma.masterCourse.findMany({
     where: {
       discoverable: true,
-      OR: [
-        {
-          ownership: "INSTITUTIONAL",
-          type: { in: ["GST_NUC", "GST_BU"] },
-        },
-        {
-          programmeLinks: {
-            some: { programmeId: submission.programmeId },
-          },
-        },
-      ],
+      code: { notIn: [...blockCodes] },
+      programmeLinks: { some: { programmeId: submission.programmeId } },
     },
     include: {
       prerequisites: { select: { code: true } },
@@ -68,24 +107,8 @@ export async function preloadRegistryCoursesForSubmission(
     orderBy: [{ level: "asc" }, { semester: "asc" }, { code: "asc" }],
   });
 
-  // G6: courses the department removed stay removed. The General Education
-  // block (rule W1) is in every draft, so it is always put back.
   const dismissed = new Set(submission.dismissedRegistryCourseIds);
-  const wanted = registryCourses.filter(
-    (course) => !dismissed.has(course.id) || isGeneralEducationMaster(course),
-  );
-  if (wanted.length === 0) {
-    return { submissionId, available: 0, added: 0, linked: 0 };
-  }
-
-  await prisma.programmeCourse.createMany({
-    data: wanted.map((course) => ({
-      programmeId: submission.programmeId,
-      courseId: course.id,
-      isCore: true,
-    })),
-    skipDuplicates: true,
-  });
+  const wanted = registryCourses.filter((course) => !dismissed.has(course.id));
 
   const existing = await prisma.course.findMany({
     where: { submissionId },
@@ -95,8 +118,8 @@ export async function preloadRegistryCoursesForSubmission(
   // Course titles are unique per submission. Some Registry courses share a
   // title (e.g. GST 112 and GST 113), so later ones get their code appended.
   const takenTitles = new Set(existing.map((course) => titleKey(course.title)));
-  let added = 0;
-  let linked = 0;
+  let added = blockAdded.added;
+  let linked = blockLinked;
 
   for (const master of wanted) {
     const programmeLink = master.programmeLinks[0];
@@ -132,56 +155,18 @@ export async function preloadRegistryCoursesForSubmission(
     if (wasPresent) linked += 1;
     else added += 1;
 
-    // Seed the shared Registry description only when a programme has not
-    // already supplied its own details. HoDs retain editorial control over
-    // the preloaded copy in their submission.
-    const effectiveLearningOutcomes =
-      programmeLink?.learningOutcomesOverride ?? master.learningOutcomes;
-    const learningOutcomes = Array.isArray(effectiveLearningOutcomes)
-      ? effectiveLearningOutcomes.filter(
-          (item): item is string => typeof item === "string" && item.trim() !== "",
-        )
-      : [];
-    const courseContent =
-      programmeLink?.courseContentOverride?.trim() ||
-      master.courseContent?.trim() ||
-      master.description?.trim() ||
-      "";
-    const hasCentralDetails =
-      learningOutcomes.length > 0 ||
-      courseContent ||
-      master.labWork?.trim() ||
-      master.entrepreneurialAspect?.trim();
-    if (hasCentralDetails) {
-      const description = await prisma.courseDescription.findUnique({
-        where: { courseId: course.id },
-        select: { id: true },
-      });
-      if (!description) {
-        const graceState = await prepareCourseGraceState(prisma, {
-          title,
-          learningOutcomes,
-          courseContent,
-        });
-        await prisma.courseDescription.create({
-          data: {
-            courseId: course.id,
-            submissionId,
-            courseContent: courseContent || null,
-            learningOutcomes,
-            labWork: master.labWork?.trim() || null,
-            entrepreneurialAspect:
-              master.entrepreneurialAspect?.trim() || null,
-            ...graceState,
-          },
-        });
-      }
-    }
+    await seedRegistryDescription(prisma, {
+      courseId: course.id,
+      submissionId,
+      title,
+      master,
+      programmeLink,
+    });
   }
 
   return {
     submissionId,
-    available: wanted.length,
+    available: wanted.length + block.length,
     added,
     linked,
   };

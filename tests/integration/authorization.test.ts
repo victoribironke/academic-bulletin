@@ -120,6 +120,8 @@ import { GET as listActivities } from "@/app/api/activity-log/route";
 import { GET as getDashboardStats } from "@/app/api/dashboard/stats/route";
 import { courseGraceContentHash } from "@/lib/courses/grace-compliance";
 import { preloadRegistryCoursesForSubmission } from "@/lib/courses/gst-pool";
+import { GENERAL_EDUCATION_BLOCK } from "@/lib/courses/general-education";
+import { applyCourseStructure, loadRegistryCourses, planCourseStructure } from "@/lib/courses/course-structure";
 import { GET as getDeadlines } from "@/app/api/calendar/desk/route";
 import { type CalendarSettings, applyCalendarSettings } from "@/lib/calendar/settings";
 import { type RosterRow, applyRoster, planRoster } from "@/lib/people/roster";
@@ -2216,6 +2218,12 @@ describe("registry preload", () => {
         { ...shared, code: "DUP 113" },
       ],
     });
+    // Linked to the programme, so the preload brings them in (only the
+    // section 6.1 block comes in without a link).
+    const duplicates = await prisma.masterCourse.findMany({ where: { code: { in: ["DUP 112", "DUP 113"] } } });
+    await prisma.programmeCourse.createMany({
+      data: duplicates.map((course) => ({ programmeId: ids.programmeA, courseId: course.id })),
+    });
     // Earlier tests may have moved the shared fixture along the workflow.
     await prisma.submission.update({
       where: { id: ids.submission },
@@ -2230,8 +2238,9 @@ describe("registry preload", () => {
         select: { code: true, title: true },
         orderBy: { code: "asc" },
       });
+      // GST 112 in the General Education block already has the plain title.
       expect(courses).toEqual([
-        { code: "DUP 112", title: "Nigerian Peoples and Culture" },
+        { code: "DUP 112", title: "Nigerian Peoples and Culture (DUP 112)" },
         { code: "DUP 113", title: "Nigerian Peoples and Culture (DUP 113)" },
       ]);
 
@@ -5269,18 +5278,81 @@ describe("removed courses stay removed (G6) and General Education is locked (W1)
     ).toEqual([]);
   });
 
-  it("refuses a department's change or removal of a General Education row", async () => {
-    const gst = await row("GST 118");
-    expect(gst).not.toBeNull();
+  it("puts in the section 6.1 block for the programme's levels, and no other GST course", async () => {
+    // GST 118 is a GST course outside the block and not linked to the programme.
+    expect(await row("GST 118")).toBeNull();
+    const block = await prisma.course.findMany({
+      where: { submissionId, code: { in: GENERAL_EDUCATION_BLOCK.map((course) => course.code) } },
+      select: { code: true, level: true },
+    });
+    // The test programme has no length, so it runs 100 to 400 level: 28 courses.
+    expect(block).toHaveLength(28);
+    expect(block.some((course) => course.level === 500)).toBe(false);
+  });
+
+  it("refuses a department's change or removal of a General Education row, even one not in the Registry yet", async () => {
+    const gst = await row("BU-GST 126");
+    expect(gst).toMatchObject({ masterCourseId: null, units: 3, level: 100, semester: 2 });
     const removed = (await call(deleteCourseRow, gst!.id, "DELETE", { confirm: "DELETE" })) as Response;
     expect(removed.status).toBe(403);
     expect(await removed.json()).toMatchObject({ code: "GENERAL_EDUCATION_LOCKED" });
-    const changed = (await call(updateCourseRow, gst!.id, "PATCH", { units: 3 })) as Response;
+    const changed = (await call(updateCourseRow, gst!.id, "PATCH", { units: 2 })) as Response;
     expect(changed.status).toBe(403);
     // Saving it unchanged (the course table saves every row) is fine.
-    const same = (await call(updateCourseRow, gst!.id, "PATCH", { code: "GST 118", units: 2, semester: 1, level: 100 })) as Response;
+    const same = (await call(updateCourseRow, gst!.id, "PATCH", { code: "BU-GST 126", units: 3, semester: 2, level: 100 })) as Response;
     expect(same.status).toBe(200);
-    expect(await row("GST 118")).toMatchObject({ units: 2 });
+    expect(await row("BU-GST 126")).toMatchObject({ units: 3 });
+
+    // The list marks it locked.
+    authState.userId = ids.hod;
+    const listed = (await (await listCourses(new Request(`http://localhost/api/courses?submissionId=${submissionId}`))).json()) as {
+      code: string;
+      isGeneralEducation: boolean;
+    }[];
+    expect(listed.find((course) => course.code === "BU-GST 126")).toMatchObject({ isGeneralEducation: true });
+    expect(listed.find((course) => course.code === "GXZ 201")).toMatchObject({ isGeneralEducation: false });
+  });
+
+  it("pre-fills a draft from file 02 rows, starting details from the Registry, and only adds (E1)", async () => {
+    await prisma.masterCourse.update({
+      where: { id: "g6-dept" },
+      data: { courseContent: "Registry description.", learningOutcomes: ["Describe the registry"] },
+    });
+    const draftId = "e1-submission";
+    await prisma.reviewCycle.create({ data: { id: "e1-cycle", name: "E1", createdById: ids.super } });
+    await prisma.submission.create({
+      data: { id: draftId, title: "E1 Bulletin", programmeId: ids.programmeA, createdById: ids.hod, cycleId: "e1-cycle" },
+    });
+    try {
+      const rows = [
+        { rowNumber: 2, programmeCode: "TPA", programmeName: "Test", level: 200, semester: 2, code: "GXZ 201", title: "x", units: 3, status: "C", option: null },
+        { rowNumber: 3, programmeCode: "TPA", programmeName: "Test", level: 300, semester: null, code: "GXZ 399", title: "industrial attachment", units: 6, status: "E", option: null },
+        { rowNumber: 4, programmeCode: "TPA", programmeName: "Test", level: 100, semester: 1, code: "BU-GST 105", title: "Use of Library & Study Skills", units: 2, status: "C", option: null },
+      ];
+      const registry = await loadRegistryCourses(prisma, ["GXZ 201", "GXZ 399", ...GENERAL_EDUCATION_BLOCK.map((course) => course.code)]);
+      const plan = planCourseStructure({ levels: [100, 200, 300, 400], rows, registry, existing: [] });
+      const applied = await applyCourseStructure(prisma, { id: draftId, programmeId: ids.programmeA }, plan);
+      expect(applied.added).toBe(30);
+      expect(applied.descriptions).toBeGreaterThanOrEqual(1);
+      expect(
+        await prisma.course.findUnique({
+          where: { code_submissionId: { code: "GXZ 201", submissionId: draftId } },
+          include: { description: true },
+        }),
+      ).toMatchObject({ masterCourseId: "g6-dept", title: "Departmental registry course", description: { courseContent: "Registry description." } });
+      expect(
+        await prisma.course.findUnique({ where: { code_submissionId: { code: "GXZ 399", submissionId: draftId } } }),
+      ).toMatchObject({ masterCourseId: null, semester: null, units: 6, status: "ELECTIVE", title: "Industrial Attachment" });
+
+      // Running it again adds nothing and changes nothing.
+      const existing = await prisma.course.findMany({ where: { submissionId: draftId }, select: { code: true, title: true } });
+      const again = planCourseStructure({ levels: [100, 200, 300, 400], rows, registry, existing });
+      expect(again.courses).toEqual([]);
+      expect((await applyCourseStructure(prisma, { id: draftId, programmeId: ids.programmeA }, again)).added).toBe(0);
+    } finally {
+      await prisma.submission.delete({ where: { id: draftId } });
+      await prisma.reviewCycle.delete({ where: { id: "e1-cycle" } });
+    }
   });
 });
 

@@ -11,7 +11,7 @@ import {
   requireApiUser,
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
-import { isGeneralEducationMaster } from "@/lib/courses/general-education";
+import { isGeneralEducationCourse } from "@/lib/courses/general-education";
 import { recordActivity } from "@/lib/activity-log";
 import { currentCourseGraceState } from "@/lib/courses/grace-compliance";
 import {
@@ -83,7 +83,7 @@ export async function GET(request: Request) {
     return NextResponse.json(
       courses.map((course) => {
         // W1: the General Education block is locked for departments.
-        const locked = isGeneralEducationMaster(course.masterCourse);
+        const locked = isGeneralEducationCourse(course);
         const withFlags = { ...course, isGeneralEducation: locked, isMandatory: locked };
         return course.description
           ? { ...withFlags, description: currentCourseGraceState(course.title, course.description) }
