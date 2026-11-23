@@ -4,7 +4,7 @@
  *
  *   SOURCE_DATABASE_URL_FILE=<file holding the live URL> \
  *   TARGET_DATABASE_URL_FILE=<file holding the test site URL> \
- *     node scripts/copy-live-to-staging.mjs [--replace]
+ *     node scripts/copy-live-to-staging.mjs [--replace --confirm DELETE]
  *
  * SOURCE_DATABASE_URL / TARGET_DATABASE_URL work too, but files keep the
  * connection strings out of shell history.
@@ -13,7 +13,8 @@
  * - The test site's tables must already exist (its pre-deploy step,
  *   npm run db:prepare-staging, builds them).
  * - Without --replace it stops if the test site already has users. With
- *   --replace it empties the test site's tables first, inside the same
+ *   --replace --confirm DELETE (work order Appendix D: scripts that delete
+ *   need it) it empties the test site's tables first, inside the same
  *   transaction, so a failed copy leaves the test site as it was.
  * - Short-lived rows (rate-limit counters, two-step checks) are not copied;
  *   with --replace the test site's own are cleared.
@@ -43,6 +44,11 @@ function describe(url) {
 const sourceUrl = readUrl("SOURCE_DATABASE_URL");
 const targetUrl = readUrl("TARGET_DATABASE_URL");
 const replace = process.argv.includes("--replace");
+const confirmIndex = process.argv.indexOf("--confirm");
+if (replace && process.argv[confirmIndex + 1]?.toUpperCase() !== "DELETE") {
+  console.error("--replace empties the test site first: add --confirm DELETE to go ahead.");
+  process.exit(1);
+}
 
 if (describe(sourceUrl) === describe(targetUrl)) {
   console.error("Refusing to run: the source and the test site are the same database.");

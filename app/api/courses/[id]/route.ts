@@ -19,6 +19,7 @@ import {
 } from "@/lib/api-auth";
 import { AUTOSAVE_COALESCE_MINUTES, recordActivity } from "@/lib/activity-log";
 import { synchronizeCourseGraceAssessment } from "@/lib/courses/grace-compliance";
+import { requireDeleteConfirmation } from "@/lib/archive";
 
 // GET /api/courses/[id] - Get single course with description
 export async function GET(
@@ -209,6 +210,10 @@ export async function DELETE(
         { status: gate.status },
       );
     }
+
+    // Q7: the person typed DELETE (the course table asks when a saved row is removed).
+    const unconfirmed = await requireDeleteConfirmation(request, "course row");
+    if (unconfirmed) return unconfirmed;
 
     // Delete course (cascades to description)
     await prisma.$transaction(async (tx) => {

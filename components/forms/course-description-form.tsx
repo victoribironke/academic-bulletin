@@ -28,6 +28,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { GRACE_SUBMISSION_REQUIRED } from "@/lib/grace-config";
+import { useConfirmDelete } from "@/components/shared/typed-delete-dialog";
 
 const GRACE_PILLAR_LABELS: Record<string, string> = {
   G: "Global Relevance",
@@ -246,6 +247,8 @@ export function CourseDescriptionForm({
     Record<string, CourseDescription>
   >({});
   const [isLoading, setIsLoading] = useState(true);
+  // Q7: removing a written learning outcome asks for DELETE first.
+  const { confirmDelete, dialog: deleteDialog } = useConfirmDelete();
   const [savingCourseId, setSavingCourseId] = useState<string | null>(null);
 
   // GRACE compliance check state
@@ -549,10 +552,20 @@ export function CourseDescriptionForm({
     updateDescription(courseId, "learningOutcomes", [...current, ""]);
   };
 
-  const removeLearningOutcome = (courseId: string, index: number) => {
+  const removeLearningOutcome = async (courseId: string, index: number) => {
     const current = descriptions[courseId]?.learningOutcomes || [];
-    const newOutcomes = current.filter((_, i) => i !== index);
-    updateDescription(courseId, "learningOutcomes", newOutcomes);
+    const text = current[index]?.trim() ?? "";
+    // An empty line is unsaved typing and goes at once.
+    if (text) {
+      const confirmed = await confirmDelete({
+        title: "Delete this learning outcome?",
+        description: `"${text.length > 160 ? `${text.slice(0, 160)}...` : text}" is removed from this course's description when it saves.`,
+        actionLabel: "Delete learning outcome",
+      });
+      if (!confirmed) return;
+    }
+    const latest = descriptions[courseId]?.learningOutcomes || current;
+    updateDescription(courseId, "learningOutcomes", latest.filter((_, i) => i !== index));
   };
 
   const updateLearningOutcome = (
@@ -984,7 +997,7 @@ export function CourseDescriptionForm({
                                         variant="ghost"
                                         size="icon"
                                         onClick={() =>
-                                          removeLearningOutcome(
+                                          void removeLearningOutcome(
                                             course.id,
                                             index,
                                           )
@@ -1190,6 +1203,7 @@ export function CourseDescriptionForm({
             </div>
           ))}
       </CardContent>
+      {deleteDialog}
     </Card>
   );
 }

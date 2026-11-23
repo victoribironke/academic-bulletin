@@ -41,6 +41,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useDeleteRecord } from "@/components/shared/delete-record-dialog";
+import { DELETE_WORD, useConfirmDelete } from "@/components/shared/typed-delete-dialog";
 import { RowActionsMenu } from "@/components/shared/row-actions-menu";
 import { TableCard, TableToolbar } from "@/components/shared/table-toolbar";
 import { EmptyState, TableSkeleton } from "@/components/shared/states";
@@ -146,6 +147,7 @@ export function MasterCourseManager({
   const [isLinkingCourseId, setIsLinkingCourseId] = useState<string | null>(null);
   const [isTogglingCourseId, setIsTogglingCourseId] = useState<string | null>(null);
   const { requestDelete, dialog: deleteDialog, checkingUrl } = useDeleteRecord();
+  const { confirmDelete: confirmUnlink, dialog: unlinkDialog } = useConfirmDelete();
   const isDeletingCourseId = checkingUrl?.split("/").pop() ?? null;
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [isSyncingCcmas, setIsSyncingCcmas] = useState(false);
@@ -457,11 +459,24 @@ export function MasterCourseManager({
 
   const handleUnlinkProgramme = async (programmeId: string) => {
     if (!selectedCourse) return;
+    // Q7: removing a programme link asks for DELETE first.
+    const programmeName =
+      selectedCourse.programmeLinks?.find((link) => link.programme.id === programmeId)?.programme.name ??
+      "this programme";
+    const confirmed = await confirmUnlink({
+      title: `Remove ${selectedCourse.code} from ${programmeName}?`,
+      description:
+        "The course stays in the Registry; only its link to this programme goes. Drafts that already list it keep their row until the department removes it.",
+      actionLabel: "Remove link",
+    });
+    if (!confirmed) return;
     setIsLinkingCourseId(selectedCourse.id);
 
     try {
       const res = await fetch(`/api/master-courses/${selectedCourse.id}/programmes?programmeId=${programmeId}`, {
         method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: DELETE_WORD }),
       });
 
       if (res.ok) {
@@ -1275,6 +1290,7 @@ export function MasterCourseManager({
           }}
         />
       {deleteDialog}
+      {unlinkDialog}
     </div>
   );
 }

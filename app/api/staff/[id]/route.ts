@@ -7,7 +7,7 @@ import {
 } from "@/lib/validation/name-format";
 import { canAccessDepartment, requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
-import { archiveRecord, requireTypedConfirmation } from "@/lib/archive";
+import { archiveRecord, requireDeleteConfirmation } from "@/lib/archive";
 
 const VALID_TITLES = ["MR", "MRS", "MS", "DR", "PROF", "ENGR", "BARR", "REV", "PASTOR"];
 const VALID_GENDERS = ["MALE", "FEMALE"];
@@ -272,7 +272,7 @@ export async function DELETE(
     }
 
     const name = staffConfirmationName(existing);
-    const unconfirmed = await requireTypedConfirmation(request, name, "staff member");
+    const unconfirmed = await requireDeleteConfirmation(request, "staff member");
     if (unconfirmed) return unconfirmed;
 
     await prisma.$transaction(async (tx) => {

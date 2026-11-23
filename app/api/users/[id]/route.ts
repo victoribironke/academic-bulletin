@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getApiUser, requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
-import { requireTypedConfirmation } from "@/lib/archive";
+import { requireDeleteConfirmation } from "@/lib/archive";
 import { isPrivilegedRole, isUniversityEmail, UNIVERSITY_DOMAIN } from "@/lib/sign-in-access";
 
 interface RouteParams {
@@ -463,7 +463,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     // Deleting an account is permanent, so its email is typed to confirm.
-    const unconfirmed = await requireTypedConfirmation(request, target.email, "user");
+    const unconfirmed = await requireDeleteConfirmation(request, "user");
     if (unconfirmed) return unconfirmed;
 
     await prisma.$transaction(async (tx) => {

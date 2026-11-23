@@ -7,7 +7,7 @@ import {
   archiveRecord,
   deleteBlockers,
   inUseResponse,
-  requireTypedConfirmation,
+  requireDeleteConfirmation,
 } from "@/lib/archive";
 
 interface RouteParams {
@@ -133,7 +133,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (conflict) return conflict;
     const blockers = await deleteBlockers("DEPARTMENT", id);
     if (blockers.length) return inUseResponse("department", blockers);
-    const unconfirmed = await requireTypedConfirmation(request, record.name, "department");
+    const unconfirmed = await requireDeleteConfirmation(request, "department");
     if (unconfirmed) return unconfirmed;
 
     await prisma.$transaction(async (tx) => {

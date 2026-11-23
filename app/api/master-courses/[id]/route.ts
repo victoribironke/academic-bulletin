@@ -18,7 +18,7 @@ import {
   archiveRecord,
   deleteBlockers,
   inUseResponse,
-  requireTypedConfirmation,
+  requireDeleteConfirmation,
 } from "@/lib/archive";
 
 // Valid enum values
@@ -321,7 +321,7 @@ export async function DELETE(
 
     const blockers = await deleteBlockers("MASTER_COURSE", id);
     if (blockers.length) return inUseResponse("Registry course", blockers);
-    const unconfirmed = await requireTypedConfirmation(request, course.code, "Registry course");
+    const unconfirmed = await requireDeleteConfirmation(request, "Registry course");
     if (unconfirmed) return unconfirmed;
 
     const { prerequisites, ...columns } = course;

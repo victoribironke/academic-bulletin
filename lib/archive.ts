@@ -3,7 +3,7 @@
  * departments, programmes, Registry courses and staff.
  *
  * 1. A record anything still uses can't be deleted; the reply says what uses it.
- * 2. The person types the record's name to confirm.
+ * 2. The person types DELETE to confirm (work order Q7, Appendix D).
  * 3. The record is moved, whole, into the Archive (archived_records) instead of
  *    being erased, so an administrator can restore it with the same id.
  *
@@ -35,18 +35,29 @@ export const ARCHIVE_NOUNS: Record<ArchivableType, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// Typed confirmation
+// Typed confirmation (work order Q7, Appendix D)
 // ---------------------------------------------------------------------------
 
-function normalizeConfirmation(value: string): string {
-  return value.trim().replace(/\s+/g, " ").toLowerCase();
+/** Every delete is confirmed by typing this word. */
+export const DELETE_CONFIRMATION_WORD = "DELETE";
+
+/**
+ * True when the typed text is DELETE, ignoring letter case and spaces at
+ * either end. "delet" and "DELETED" don't match.
+ */
+export function deleteConfirmationMatches(typed: unknown): boolean {
+  return typeof typed === "string" && typed.trim().toUpperCase() === DELETE_CONFIRMATION_WORD;
 }
 
-/** True when the typed text is the expected name, ignoring case and extra spaces. */
+/**
+ * For actions that aren't deletes but ask for a typed name, such as resetting
+ * someone's two-step verification (their email): true when the text matches,
+ * ignoring case and extra spaces.
+ */
 export function confirmationMatches(typed: unknown, expected: string): boolean {
   if (typeof typed !== "string") return false;
-  const normalized = normalizeConfirmation(typed);
-  return normalized !== "" && normalized === normalizeConfirmation(expected);
+  const normalize = (value: string) => value.trim().replace(/\s+/g, " ").toLowerCase();
+  return normalize(typed) !== "" && normalize(typed) === normalize(expected);
 }
 
 /** The `confirm` text from a DELETE request's JSON body, if it has one. */
@@ -62,24 +73,24 @@ export async function readConfirmation(request: Request): Promise<string | null>
 }
 
 /**
- * Null when the request carries the record's name, otherwise the 400 reply
- * that tells the page what to ask the person to type.
+ * Null when the request carries `confirm: "DELETE"`, otherwise the 400 reply
+ * that tells the page to ask for it. The box on screen is never the only
+ * safeguard: every delete route calls this.
  */
-export async function requireTypedConfirmation(
+export async function requireDeleteConfirmation(
   request: Request,
-  expected: string,
   noun: string,
 ): Promise<NextResponse | null> {
   const typed = await readConfirmation(request);
-  if (confirmationMatches(typed, expected)) return null;
+  if (deleteConfirmationMatches(typed)) return null;
   return NextResponse.json(
     {
       error:
         typed === null
-          ? `Type the ${noun}'s name to confirm.`
-          : `That doesn't match. Type "${expected}" to confirm.`,
+          ? `Type ${DELETE_CONFIRMATION_WORD} to confirm deleting this ${noun}.`
+          : `That doesn't match. Type ${DELETE_CONFIRMATION_WORD} to confirm.`,
       code: "CONFIRMATION_REQUIRED",
-      confirmText: expected,
+      confirmText: DELETE_CONFIRMATION_WORD,
     },
     { status: 400 },
   );

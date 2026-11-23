@@ -26,6 +26,7 @@ import {
 } from "@/lib/imports/staff";
 import { validateStaffEntryRows } from "@/lib/validation/staff-entry";
 import { staffConfirmationName } from "@/lib/validation/name-format";
+import { DELETE_WORD, useConfirmDelete } from "@/components/shared/typed-delete-dialog";
 import { PhotoUploadGuidance } from "@/components/shared/photo-upload-guidance";
 
 // Updated StaffMember interface with new structured fields
@@ -229,6 +230,17 @@ export function StaffTable({
   // Each saved record's name: deleting one confirms it by name, and removing a
   // row and saving the table is that confirmation.
   const savedStaffNames = useRef(new Map<string, string>());
+  // Q7: removing a saved staff row or a photo asks for DELETE first.
+  const { confirmDelete, dialog: deleteDialog } = useConfirmDelete();
+  const confirmRemoveStaff = (staff: StaffMember) =>
+    !staff.id
+      ? Promise.resolve(true)
+      : confirmDelete({
+          title: `Delete ${savedStaffNames.current.get(staff.id) || staffConfirmationName(staff) || "this staff member"} from the staff list?`,
+          description:
+            "Their photo goes with them. The record moves to the Archive when the staff list next saves, and an administrator can restore it.",
+          actionLabel: "Delete staff member",
+        });
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -418,9 +430,8 @@ export function StaffTable({
           const res = await fetch(`/api/staff/${originalId}`, {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              confirm: savedStaffNames.current.get(originalId) ?? "",
-            }),
+            // The person typed DELETE when they removed the row (Q7).
+            body: JSON.stringify({ confirm: DELETE_WORD }),
           });
           if (!res.ok) {
             errors.push(
@@ -538,9 +549,19 @@ export function StaffTable({
 
   const handleImageRemove = async () => {
     if (!imageStaff?.id) return;
+    const confirmed = await confirmDelete({
+      title: `Remove the photo of ${savedStaffNames.current.get(imageStaff.id) || staffConfirmationName(imageStaff) || "this staff member"}?`,
+      description: "The photo is deleted from storage and can't be restored; you can upload it again.",
+      actionLabel: "Remove photo",
+    });
+    if (!confirmed) return;
 
     try {
-      const res = await fetch(`/api/staff/${imageStaff.id}/image`, { method: "DELETE" });
+      const res = await fetch(`/api/staff/${imageStaff.id}/image`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: DELETE_WORD }),
+      });
       if (res.ok) {
         const updateStaffList = (list: StaffMember[]) =>
           list.map((s) =>
@@ -663,6 +684,7 @@ export function StaffTable({
               }}
               createEmptyRow={() => createEmptyStaff("ACADEMIC")}
               disabled={disabled}
+              confirmRemove={confirmRemoveStaff}
             />
           </TabsContent>
 
@@ -676,6 +698,7 @@ export function StaffTable({
               }}
               createEmptyRow={() => createEmptyStaff("ADJUNCT")}
               disabled={disabled}
+              confirmRemove={confirmRemoveStaff}
             />
           </TabsContent>
 
@@ -689,6 +712,7 @@ export function StaffTable({
               }}
               createEmptyRow={() => createEmptyStaff("NON_ACADEMIC")}
               disabled={disabled}
+              confirmRemove={confirmRemoveStaff}
             />
           </TabsContent>
         </Tabs>
@@ -883,6 +907,7 @@ export function StaffTable({
           await fetchStaff();
         }}
       />
+      {deleteDialog}
     </Card>
   );
 }

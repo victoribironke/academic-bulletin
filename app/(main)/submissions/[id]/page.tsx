@@ -87,6 +87,7 @@ import {
 import { MINIMUM_CGPA_RANGE, UNIVERSITY_MINIMUM_CGPA } from "@/lib/submissions/cgpa-rule";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PhotoUploadGuidance } from "@/components/shared/photo-upload-guidance";
+import { useConfirmDelete } from "@/components/shared/typed-delete-dialog";
 
 interface Submission {
   id: string;
@@ -423,6 +424,8 @@ export default function SubmissionDetailPage({
   // These sections have their own Save button inside the section.
   const sectionSavesSeparately = ["staff", "courses", "descriptions"].includes(activeSection);
   const [hasChanges, setHasChanges] = useState(false);
+  // Q7: one DELETE box for removing photos and written items on this page.
+  const { confirmDelete, dialog: deleteDialog } = useConfirmDelete();
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   // Form state for structured sections
@@ -1085,11 +1088,34 @@ export default function SubmissionDetailPage({
     setHasChanges(true);
   };
 
-  const removeListItem = (
+  // Q7: removing written text asks for DELETE first; an empty line is just
+  // unsaved typing and goes at once.
+  const removeListItem = async (
     setter: React.Dispatch<React.SetStateAction<string[]>>,
     index: number,
+    items: string[],
+    noun: string,
   ) => {
+    const text = items[index]?.trim() ?? "";
+    if (text) {
+      const confirmed = await confirmDelete({
+        title: `Delete this ${noun}?`,
+        description: `"${text.length > 160 ? `${text.slice(0, 160)}...` : text}" is removed from this programme when the page saves.`,
+        actionLabel: `Delete ${noun}`,
+      });
+      if (!confirmed) return;
+    }
     setter((prev) => prev.filter((_, i) => i !== index));
+    setHasChanges(true);
+  };
+  const removePhoto = async (who: "Dean" | "Head of Department", clear: () => void) => {
+    const confirmed = await confirmDelete({
+      title: `Remove the ${who}'s photo?`,
+      description: "It is removed from this programme's page when the page saves. You can upload it again.",
+      actionLabel: "Remove photo",
+    });
+    if (!confirmed) return;
+    clear();
     setHasChanges(true);
   };
 
@@ -1625,10 +1651,7 @@ export default function SubmissionDetailPage({
                                 variant="ghost"
                                 size="sm"
                                 className="text-destructive"
-                                onClick={() => {
-                                  setDeanImageUrl("");
-                                  setHasChanges(true);
-                                }}
+                                onClick={() => void removePhoto("Dean", () => setDeanImageUrl(""))}
                               >
                                 <Trash2 className="h-4 w-4 mr-2" />
                                 Remove
@@ -1688,10 +1711,9 @@ export default function SubmissionDetailPage({
                                 variant="ghost"
                                 size="sm"
                                 className="text-destructive"
-                                onClick={() => {
-                                  setHodImageUrl("");
-                                  setHasChanges(true);
-                                }}
+                                onClick={() =>
+                                  void removePhoto("Head of Department", () => setHodImageUrl(""))
+                                }
                               >
                                 <Trash2 className="h-4 w-4 mr-2" />
                                 Remove
@@ -1902,7 +1924,7 @@ export default function SubmissionDetailPage({
                                 variant="ghost"
                                 size="icon"
                                 onClick={() =>
-                                  removeListItem(setObjectives, index)
+                                  void removeListItem(setObjectives, index, objectives, "objective")
                                 }
                                 disabled={objectives.length <= 1}
                               >
@@ -1951,7 +1973,7 @@ export default function SubmissionDetailPage({
                                 variant="ghost"
                                 size="icon"
                                 onClick={() =>
-                                  removeListItem(setUniqueFeatures, index)
+                                  void removeListItem(setUniqueFeatures, index, uniqueFeatures, "unique feature")
                                 }
                                 disabled={uniqueFeatures.length <= 1}
                               >
@@ -2000,7 +2022,7 @@ export default function SubmissionDetailPage({
                                 variant="ghost"
                                 size="icon"
                                 onClick={() =>
-                                  removeListItem(setEmployability, index)
+                                  void removeListItem(setEmployability, index, employability, "employability skill")
                                 }
                                 disabled={employability.length <= 1}
                               >
@@ -2452,6 +2474,7 @@ export default function SubmissionDetailPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {deleteDialog}
     </div>
   );
 }

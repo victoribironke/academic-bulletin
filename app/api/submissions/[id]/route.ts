@@ -12,7 +12,7 @@ import { AUTOSAVE_COALESCE_MINUTES, recordActivity } from "@/lib/activity-log";
 import { getSubmissionWorkflow } from "@/lib/submissions/phase-owners";
 import { workflowHistoryConflict } from "@/lib/submissions/workflow-history";
 import { unsafeMarkupReason } from "@/lib/html/safe-html";
-import { inUseResponse, requireTypedConfirmation } from "@/lib/archive";
+import { inUseResponse, requireDeleteConfirmation } from "@/lib/archive";
 import { photoNotUploadedHere } from "@/lib/images/photo-urls";
 import { isValidMinimumCgpa, minimumCgpaRuleMessage } from "@/lib/submissions/cgpa-rule";
 
@@ -428,11 +428,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
     const blockers = submissionDeleteBlockers(submission);
     if (blockers.length) return inUseResponse("bulletin", blockers);
-    const unconfirmed = await requireTypedConfirmation(
-      request,
-      submission.programme.name,
-      "bulletin's programme",
-    );
+    const unconfirmed = await requireDeleteConfirmation(request, "draft");
     if (unconfirmed) return unconfirmed;
 
     await prisma.$transaction(async (tx) => {

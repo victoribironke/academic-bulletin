@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
 import { preloadRegistryCoursesForSubmission } from "@/lib/courses/gst-pool";
+import { requireDeleteConfirmation } from "@/lib/archive";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -196,6 +197,10 @@ export async function DELETE(request: Request, { params }: RouteParams) {
         { status: 400 },
       );
     }
+
+    // Q7: the person typed DELETE.
+    const unconfirmed = await requireDeleteConfirmation(request, "programme link");
+    if (unconfirmed) return unconfirmed;
 
     const deleted = await prisma.programmeCourse.deleteMany({
       where: {

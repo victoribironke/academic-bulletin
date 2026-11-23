@@ -46,6 +46,11 @@ interface DynamicTableProps<T extends Record<string, unknown>> {
   isRowLocked?: (row: T) => boolean;
   isRowEditable?: (row: T) => boolean;
   onRowUpdate?: (row: T, key: keyof T, value: unknown) => T;
+  /**
+   * Q7: asked before a row is removed. Resolve false to keep it (the person
+   * cancelled the DELETE box). Rows that were never saved need no asking.
+   */
+  confirmRemove?: (row: T, index: number) => Promise<boolean>;
 }
 
 export function DynamicTable<T extends Record<string, unknown>>({
@@ -60,6 +65,7 @@ export function DynamicTable<T extends Record<string, unknown>>({
   isRowLocked,
   isRowEditable,
   onRowUpdate,
+  confirmRemove,
 }: DynamicTableProps<T>) {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
@@ -68,10 +74,11 @@ export function DynamicTable<T extends Record<string, unknown>>({
     onChange([...data, createEmptyRow()]);
   };
 
-  const removeRow = (index: number) => {
-    const newData = [...data];
-    newData.splice(index, 1);
-    onChange(newData);
+  const removeRow = async (index: number) => {
+    const row = data[index];
+    if (confirmRemove && !(await confirmRemove(row, index))) return;
+    // Remove that row from the data as it is now, in case it changed meanwhile.
+    onChange(data.filter((item) => item !== row));
   };
 
   const updateCell = (index: number, key: keyof T, value: unknown) => {
@@ -280,7 +287,7 @@ export function DynamicTable<T extends Record<string, unknown>>({
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => removeRow(rowIndex)}
+                          onClick={() => void removeRow(rowIndex)}
                           className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
                         >
                           <Trash2 className="h-4 w-4" />

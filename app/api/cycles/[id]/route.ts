@@ -7,7 +7,7 @@ import {
   archiveRecord,
   deleteBlockers,
   inUseResponse,
-  requireTypedConfirmation,
+  requireDeleteConfirmation,
 } from "@/lib/archive";
 
 export async function PUT(
@@ -140,7 +140,7 @@ export async function DELETE(
 
     const blockers = await deleteBlockers("REVIEW_CYCLE", id);
     if (blockers.length) return inUseResponse("review cycle", blockers);
-    const unconfirmed = await requireTypedConfirmation(request, cycle.name, "review cycle");
+    const unconfirmed = await requireDeleteConfirmation(request, "review cycle");
     if (unconfirmed) return unconfirmed;
 
     await prisma.$transaction(async (tx) => {

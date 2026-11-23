@@ -11,6 +11,7 @@ import {
   photoRequestTooLarge,
   readUploadForm,
 } from "@/lib/images/photo-upload";
+import { requireDeleteConfirmation } from "@/lib/archive";
 
 // The photo check calls Gemini, which can take a while.
 export const maxDuration = 60;
@@ -162,6 +163,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (!(await canAccessDepartment(auth.user, staff.departmentId))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+
+    // Q7: the person typed DELETE.
+    const unconfirmed = await requireDeleteConfirmation(request, "photo");
+    if (unconfirmed) return unconfirmed;
 
     if (staff.imageDriveFileId) {
       try {

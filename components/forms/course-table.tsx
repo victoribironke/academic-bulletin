@@ -43,6 +43,7 @@ import {
 const SESSIONAL_VALUE = "S";
 import { toast } from "sonner";
 import { BulkImportDialog } from "@/components/imports/bulk-import-dialog";
+import { DELETE_WORD, useConfirmDelete } from "@/components/shared/typed-delete-dialog";
 import { TableToolbar } from "@/components/shared/table-toolbar";
 import { TablePagination } from "@/components/shared/table-pagination";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -192,6 +193,17 @@ export function CourseTable({
 
   // Autosave state
   const [isDirty, setIsDirty] = useState(false);
+  // Q7: removing a saved course row asks for DELETE first.
+  const { confirmDelete, dialog: deleteDialog } = useConfirmDelete();
+  const confirmRemoveCourse = (course: Course) =>
+    !course.id || course.isNew
+      ? Promise.resolve(true)
+      : confirmDelete({
+          title: `Delete ${course.code || "this course"} from this programme's course structure?`,
+          description:
+            "Its course description and learning outcomes are removed too. It goes when the course structure next saves, and it can't be restored from the Archive; add it again from the Registry if needed.",
+          actionLabel: "Delete row",
+        });
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isSavingRef = useRef(false);
 
@@ -659,8 +671,11 @@ export function CourseTable({
 
       for (const originalId of originalCourseIds) {
         if (!currentCourseIds.has(originalId)) {
+          // The person typed DELETE when they removed the row (Q7).
           const res = await fetch(`/api/courses/${originalId}`, {
             method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ confirm: DELETE_WORD }),
           });
           if (!res.ok) {
             errors.push(`Failed to delete a removed course`);
@@ -863,6 +878,7 @@ export function CourseTable({
                     isRowLocked={(row) => !!row.isMandatory} // Lock mandatory rows
                     isRowEditable={(row) => !row.masterCourseId} // Registry courses are read-only
                     onRowUpdate={handleRowUpdate}
+                    confirmRemove={confirmRemoveCourse}
                   />
                 </div>
 
@@ -1238,6 +1254,7 @@ export function CourseTable({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {deleteDialog}
     </Card>
   );
 }
