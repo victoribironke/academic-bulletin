@@ -75,6 +75,14 @@ export async function allowGoogleSignIn(
       metadata: { until: appUser.signInExceptionUntil.toISOString() },
     });
   }
+  // D3: when each person first signed in and was last active.
+  if (appUser) {
+    const now = new Date();
+    await prisma.user
+      .updateMany({ where: { id: appUser.id, firstSignInAt: null }, data: { firstSignInAt: now } })
+      .then(() => prisma.user.update({ where: { id: appUser.id }, data: { lastActiveAt: now } }))
+      .catch((error) => console.error("Couldn't record the sign-in time:", error));
+  }
   return true;
 }
 

@@ -3,7 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Trash2, UserCheck, Users, UserX } from "lucide-react";
+import { Loader2, Mail, Trash2, UserCheck, Users, UserX } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { usePermission, useUser } from "@/contexts/user-context";
 import { getRoleDisplayName } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -78,6 +86,9 @@ interface User {
   signInExceptionReason: string | null;
   signInExceptionGrantedBy: { firstName: string; lastName: string } | null;
   mfaEnabledAt: string | null;
+  invitedAt: string | null;
+  firstSignInAt: string | null;
+  lastActiveAt: string | null;
   schoolId: string | null;
   departmentId: string | null;
   school?: School | null;
@@ -209,6 +220,8 @@ export default function UsersPage() {
       if (filterRole !== "all" && u.role !== filterRole) return false;
       if (filterStatus === "active" && !u.isActive) return false;
       if (filterStatus === "inactive" && u.isActive) return false;
+      // D3: who hasn't signed in yet, for DAP's daily list.
+      if (filterStatus === "not-signed-in" && (u.firstSignInAt || !u.isActive)) return false;
       if (!q) return true;
       return [u.firstName, u.lastName, u.email, u.department?.name, u.school?.name]
         .filter(Boolean)
@@ -324,6 +337,15 @@ export default function UsersPage() {
         description="People who can sign in. Each person signs in with Google using the email added here."
         actions={
           canManage && (
+            <div className="flex flex-wrap items-center gap-2">
+            <SendInvitationsButton
+              waiting={
+                users?.filter(
+                  (u) => u.isActive && !u.invitedAt && INVITED_ROLES.includes(u.role),
+                ).length ?? 0
+              }
+              onSent={reload}
+            />
             <CreateUserDialog
               schools={schools}
               departments={departments}
@@ -331,6 +353,7 @@ export default function UsersPage() {
               isSuperAdmin={isSuperAdmin}
               onSuccess={reload}
             />
+            </div>
           )
         }
       />
@@ -364,6 +387,7 @@ export default function UsersPage() {
                 <SelectItem value="all">All statuses</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="inactive">Deactivated</SelectItem>
+                <SelectItem value="not-signed-in">Not signed in yet</SelectItem>
               </SelectContent>
             </Select>
           </>
@@ -503,6 +527,14 @@ export default function UsersPage() {
                           Deactivated
                         </span>
                       )}
+                      {/* D3: invited, first sign-in, last active. */}
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        {user.firstSignInAt
+                          ? `Signed in ${shortDate(user.firstSignInAt)}${user.lastActiveAt ? ` · last active ${shortDate(user.lastActiveAt)}` : ""}`
+                          : user.invitedAt
+                            ? `Invited ${shortDate(user.invitedAt)} · not signed in yet`
+                            : "Not signed in yet"}
+                      </span>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -522,6 +554,9 @@ export default function UsersPage() {
                           !isPrivilegedRole(user.role) && (
                             <SignInExceptionDialog user={user} onSuccess={reload} />
                           )}
+                        {canManage && user.isActive && INVITED_ROLES.includes(user.role) && (
+                          <InviteButton userId={user.id} invited={Boolean(user.invitedAt)} onSent={reload} />
+                        )}
                         {isSuperAdmin && user.mfaEnabledAt && user.id !== currentUser?.id && (
                           <ResetTwoStepDialog user={user} onSuccess={reload} />
                         )}
@@ -580,5 +615,105 @@ export default function UsersPage() {
       )}
       {deleteDialog}
     </div>
+  );
+}
+
+/** D3: the roles that get an invitation. */
+const INVITED_ROLES: string[] = ["HOD", "PROGRAMME_COORDINATOR", "DEAN"];
+
+const shortDateFormat = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Africa/Lagos",
+  month: "long",
+  day: "numeric",
+  year: "numeric",
+});
+function shortDate(value: string): string {
+  return shortDateFormat.format(new Date(value));
+}
+
+/** Sends one person's invitation, or sends it again. */
+function InviteButton({ userId, invited, onSent }: { userId: string; invited: boolean; onSent: () => void }) {
+  const [sending, setSending] = useState(false);
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={sending}
+      onClick={async () => {
+        setSending(true);
+        try {
+          const response = await fetch(`/api/users/${userId}/invite`, { method: "POST" });
+          const data = await response.json().catch(() => ({}));
+          if (response.ok) {
+            toast.success(`Invitation sent to ${data.email}.`);
+            onSent();
+          } else {
+            toast.error(data.error ?? "The invitation wasn't sent.");
+          }
+        } finally {
+          setSending(false);
+        }
+      }}
+    >
+      {sending ? <Loader2 className="animate-spin" /> : <Mail />}
+      <span className="hidden sm:inline">{invited ? "Resend invitation" : "Send invitation"}</span>
+    </Button>
+  );
+}
+
+/** Sends every waiting invitation at once, after a confirmation. */
+function SendInvitationsButton({ waiting, onSent }: { waiting: number; onSent: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  if (waiting === 0) return null;
+  return (
+    <>
+      <Button variant="outline" onClick={() => setOpen(true)}>
+        <Mail />
+        Send waiting invitations ({waiting})
+      </Button>
+      <Dialog open={open} onOpenChange={(next) => !sending && setOpen(next)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send {waiting} invitation{waiting === 1 ? "" : "s"} now?</DialogTitle>
+            <DialogDescription>
+              Each Head of Department, programme coordinator and Dean who hasn&apos;t had one gets their
+              invitation email now. On their own, the invitations go out from 8:00 am WAT on Thursday,
+              November 26, 2026.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={sending}>
+              Cancel
+            </Button>
+            <Button
+              disabled={sending}
+              onClick={async () => {
+                setSending(true);
+                try {
+                  const response = await fetch("/api/invitations", { method: "POST" });
+                  const data = await response.json().catch(() => ({}));
+                  if (response.ok) {
+                    const failed = (data.results ?? []).filter((result: { sent: boolean }) => !result.sent).length;
+                    toast.success(`${data.sent} invitation${data.sent === 1 ? "" : "s"} sent.`, {
+                      description: failed ? `${failed} could not be sent; see the Activity Log.` : undefined,
+                    });
+                    setOpen(false);
+                    onSent();
+                  } else {
+                    toast.error(data.error ?? "The invitations weren't sent.");
+                  }
+                } finally {
+                  setSending(false);
+                }
+              }}
+            >
+              {sending && <Loader2 className="animate-spin" />}
+              Send {waiting} now
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

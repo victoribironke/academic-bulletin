@@ -194,8 +194,9 @@ export function planRoster(rows: RosterRow[], platform: RosterPlatform): RosterP
         } else {
           const school = schoolById.get(found.id)!;
           unitLabel = `${school.code} ${school.name}`;
-          // Deans belong to their school; Academic Planning admins to none.
-          if (row.sheet === "Deans") schoolId = school.id;
+          // Deans belong to their school; a DAP officer is named for one, and
+          // the invitations give that officer as the school's help (D3).
+          schoolId = school.id;
         }
       }
     }

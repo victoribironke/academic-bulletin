@@ -10,7 +10,18 @@ export type EmailMessage = {
   subject: string;
   html: string;
   text: string;
+  /** A different sender name on the site's verified address (DEC7). */
+  fromName?: string;
+  /** Where replies go. */
+  replyTo?: string[];
 };
+
+/** The site's sender, with another display name when given. */
+export function senderFor(fromName: string | undefined): string {
+  if (!fromName) return EMAIL_FROM;
+  const address = EMAIL_FROM.match(/<([^>]+)>/)?.[1] ?? EMAIL_FROM;
+  return `${fromName.replace(/[<>"]/g, "")} <${address}>`;
+}
 
 function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
@@ -26,6 +37,7 @@ export function testSiteEmail(message: EmailMessage, testInbox: string | undefin
   if (!inbox) return null;
   const wouldHaveReached = message.to.join(", ") || "nobody";
   return {
+    ...message,
     to: [inbox],
     subject: `[TEST SITE] ${message.subject}`,
     text: `Sent by the ABRS test site. On the live site this would have gone to: ${wouldHaveReached}\n\n${message.text}`,
@@ -46,7 +58,6 @@ export function isEmailConfigured(): boolean {
  */
 export async function sendEmail(original: EmailMessage): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
-  const from = EMAIL_FROM;
   if (!apiKey) {
     console.warn("[email] RESEND_API_KEY not set; skipping send.");
     return false;
@@ -70,7 +81,14 @@ export async function sendEmail(original: EmailMessage): Promise<boolean> {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ from, ...message }),
+      body: JSON.stringify({
+        from: senderFor(message.fromName),
+        to: message.to,
+        subject: message.subject,
+        html: message.html,
+        text: message.text,
+        ...(message.replyTo?.length && { reply_to: message.replyTo }),
+      }),
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) {

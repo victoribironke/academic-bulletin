@@ -26,6 +26,9 @@ export const MFA_REQUIRED_RESPONSE = {
   code: "MFA_REQUIRED",
 } as const;
 
+/** How often "last active" is written for someone using the site. */
+const LAST_ACTIVE_EVERY_MS = 15 * 60_000;
+
 type ApiUserLookup =
   | { user: ApiUser }
   | { user: null; reason: "signed_out" | "mfa_required" };
@@ -57,13 +60,20 @@ export async function lookupApiUser(options?: {
           select: { programmeId: true },
         },
         mfaVerifications: currentVerification(access.sessionId),
+        lastActiveAt: true,
       },
     });
 
     if (!dbUser || (!dbUser.isActive && !options?.includeInactive)) {
       return { user: null, reason: "signed_out" };
     }
-    const { programmeAssignments, mfaVerifications, ...profile } = dbUser;
+    const { programmeAssignments, mfaVerifications, lastActiveAt, ...profile } = dbUser;
+    // D3: last active, written at most every 15 minutes and never in the way.
+    if (!lastActiveAt || Date.now() - lastActiveAt.getTime() > LAST_ACTIVE_EVERY_MS) {
+      void prisma.user
+        .update({ where: { id: profile.id }, data: { lastActiveAt: new Date() } })
+        .catch((error) => console.error("Couldn't record activity time:", error));
+    }
     if (mfaRequiredFor(profile.role) && mfaVerifications.length === 0) {
       return { user: null, reason: "mfa_required" };
     }

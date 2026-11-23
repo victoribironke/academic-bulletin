@@ -120,6 +120,7 @@ import { preloadRegistryCoursesForSubmission } from "@/lib/courses/gst-pool";
 import { GET as getDeadlines } from "@/app/api/calendar/desk/route";
 import { type CalendarSettings, applyCalendarSettings } from "@/lib/calendar/settings";
 import { type RosterRow, applyRoster, planRoster } from "@/lib/people/roster";
+import { sendDueInvitations, sendInvitation } from "@/lib/people/invitations";
 import { loadCodeLookups } from "@/lib/units/code-aliases";
 import { RECHECK_MS, allowGoogleSignIn, refreshSessionToken } from "@/lib/auth-callbacks";
 import { philosophyGraceHash } from "@/lib/submissions/submit-readiness";
@@ -5444,5 +5445,96 @@ describe("roster import (D2)", () => {
     // either way the row is refused and nothing changes.
     expect(plan.people).toEqual([]);
     expect(plan.problems.length).toBeGreaterThan(0);
+  });
+});
+
+// D3: invitations to Heads, coordinators and Deans, with their school's DAP
+// officer as the help contact, and sign-in tracking.
+describe("invitations and sign-in tracking (D3)", () => {
+  const people = {
+    head: { id: "d3-head", email: "d3.head@babcock.edu.ng", role: "HOD" as const },
+    officer: { id: "d3-officer", email: "d3.officer@babcock.edu.ng", role: "ADMIN" as const },
+    gone: { id: "d3-gone", email: "d3.gone@babcock.edu.ng", role: "HOD" as const },
+  };
+
+  beforeAll(async () => {
+    const department = await prisma.department.findUniqueOrThrow({ where: { id: ids.departmentA } });
+    await prisma.user.create({
+      data: { ...people.head, firstName: "Ngozi", lastName: "Eze", title: "Dr.", departmentId: department.id, schoolId: department.schoolId },
+    });
+    await prisma.user.create({
+      data: { ...people.officer, firstName: "Officer", lastName: "One", title: "Mrs.", whatsapp: "+2348030000000", schoolId: department.schoolId },
+    });
+    await prisma.user.create({
+      data: { ...people.gone, firstName: "Gone", lastName: "Away", departmentId: department.id, isActive: false },
+    });
+  });
+
+  afterAll(async () => {
+    await prisma.user.deleteMany({ where: { id: { in: Object.values(people).map((person) => person.id) } } });
+  });
+
+  const withEmail = async <T,>(run: (sent: { to: string[]; subject: string; text: string; from: string; reply_to?: string[] }[]) => Promise<T>) => {
+    const sent: { to: string[]; subject: string; text: string; from: string; reply_to?: string[] }[] = [];
+    const previous = { key: process.env.RESEND_API_KEY, replyTo: process.env.INVITATION_REPLY_TO };
+    process.env.RESEND_API_KEY = "test-key";
+    process.env.INVITATION_REPLY_TO = "deputy.director@babcock.edu.ng";
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      sent.push(JSON.parse(String(init?.body)));
+      return new Response("{}", { status: 200 });
+    });
+    try {
+      return await run(sent);
+    } finally {
+      fetchSpy.mockRestore();
+      if (previous.key === undefined) delete process.env.RESEND_API_KEY;
+      else process.env.RESEND_API_KEY = previous.key;
+      if (previous.replyTo === undefined) delete process.env.INVITATION_REPLY_TO;
+      else process.env.INVITATION_REPLY_TO = previous.replyTo;
+    }
+  };
+
+  it("sends one person's invitation with their school's DAP officer, and records it", async () => {
+    await withEmail(async (sent) => {
+      expect(await sendInvitation(people.head.id)).toMatchObject({ sent: true });
+      expect(sent).toHaveLength(1);
+      expect(sent[0]).toMatchObject({
+        to: [people.head.email],
+        subject: "Your Academic Bulletin desk is ready",
+        from: "Directorate of Academic Planning, Babcock University <notifications@academicplanning.app>",
+        reply_to: ["deputy.director@babcock.edu.ng"],
+      });
+      expect(sent[0].text).toContain("Dear Dr. Eze,");
+      expect(sent[0].text).toContain("Help: Mrs. Officer One, d3.officer@babcock.edu.ng, WhatsApp +2348030000000");
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: people.head.id } })).invitedAt).not.toBeNull();
+
+      // Admins and deactivated people get none.
+      expect(await sendInvitation(people.officer.id)).toMatchObject({ sent: false });
+      expect(await sendInvitation(people.gone.id)).toMatchObject({ sent: false });
+      expect(sent).toHaveLength(1);
+    });
+  });
+
+  it("waits for 8:00 am WAT on November 26 before sending the rest", async () => {
+    await withEmail(async (sent) => {
+      expect(await sendDueInvitations(new Date("2026-11-26T07:59:00+01:00"))).toEqual({ due: false, results: [] });
+      expect(sent).toHaveLength(0);
+      const later = await sendDueInvitations(new Date("2026-11-26T08:00:00+01:00"));
+      expect(later.due).toBe(true);
+      // The head was invited already; nobody is sent a second one this way.
+      expect(later.results.map((result) => result.email)).not.toContain(people.head.email);
+    });
+  });
+
+  it("records the first sign-in once, and keeps it", async () => {
+    const hd = "babcock.edu.ng";
+    expect(await allowGoogleSignIn({ email: people.head.email, email_verified: true, hd })).toBe(true);
+    const first = (await prisma.user.findUniqueOrThrow({ where: { id: people.head.id } })).firstSignInAt;
+    expect(first).not.toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(await allowGoogleSignIn({ email: people.head.email, email_verified: true, hd })).toBe(true);
+    const again = await prisma.user.findUniqueOrThrow({ where: { id: people.head.id } });
+    expect(again.firstSignInAt).toEqual(first);
+    expect(again.lastActiveAt!.getTime()).toBeGreaterThanOrEqual(first!.getTime());
   });
 });

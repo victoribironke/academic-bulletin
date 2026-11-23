@@ -20,6 +20,10 @@ export async function GET() {
         signInExceptionReason: true,
         signInExceptionGrantedBy: { select: { firstName: true, lastName: true } },
         mfaEnabledAt: true,
+        // D3: invited, first signed in, last active.
+        invitedAt: true,
+        firstSignInAt: true,
+        lastActiveAt: true,
         schoolId: true,
         departmentId: true,
         school: {
