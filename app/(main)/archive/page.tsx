@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatDate } from "@/lib/dates/format";
 
 /** A whole cycle archived in place, with its drafts (task A2). */
 type ArchivedCycle = {
@@ -46,11 +47,6 @@ const TYPE_LABELS: Record<string, string> = {
   STAFF: "Staff",
 };
 
-const dateFormat = new Intl.DateTimeFormat("en-US", {
-  month: "long",
-  day: "numeric",
-  year: "numeric",
-});
 
 export default function ArchivePage() {
   const router = useRouter();
@@ -189,7 +185,7 @@ export default function ArchivePage() {
                         : "Unknown"}
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground md:table-cell">
-                      {dateFormat.format(new Date(cycle.archivedAt))}
+                      {formatDate(cycle.archivedAt)}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
@@ -259,7 +255,7 @@ export default function ArchivePage() {
                       : "Unknown"}
                   </TableCell>
                   <TableCell className="hidden text-muted-foreground md:table-cell">
-                    {dateFormat.format(new Date(record.archivedAt))}
+                    {formatDate(record.archivedAt)}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button

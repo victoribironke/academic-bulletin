@@ -7,7 +7,7 @@ import {
   parseCourseSemester,
 } from "@/lib/courses/course-rules";
 import {
-  formatCourseTitle,
+  cleanCourseTitle,
   formatCourseCode,
   isValidCourseCode,
 } from "@/lib/validation/name-format";
@@ -42,7 +42,8 @@ export async function GET(request: Request) {
     const level = searchParams.get("level");
     const semester = searchParams.get("semester");
     const discoverable = searchParams.get("discoverable");
-    const query = searchParams.get("q")?.trim();
+    // K0: the search term, under any of the names callers use.
+    const query = (searchParams.get("q") ?? searchParams.get("search") ?? searchParams.get("query"))?.trim();
     // `page` asks for one page of full rows; `fields=summary` asks for every
     // course with only the fields the course-code picker needs.
     const paginated = searchParams.has("page");
@@ -115,9 +116,12 @@ export async function GET(request: Request) {
     }
 
     if (query) {
+      // "gst112" and "BU-GST112" find "GST 112" and "BU-GST 112" too.
+      const tidyCode = formatCourseCode(query);
       const search: Prisma.MasterCourseWhereInput = {
         OR: [
           { code: { contains: query, mode: "insensitive" } },
+          ...(tidyCode && tidyCode !== query ? [{ code: { contains: tidyCode, mode: "insensitive" as const } }] : []),
           { title: { contains: query, mode: "insensitive" } },
         ],
       };
@@ -362,7 +366,7 @@ export async function POST(request: Request) {
     const course = await prisma.masterCourse.create({
       data: {
         code: formatCourseCode(code),
-        title: formatCourseTitle(title),
+        title: cleanCourseTitle(title),
         units,
         type: type || "CORE",
         ownership: resolvedOwnership,

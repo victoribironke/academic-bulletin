@@ -1,7 +1,6 @@
 import { cookies } from "next/headers";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { SiteHeader } from "@/components/layout/site-header";
-import { HelpButton } from "@/components/layout/help-button";
 import { CountdownBar } from "@/components/calendar/countdown";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { UserProvider } from "@/contexts/user-context";
@@ -27,7 +26,6 @@ export default async function MainLayout({
             <div className="mx-auto w-full max-w-7xl">{children}</div>
           </main>
         </SidebarInset>
-        <HelpButton />
       </SidebarProvider>
     </UserProvider>
   );

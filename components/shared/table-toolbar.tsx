@@ -74,7 +74,9 @@ export function TableCard({
   className?: string;
 }) {
   return (
-    <div className={cn("overflow-hidden rounded-lg border bg-card", className)}>
+    // Q2: "@container" lets a table show or hide columns by its own width,
+    // so the side menu being open doesn't push a column off the edge.
+    <div className={cn("@container overflow-hidden rounded-lg border bg-card", className)}>
       <div className="overflow-x-auto">{children}</div>
     </div>
   );

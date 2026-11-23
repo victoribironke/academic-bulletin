@@ -14,6 +14,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useUser } from "@/contexts/user-context";
+import { HelpButton } from "@/components/layout/help-button";
 
 const SEGMENT_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
@@ -91,6 +92,9 @@ export function SiteHeader() {
             })}
           </BreadcrumbList>
         </Breadcrumb>
+        <div className="ml-auto">
+          <HelpButton />
+        </div>
       </div>
     </header>
   );

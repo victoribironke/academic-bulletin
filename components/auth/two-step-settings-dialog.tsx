@@ -14,15 +14,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RecoveryCodes } from "@/components/auth/recovery-codes";
+import { formatDate } from "@/lib/dates/format";
 
 type Status = { enabledAt: string | null; recoveryCodesLeft: number };
 
-const longDate = new Intl.DateTimeFormat("en-US", {
-  month: "long",
-  day: "numeric",
-  year: "numeric",
-  timeZone: "Africa/Lagos",
-});
 
 /**
  * An admin's own two-step verification: when it was set up, how many
@@ -130,7 +125,7 @@ export function TwoStepSettingsDialog({
               <div>
                 <dt className="text-xs text-muted-foreground">Set up</dt>
                 <dd className="font-medium">
-                  {status.enabledAt ? longDate.format(new Date(status.enabledAt)) : "Not yet"}
+                  {status.enabledAt ? formatDate(status.enabledAt) : "Not yet"}
                 </dd>
               </div>
               <div>

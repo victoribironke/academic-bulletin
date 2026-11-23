@@ -49,6 +49,7 @@ import {
 } from "@/components/users/sign-in-exception-dialog";
 import { isPrivilegedRole, isUniversityEmail } from "@/lib/sign-in-access";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/dates/format";
 
 interface School {
   id: string;
@@ -529,9 +530,9 @@ export default function UsersPage() {
                       {/* D3: invited, first sign-in, last active. */}
                       <span className="mt-0.5 block text-xs text-muted-foreground">
                         {user.firstSignInAt
-                          ? `Signed in ${shortDate(user.firstSignInAt)}${user.lastActiveAt ? ` · last active ${shortDate(user.lastActiveAt)}` : ""}`
+                          ? `Signed in ${formatDate(user.firstSignInAt)}${user.lastActiveAt ? ` · last active ${formatDate(user.lastActiveAt)}` : ""}`
                           : user.invitedAt
-                            ? `Invited ${shortDate(user.invitedAt)} · not signed in yet`
+                            ? `Invited ${formatDate(user.invitedAt)} · not signed in yet`
                             : "Not signed in yet"}
                       </span>
                     </TableCell>
@@ -623,15 +624,6 @@ export default function UsersPage() {
 /** D3: the roles that get an invitation. */
 const INVITED_ROLES: string[] = ["HOD", "PROGRAMME_COORDINATOR", "DEAN"];
 
-const shortDateFormat = new Intl.DateTimeFormat("en-US", {
-  timeZone: "Africa/Lagos",
-  month: "long",
-  day: "numeric",
-  year: "numeric",
-});
-function shortDate(value: string): string {
-  return shortDateFormat.format(new Date(value));
-}
 
 /** Sends one person's invitation, or sends it again. */
 function InviteButton({ userId, invited, onSent }: { userId: string; invited: boolean; onSent: () => void }) {

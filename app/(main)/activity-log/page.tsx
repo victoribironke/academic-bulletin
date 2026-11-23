@@ -24,6 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatDateWithDay, formatTime } from "@/lib/dates/format";
 
 type Activity = {
   id: string;
@@ -60,13 +61,6 @@ type ActivityResponse = {
   };
 };
 
-const timeFormat = new Intl.DateTimeFormat("en-NG", { timeStyle: "short" });
-const dayFormat = new Intl.DateTimeFormat("en-NG", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-});
 
 function dayKey(value: string) {
   const date = new Date(value);
@@ -305,9 +299,9 @@ export default function ActivityLogPage() {
               <TableHeader>
                 <TableRow className="bg-muted/50 hover:bg-muted/50">
                   <TableHead className="w-24">Time</TableHead>
-                  <TableHead className="w-52">Person</TableHead>
+                  <TableHead className="w-40 @3xl:w-52">Person</TableHead>
                   <TableHead>Activity</TableHead>
-                  <TableHead className="hidden lg:table-cell">Record</TableHead>
+                  <TableHead className="hidden @3xl:table-cell">Record</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -326,13 +320,13 @@ export default function ActivityLogPage() {
                             colSpan={4}
                             className="py-2 text-xs font-medium text-muted-foreground"
                           >
-                            {dayFormat.format(new Date(item.createdAt))}
+                            {formatDateWithDay(item.createdAt)}
                           </TableCell>
                         </TableRow>
                       )}
                       <TableRow>
                         <TableCell className="align-top text-sm whitespace-nowrap text-muted-foreground">
-                          {timeFormat.format(new Date(item.createdAt))}
+                          {formatTime(item.createdAt)}
                         </TableCell>
                         <TableCell className="align-top">
                           {item.actor ? (
@@ -354,7 +348,7 @@ export default function ActivityLogPage() {
                             {readable(item.action)}
                           </p>
                         </TableCell>
-                        <TableCell className="hidden align-top text-sm text-muted-foreground lg:table-cell">
+                        <TableCell className="hidden align-top text-sm text-muted-foreground @3xl:table-cell">
                           {readable(item.entityType)}
                           {item.entityId && (
                             <span className="block max-w-48 truncate font-mono text-xs">
@@ -370,7 +364,7 @@ export default function ActivityLogPage() {
             </Table>
           </TableCard>
 
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
             <span>{data.total} recorded activities</span>
             <div className="flex items-center gap-2">
               <Button

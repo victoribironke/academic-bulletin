@@ -9,6 +9,7 @@ import {
   normalizeEmail,
   personalAccountMayUseApp,
 } from "@/lib/sign-in-access";
+import { formatDate } from "@/lib/dates/format";
 
 /**
  * Auth.js callbacks (wired up in /auth.ts), kept apart so they can be tested
@@ -29,12 +30,6 @@ type GoogleProfile = {
   hd?: unknown;
 };
 
-const dateFormat = new Intl.DateTimeFormat("en-US", {
-  month: "long",
-  day: "numeric",
-  year: "numeric",
-  timeZone: "Africa/Lagos",
-});
 
 /** True to let the sign-in through, or the login page URL with the reason. */
 export async function allowGoogleSignIn(
@@ -71,7 +66,7 @@ export async function allowGoogleSignIn(
       action: "SIGN_IN_VIA_EXCEPTION",
       entityType: "USER",
       entityId: appUser.id,
-      description: `Signed in with a personal Google account under a sign-in exception that ends ${dateFormat.format(appUser.signInExceptionUntil)}.`,
+      description: `Signed in with a personal Google account under a sign-in exception that ends ${formatDate(appUser.signInExceptionUntil)}.`,
       metadata: { until: appUser.signInExceptionUntil.toISOString() },
     });
   }

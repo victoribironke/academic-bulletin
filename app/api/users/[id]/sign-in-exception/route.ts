@@ -8,6 +8,7 @@ import {
   parseSignInExceptionEnd,
   UNIVERSITY_DOMAIN,
 } from "@/lib/sign-in-access";
+import { formatDate } from "@/lib/dates/format";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -15,12 +16,6 @@ interface RouteParams {
 
 const MAX_REASON_LENGTH = 300;
 
-const dateFormat = new Intl.DateTimeFormat("en-US", {
-  month: "long",
-  day: "numeric",
-  year: "numeric",
-  timeZone: "Africa/Lagos",
-});
 
 const refuse = (error: string, status = 400) =>
   NextResponse.json({ error }, { status });
@@ -91,7 +86,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           action: "SIGN_IN_EXCEPTION_GRANTED",
           entityType: "USER",
           entityId: id,
-          description: `${renewing ? "Changed" : "Gave"} ${name}'s sign-in exception for a personal Google account, to end ${dateFormat.format(end.until)}: ${reason}`,
+          description: `${renewing ? "Changed" : "Gave"} ${name}'s sign-in exception for a personal Google account, to end ${formatDate(end.until)}: ${reason}`,
           metadata: {
             email: target.email,
             until: end.until.toISOString(),

@@ -4,6 +4,7 @@
  * The help panel (work order task H1): a quick start for the person's role in
  * the exact words of the screens, their current deadline and next
  * checkpoint, the DAP officer for their school, and the Academic Policy (H9).
+ * It opens from the top bar on every page (H3).
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -64,14 +65,11 @@ export function HelpButton() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
+      {/* H3: in the top bar, so it never covers a control on the page. */}
       <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          size="icon"
-          className="fixed bottom-6 right-6 h-12 w-12 rounded-full shadow-lg z-50"
-          aria-label="Help and quick start"
-        >
-          <HelpCircle className="h-6 w-6" />
+        <Button variant="ghost" size="sm" className="gap-1.5" aria-label="Help and quick start">
+          <HelpCircle className="h-4 w-4" />
+          <span className="hidden sm:inline">Help</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">

@@ -53,6 +53,7 @@ import {
 } from "@/components/shared/states";
 import { cn } from "@/lib/utils";
 import { DeadlinesPanel } from "@/components/calendar/countdown";
+import { formatDate } from "@/lib/dates/format";
 
 interface DashboardStats {
   submissions: {
@@ -133,13 +134,6 @@ function greeting(): string {
   return "Good evening";
 }
 
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
 
 function StatCard({
   title,

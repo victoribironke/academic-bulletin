@@ -34,6 +34,7 @@ import {
 } from "./document-utils";
 import { validateBulletinData } from "./validation";
 import { loadPhoto } from "@/lib/storage";
+import { formatDate } from "@/lib/dates/format";
 
 const NAVY = "123B66";
 const GOLD = "C99A2E";
@@ -239,7 +240,7 @@ function coverPage(programme: BulletinProgramme, draft: boolean): Paragraph[] {
       spacing: { before: 700 },
       children: [
         new TextRun({
-          text: `Generated ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`,
+          text: `Generated ${formatDate(new Date())}`,
           color: "526173",
           size: 19,
         }),

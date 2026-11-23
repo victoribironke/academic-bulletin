@@ -16,6 +16,7 @@ import { Loader2, Printer, Download, BookOpen } from "lucide-react";
 import { BulletinData } from "@/lib/bulletin/generation";
 import { BulletinProgrammeView } from "@/components/preview/bulletin-programme-view";
 import { useUser } from "@/contexts/user-context";
+import { formatDate } from "@/lib/dates/format";
 
 interface School {
   id: string;
@@ -259,7 +260,7 @@ export function BulletinGenerator() {
             <p className="text-2xl">Academic Bulletin</p>
             <p className="text-sm text-muted-foreground mt-8">
               Generated on{" "}
-              {new Date(generatedData.generatedAt).toLocaleDateString()}
+              {formatDate(generatedData.generatedAt)}
             </p>
           </div>
 

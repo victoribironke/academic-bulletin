@@ -32,6 +32,7 @@ import {
 import { PHASE_NAMES, STATUS_LABELS } from "@/lib/submissions/phases";
 import { cn } from "@/lib/utils";
 import type { SubmissionProgress } from "@/lib/submissions/progress";
+import { formatDate } from "@/lib/dates/format";
 
 export interface SubmissionRow {
   id: string;
@@ -64,14 +65,6 @@ interface Cycle {
   isActive: boolean;
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
 
 /**
  * Filterable, searchable table of submissions.
@@ -273,9 +266,9 @@ export function SubmissionsList({
                 <TableHead>Programme</TableHead>
                 <TableHead>Phase</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="hidden md:table-cell">Cycle</TableHead>
-                <TableHead className="hidden sm:table-cell">Comments</TableHead>
-                <TableHead className="hidden lg:table-cell">Updated</TableHead>
+                <TableHead className="hidden @3xl:table-cell">Cycle</TableHead>
+                <TableHead className="hidden @2xl:table-cell">Comments</TableHead>
+                <TableHead className="hidden @4xl:table-cell">Updated</TableHead>
                 <TableHead className="w-10">
                   <span className="sr-only">Open</span>
                 </TableHead>
@@ -344,7 +337,7 @@ export function SubmissionsList({
                         </p>
                       </div>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
+                    <TableCell className="hidden @3xl:table-cell">
                       <span className="text-sm">{submission.cycle?.name ?? "—"}</span>
                       {submission.cycle?.isActive && (
                         <Badge variant="secondary" className="ml-2 px-1.5 py-0 text-[10px] font-normal">
@@ -352,14 +345,14 @@ export function SubmissionsList({
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell className="hidden sm:table-cell">
+                    <TableCell className="hidden @2xl:table-cell">
                       <span className="inline-flex items-center gap-1 text-muted-foreground">
                         <MessageSquare className="size-4" />
                         {submission._count.comments}
                       </span>
                     </TableCell>
-                    <TableCell className="hidden text-muted-foreground lg:table-cell">
-                      {formatDate(submission.updatedAt)}
+                    <TableCell className="hidden text-muted-foreground @4xl:table-cell">
+                      {submission.updatedAt ? formatDate(submission.updatedAt) : "—"}
                     </TableCell>
                     <TableCell>
                       <ArrowRight className="size-4 text-muted-foreground" />

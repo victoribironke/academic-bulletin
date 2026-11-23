@@ -18,7 +18,7 @@ import {
   isGeneralEducationCode,
   isGeneralEducationFamily,
 } from "@/lib/courses/general-education";
-import { formatCourseCode, formatCourseTitle, isValidCourseCode } from "@/lib/validation/name-format";
+import { cleanCourseTitle, formatCourseCode, isValidCourseCode } from "@/lib/validation/name-format";
 
 type Database = PrismaClient | Prisma.TransactionClient;
 
@@ -194,7 +194,7 @@ export function planCourseStructure(input: {
         message: `${code} isn't in the Registry yet; added from file 02 and linked once the Registry has it.`,
       });
     }
-    const title = uniqueTitle(master?.title ?? formatCourseTitle(row.title.trim()), code, takenTitles);
+    const title = uniqueTitle(master?.title ?? cleanCourseTitle(row.title.trim()), code, takenTitles);
     takenTitles.add(titleKey(title));
     taken.add(code);
     courses.push({

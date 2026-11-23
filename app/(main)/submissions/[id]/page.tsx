@@ -78,6 +78,7 @@ import {
 } from "@/lib/submissions/phases";
 import type { SubmissionWorkflow } from "@/lib/submissions/phase-owners";
 import { PageHeader } from "@/components/shared/page-header";
+import { formatDate, formatTime } from "@/lib/dates/format";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { PhaseTracker } from "@/components/shared/phase-tracker";
 import { EmptyState } from "@/components/shared/states";
@@ -1267,7 +1268,7 @@ export default function SubmissionDetailPage({
               {overrides.map((t) => (
                 <li key={t.id}>
                   {t.performedBy.firstName} {t.performedBy.lastName} acted on Phase {t.fromPhase} on{" "}
-                  {new Date(t.transitionedAt).toLocaleDateString()}: {t.phaseOverride?.reason}
+                  {formatDate(t.transitionedAt)}: {t.phaseOverride?.reason}
                 </li>
               ))}
             </ul>
@@ -1283,7 +1284,7 @@ export default function SubmissionDetailPage({
             <p className="font-medium">
               Revision requested by {latestSendBack.performedBy.firstName}{" "}
               {latestSendBack.performedBy.lastName} on{" "}
-              {new Date(latestSendBack.transitionedAt).toLocaleDateString()}
+              {formatDate(latestSendBack.transitionedAt)}
             </p>
             {latestSendBack.remarks && (
               <p className="mt-1 whitespace-pre-wrap">{latestSendBack.remarks}</p>
@@ -1344,7 +1345,7 @@ export default function SubmissionDetailPage({
                         All changes saved
                         {lastSavedAt && (
                           <span className="ml-1 text-muted-foreground">
-                            ({lastSavedAt.toLocaleTimeString()})
+                            ({formatTime(lastSavedAt)})
                           </span>
                         )}
                       </span>
@@ -1559,7 +1560,7 @@ export default function SubmissionDetailPage({
                             <p className="text-sm mt-1">{comment.content}</p>
                             <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
                               <Clock className="h-3 w-3" />
-                              {new Date(comment.createdAt).toLocaleDateString()}
+                              {formatDate(comment.createdAt)}
                               <span>• Phase {comment.phase}</span>
                             </div>
                           </div>

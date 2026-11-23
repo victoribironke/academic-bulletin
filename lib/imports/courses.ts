@@ -1,6 +1,6 @@
 import {
   formatCourseCode,
-  formatCourseTitle,
+  cleanCourseTitle,
   isValidCourseCode,
 } from "@/lib/validation/name-format";
 import {
@@ -220,7 +220,7 @@ export function validateCourseImportRows(
     const rawCode = importText(getImportValue(raw, ["Course Code", "Code"]));
     const rawTitle = importText(getImportValue(raw, ["Course Title", "Title"]));
     const code = formatCourseCode(rawCode);
-    const title = formatCourseTitle(rawTitle);
+    const title = cleanCourseTitle(rawTitle);
     const units = numberValue(getImportValue(raw, ["Units", "Credit Units"]));
     const statusInput = normalizedEnum(getImportValue(raw, ["Status", "Course Status"]) || "CORE");
     const semester = readSemester(raw, errors, warnings);
@@ -283,7 +283,7 @@ export function validateMasterCourseImportRows(
     const rawCode = importText(getImportValue(raw, ["Course Code", "Code"]));
     const rawTitle = importText(getImportValue(raw, ["Course Title", "Title"]));
     const code = formatCourseCode(rawCode);
-    const title = formatCourseTitle(rawTitle);
+    const title = cleanCourseTitle(rawTitle);
     const units = numberValue(getImportValue(raw, ["Units", "Credit Units"]));
     const type = normalizedEnum(getImportValue(raw, ["Course Type", "Type"]) || "CORE");
     const ownership = normalizedEnum(getImportValue(raw, ["Ownership"]) || "DEPARTMENT");

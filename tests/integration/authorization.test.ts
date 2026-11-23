@@ -6116,3 +6116,29 @@ describe("what is waiting on each desk (T1)", () => {
     }
   });
 });
+
+describe("the Registry search box (K0)", () => {
+  afterAll(async () => {
+    await prisma.masterCourse.deleteMany({ where: { id: { in: ["k0-one", "k0-two"] } } });
+  });
+
+  it("filters on the server whatever the search is called, and finds a code typed without its space", async () => {
+    await prisma.masterCourse.createMany({
+      data: [
+        { id: "k0-one", code: "KZQ 112", title: "Zebra Search Course", units: 2, level: 100, semester: 1, ownerDeptId: ids.departmentA },
+        { id: "k0-two", code: "KZR 113", title: "Another Course", units: 2, level: 100, semester: 2, ownerDeptId: ids.departmentA },
+      ],
+    });
+    authState.userId = ids.admin;
+    const codes = async (query: string) => {
+      const response = await listMasterCourses(new Request(`http://localhost/api/master-courses?page=1&${query}`));
+      expect(response.status).toBe(200);
+      return ((await response.json()) as { items: { code: string }[] }).items.map((item) => item.code);
+    };
+    expect(await codes("q=zebra")).toEqual(["KZQ 112"]);
+    expect(await codes("search=zebra")).toEqual(["KZQ 112"]);
+    expect(await codes("query=Zebra")).toEqual(["KZQ 112"]);
+    expect(await codes("q=kzq112")).toEqual(["KZQ 112"]);
+    expect((await codes("q=KZ")).sort()).toEqual(["KZQ 112", "KZR 113"]);
+  });
+});

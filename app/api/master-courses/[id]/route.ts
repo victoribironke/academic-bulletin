@@ -7,7 +7,7 @@ import {
   parseCourseSemester,
 } from "@/lib/courses/course-rules";
 import {
-  formatCourseTitle,
+  cleanCourseTitle,
   isValidCourseCode,
   formatCourseCode,
 } from "@/lib/validation/name-format";
@@ -155,7 +155,7 @@ export async function PATCH(
       }
       updateData.code = formatCourseCode(code);
     }
-    if (title !== undefined) updateData.title = formatCourseTitle(title);
+    if (title !== undefined) updateData.title = cleanCourseTitle(title);
     if (units !== undefined) {
       if (!isValidCourseUnits(units)) {
         return NextResponse.json({ error: UNITS_RULE_MESSAGE }, { status: 400 });
@@ -256,7 +256,7 @@ export async function PATCH(
     // Propagate changes to linked submission courses
     const propagationResult = await propagateMasterCourseChanges({
       id,
-      title: title !== undefined ? formatCourseTitle(title) : undefined,
+      title: title !== undefined ? cleanCourseTitle(title) : undefined,
       units,
       level,
       semester,

@@ -14,6 +14,7 @@ import {
 } from "./document-utils";
 import { validateBulletinData } from "./validation";
 import { loadPhoto } from "@/lib/storage";
+import { formatDate } from "@/lib/dates/format";
 
 const MARGIN = 54;
 const NAVY = "#123B66";
@@ -291,7 +292,7 @@ function drawCover(doc: PdfDoc, programme: BulletinProgramme, draft: boolean) {
     );
   }
   doc.fillColor("#526173").font("Helvetica").fontSize(9.5).text(
-    `Generated ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`,
+    `Generated ${formatDate(new Date())}`,
     MARGIN,
     doc.page.height - 92,
     { width: contentWidth(doc), align: "center" },

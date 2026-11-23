@@ -30,9 +30,9 @@ import { PageHeader } from "@/components/shared/page-header";
 import { TableCard } from "@/components/shared/table-toolbar";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/shared/states";
 import { toast } from "sonner";
-import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { formatDate } from "@/lib/dates/format";
 
 type ReviewCycle = {
   id: string;
@@ -317,7 +317,7 @@ export default function ReviewCyclesPage() {
                     )}
                   </TableCell>
                   <TableCell className="hidden text-muted-foreground sm:table-cell">
-                    {format(new Date(cycle.startedAt), "d MMM yyyy")}
+                    {formatDate(cycle.startedAt)}
                   </TableCell>
                   <TableCell className="hidden tabular-nums md:table-cell">
                     {cycle._count?.submissions ?? 0}

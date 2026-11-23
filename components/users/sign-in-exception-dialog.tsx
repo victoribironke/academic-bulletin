@@ -22,6 +22,7 @@ import {
   MAX_SIGN_IN_EXCEPTION_DAYS,
   UNIVERSITY_DOMAIN,
 } from "@/lib/sign-in-access";
+import { formatDate } from "@/lib/dates/format";
 
 export type SignInExceptionUser = {
   id: string;
@@ -36,16 +37,10 @@ export type SignInExceptionUser = {
 const DEFAULT_DAYS = 30;
 const MAX_REASON_LENGTH = 300;
 
-const longDate = new Intl.DateTimeFormat("en-US", {
-  month: "long",
-  day: "numeric",
-  year: "numeric",
-  timeZone: "Africa/Lagos",
-});
 
 /** "December 19, 2026" for an exception's end, in Lagos time. */
 export function formatExceptionDate(value: string | Date): string {
-  return longDate.format(new Date(value));
+  return formatDate(value);
 }
 
 export function hasActiveException(user: SignInExceptionUser): boolean {

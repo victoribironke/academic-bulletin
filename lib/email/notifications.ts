@@ -16,6 +16,7 @@ import { getSiteUrl } from "@/lib/site-url";
 import { PHASE_NAMES, TOTAL_PHASES } from "@/lib/submissions/phases";
 import { isEmailConfigured, sendEmail } from "./resend";
 import { NOT_IN_ARCHIVED_CYCLE } from "@/lib/cycles/archive";
+import { formatDate, formatDateTime } from "@/lib/dates/format";
 
 export function escapeHtml(value: string): string {
   return value
@@ -139,13 +140,6 @@ const DECISION_LABELS: Record<string, string> = {
   RETURN: "Returned to the previous phase",
 };
 
-function formatDate(value: Date): string {
-  return value.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    timeZone: "Africa/Lagos",
-  });
-}
 
 export type DigestResult = {
   transitions: number;
@@ -489,11 +483,6 @@ export type TwoStepNotice =
   | { kind: "reset" }
   | { kind: "locked" };
 
-const noticeTime = new Intl.DateTimeFormat("en-GB", {
-  dateStyle: "long",
-  timeStyle: "short",
-  timeZone: "Africa/Lagos",
-});
 
 /**
  * Tells someone their two-step verification changed, so a change they didn't
@@ -549,7 +538,7 @@ export async function sendTwoStepNoticeEmail(opts: {
     intro,
     details: [
       ["Account", opts.to],
-      ["When", noticeTime.format(opts.at ?? new Date())],
+      ["When", formatDateTime(opts.at ?? new Date())],
     ],
     link: `${getSiteUrl()}/login`,
     linkLabel: "Open the Academic Bulletin",
