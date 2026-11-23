@@ -1262,6 +1262,15 @@ export function MasterCourseManager({
                   "Descriptions preloaded into active bulletins will be checked automatically for GRACE compliance.",
               },
             );
+            // A5: rows that used an old school, department or programme code.
+            const codeWarnings: { row: number; warnings: string[] }[] = data.codeWarnings ?? [];
+            if (codeWarnings.length > 0) {
+              const unique = [...new Set(codeWarnings.flatMap((item) => item.warnings))];
+              toast.warning(`${codeWarnings.length} row(s) used old codes; they were accepted.`, {
+                description: unique.slice(0, 4).join(" ") + (unique.length > 4 ? ` And ${unique.length - 4} more.` : ""),
+                duration: 15000,
+              });
+            }
             await fetchData();
           }}
         />

@@ -159,8 +159,12 @@ model Programme {
   name        String
   code        String   @unique
   description String?
-  degreeType  String? // e.g., "BSc", "MSc", "PhD"
+  degreeType  String? // e.g., "B.Sc.", "B.Eng.", "MBBS" (code standard, section 1.1)
   duration    Int? // Duration in years
+  /// Kept from Heads of Department until DAP confirms it is still offered (task B15).
+  isHidden    Boolean  @default(false)
+  /// Newly approved, with no page in the 2023-2027 bulletin (task B18).
+  isNew       Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -175,6 +179,24 @@ model Programme {
 
   @@unique([name, departmentId])
   @@map("programmes")
+}
+
+/// An old school, department or programme code kept findable after the code
+/// standard of November 23, 2026 (task A5). Uploads that use it are accepted
+/// with a warning naming the new code until `validUntil` (end of
+/// Departmental Drafting, February 4, 2027).
+model CodeAlias {
+  id         String   @id @default(cuid())
+  kind       String // SCHOOL, DEPARTMENT or PROGRAMME
+  oldCode    String
+  newCode    String
+  entityId   String
+  validUntil DateTime
+  createdAt  DateTime @default(now())
+
+  @@unique([kind, oldCode])
+  @@index([entityId])
+  @@map("code_aliases")
 }
 
 // ============================================================================

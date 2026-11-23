@@ -45,6 +45,12 @@ type Programme = {
   duration: number | null;
   description: string | null;
   departmentId: string;
+  /** B18: newly approved, with no page in the 2023-2027 bulletin. */
+  isNew?: boolean;
+  /** B15: kept from Heads of Department until DAP confirms it. */
+  isHidden?: boolean;
+  /** A5: old codes that still find this unit. */
+  formerCodes?: string[];
 };
 type Department = {
   id: string;
@@ -53,6 +59,7 @@ type Department = {
   description: string | null;
   schoolId: string;
   programmes: Programme[];
+  formerCodes?: string[];
 };
 type School = {
   id: string;
@@ -60,6 +67,7 @@ type School = {
   code: string;
   description: string | null;
   departments: Department[];
+  formerCodes?: string[];
 };
 
 export default function AcademicUnitsPage() {
@@ -264,11 +272,14 @@ export default function AcademicUnitsPage() {
     if (!query) return schools;
     return schools
       .map((school) => {
-        if (matches(school.name, school.code)) return school;
+        // Old codes (A5) find their unit too.
+        if (matches(school.name, school.code, ...(school.formerCodes ?? []))) return school;
         const departments = school.departments
           .map((dept) => {
-            if (matches(dept.name, dept.code)) return dept;
-            const programmes = dept.programmes.filter((p) => matches(p.name, p.code));
+            if (matches(dept.name, dept.code, ...(dept.formerCodes ?? []))) return dept;
+            const programmes = dept.programmes.filter((p) =>
+              matches(p.name, p.code, ...(p.formerCodes ?? [])),
+            );
             return programmes.length ? { ...dept, programmes } : null;
           })
           .filter((d): d is Department => d !== null);
@@ -466,6 +477,19 @@ export default function AcademicUnitsPage() {
                                         {prog.duration && (
                                           <span className="shrink-0 rounded border px-1.5 py-0.5 text-[11px] text-muted-foreground">
                                             {prog.duration} yrs
+                                          </span>
+                                        )}
+                                        {prog.isNew && (
+                                          <span className="shrink-0 rounded border border-brand-gold/50 bg-brand-gold/10 px-1.5 py-0.5 text-[11px] font-medium">
+                                            New programme
+                                          </span>
+                                        )}
+                                        {prog.isHidden && (
+                                          <span
+                                            className="shrink-0 rounded border border-dashed px-1.5 py-0.5 text-[11px] text-muted-foreground"
+                                            title="Hidden from Heads of Department until DAP confirms it is still offered"
+                                          >
+                                            Hidden
                                           </span>
                                         )}
                                       </span>

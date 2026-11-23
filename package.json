@@ -18,6 +18,7 @@
     "db:generate": "prisma generate",
     "db:push": "cross-env NODE_OPTIONS=--dns-result-order=ipv4first prisma db push",
     "db:prepare-staging": "node scripts/prepare-staging-database.mjs",
+    "units:code-standard": "tsx scripts/apply-code-standard.ts",
     "db:seed": "bun run prisma/seed.ts",
     "db:seed-units": "bun run scripts/seed-platform.ts",
     "db:sync-ccmas": "bun run scripts/sync-ccmas.ts",

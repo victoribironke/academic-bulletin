@@ -18,6 +18,8 @@ export async function GET(request: NextRequest) {
         ...(auth.user.role === "PROGRAMME_COORDINATOR" && {
           id: { in: auth.user.programmeIds },
         }),
+        // B15: hidden programmes are seen only by administrators.
+        ...(!["ADMIN", "SUPER_ADMIN"].includes(auth.user.role) && { isHidden: false }),
         ...(departmentId && { departmentId }),
         ...(schoolId && { department: { schoolId } }),
       },

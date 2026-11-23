@@ -9,6 +9,7 @@ import {
 import { recordActivity } from "@/lib/activity-log";
 import { preloadRegistryCoursesForSubmission } from "@/lib/courses/gst-pool";
 import { matchProgrammeNames } from "@/lib/courses/programme-matching";
+import { type CodeLookup, loadCodeLookups } from "@/lib/units/code-aliases";
 
 const MAX_IMPORT_ROWS = 5000;
 
@@ -49,37 +50,45 @@ export async function POST(request: Request) {
       );
     }
 
-    const departmentCodes = Array.from(
-      new Set(validated.map((row) => row.data!.ownerDepartmentCode).filter(Boolean)),
-    );
-    const schoolCodes = Array.from(
-      new Set(validated.map((row) => row.data!.ownerSchoolCode).filter(Boolean)),
-    );
-    const [departments, schools, programmes] = await Promise.all([
-      prisma.department.findMany({ where: { code: { in: departmentCodes } }, select: { id: true, code: true } }),
-      prisma.school.findMany({ where: { code: { in: schoolCodes } }, select: { id: true, code: true } }),
+    // Current codes, plus old codes still accepted with a warning (A5).
+    const [lookups, programmes] = await Promise.all([
+      loadCodeLookups(),
       prisma.programme.findMany({
         select: { id: true, code: true, name: true, degreeType: true },
       }),
     ]);
-    const departmentByCode = new Map(departments.map((department) => [department.code.toUpperCase(), department.id]));
-    const schoolByCode = new Map(schools.map((school) => [school.code.toUpperCase(), school.id]));
-    const programmeByCode = new Map(
-      programmes.map((programme) => [programme.code.toUpperCase(), programme.id]),
-    );
+    const codeWarnings: { row: number; warnings: string[] }[] = [];
+    const resolveCode = (lookup: CodeLookup, code: string, rowNumber: number) => {
+      const found = lookup.resolve(code);
+      if (found?.warning) {
+        const entry = codeWarnings.find((item) => item.row === rowNumber);
+        if (entry) entry.warnings.push(found.warning);
+        else codeWarnings.push({ row: rowNumber, warnings: [found.warning] });
+      }
+      return found?.id;
+    };
+    const departmentIdByRow = new Map<number, string | undefined>();
+    const schoolIdByRow = new Map<number, string | undefined>();
+    const programmeIdsByRow = new Map<number, string[]>();
     const ownerIssues = validated.flatMap((row) => {
       const data = row.data!;
-      if (
-        data.ownerDepartmentCode &&
-        !departmentByCode.has(data.ownerDepartmentCode)
-      ) {
+      const departmentId = data.ownerDepartmentCode
+        ? resolveCode(lookups.department, data.ownerDepartmentCode, row.rowNumber)
+        : undefined;
+      if (data.ownerDepartmentCode && !departmentId) {
         return [{ row: row.rowNumber, errors: [`Unknown department code ${data.ownerDepartmentCode}.`] }];
       }
-      if (data.ownership === "SCHOOL" && !schoolByCode.has(data.ownerSchoolCode)) {
+      departmentIdByRow.set(row.rowNumber, departmentId);
+      const schoolId =
+        data.ownership === "SCHOOL" ? resolveCode(lookups.school, data.ownerSchoolCode, row.rowNumber) : undefined;
+      if (data.ownership === "SCHOOL" && !schoolId) {
         return [{ row: row.rowNumber, errors: [`Unknown school code ${data.ownerSchoolCode}.`] }];
       }
+      schoolIdByRow.set(row.rowNumber, schoolId);
+      const programmeIds = data.programmeCodes.map((code) => resolveCode(lookups.programme, code, row.rowNumber));
+      programmeIdsByRow.set(row.rowNumber, programmeIds.filter((id): id is string => Boolean(id)));
       const unknownProgrammes = data.programmeCodes.filter(
-        (code) => !programmeByCode.has(code),
+        (_code, index) => !programmeIds[index],
       );
       if (unknownProgrammes.length > 0) {
         return [
@@ -109,7 +118,7 @@ export async function POST(request: Request) {
     const ambiguousSourceProgrammes = new Set<string>();
 
     await prisma.$transaction(async (tx) => {
-      for (const { data } of validated) {
+      for (const { data, rowNumber } of validated) {
         const row = data!;
         const courseData = {
           title: row.title,
@@ -127,13 +136,8 @@ export async function POST(request: Request) {
           sourceReference: row.sourceReference || null,
           sourceProgrammes: row.sourceProgrammes,
           discoverable: row.discoverable,
-          ownerDeptId: row.ownerDepartmentCode
-            ? departmentByCode.get(row.ownerDepartmentCode)
-            : null,
-          ownerSchoolId:
-            row.ownership === "SCHOOL"
-              ? schoolByCode.get(row.ownerSchoolCode)
-              : null,
+          ownerDeptId: departmentIdByRow.get(rowNumber) ?? null,
+          ownerSchoolId: row.ownership === "SCHOOL" ? (schoolIdByRow.get(rowNumber) ?? null) : null,
         };
         const course = await tx.masterCourse.upsert({
           where: { code: row.code },
@@ -155,7 +159,7 @@ export async function POST(request: Request) {
           ambiguousSourceProgrammes.add(name),
         );
         const resolvedProgrammeIds = new Set([
-          ...row.programmeCodes.map((code) => programmeByCode.get(code)!),
+          ...(programmeIdsByRow.get(rowNumber) ?? []),
           ...sourceMatches.matchedIds,
         ]);
         resolvedProgrammeIds.forEach((id) => affectedProgrammeIds.add(id));
@@ -218,6 +222,8 @@ export async function POST(request: Request) {
         submissionsPreloaded: editableSubmissions.length,
         unmatchedSourceProgrammes: [...unmatchedSourceProgrammes].sort(),
         ambiguousSourceProgrammes: [...ambiguousSourceProgrammes].sort(),
+        // Rows that used an old school, department or programme code (A5).
+        codeWarnings,
       },
       { status: 201 },
     );
