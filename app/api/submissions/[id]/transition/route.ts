@@ -6,8 +6,9 @@ import {
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
 import {
-  canPerformWorkflowAction,
   clearedPreviousGate,
+  getWorkflowAccess,
+  readOverrideReason,
   resolveWorkflowTransition,
 } from "@/lib/submissions/workflow";
 import { loadPhaseOwners, previousGateActorId } from "@/lib/submissions/phase-owners";
@@ -105,22 +106,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Refuse the wrong role or the wrong phase before anything else, so a
     // caller who may not act here learns nothing about the record's state.
-    if (
-      !canPerformWorkflowAction(
-        {
-          role: user.role,
-          userId: user.id,
-          currentPhase: submission.currentPhase,
-          currentStatus: submission.status,
-          owners: await loadPhaseOwners(),
-        },
-        action,
-      )
-    ) {
+    const access = getWorkflowAccess({
+      role: user.role,
+      userId: user.id,
+      currentPhase: submission.currentPhase,
+      currentStatus: submission.status,
+      owners: await loadPhaseOwners(),
+    });
+    if (!access.actions.includes(action)) {
       return NextResponse.json(
         { error: "This action is not available to your role at the current phase." },
         { status: 403 },
       );
+    }
+
+    // D4: acting on a phase you do not own is an override with a written
+    // reason, flagged on the programme and in the Activity Log.
+    let phaseOverride: { reason: string; role: string } | null = null;
+    if (access.viaOverride) {
+      const override = readOverrideReason(body.override);
+      if (!override.ok) {
+        return NextResponse.json(
+          { error: override.message, code: "OVERRIDE_REASON_REQUIRED" },
+          { status: 403 },
+        );
+      }
+      phaseOverride = { reason: override.reason, role: user.role };
     }
 
     if (
@@ -272,6 +283,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           actorRole: user.role,
           contentHash: await bulletinContentHash(tx, id),
           ...(graceOverride && { graceOverride }),
+          ...(phaseOverride && { phaseOverride }),
           performedById: user.id,
         },
         include: {
@@ -307,9 +319,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           action: `SUBMISSION_${action}`,
           entityType: "SUBMISSION",
           entityId: id,
-          description: graceOverride
-            ? `Approved ${updated.programme.name} past GRACE results that hadn't passed (override): ${graceOverride.reason}`
-            : `${action.charAt(0)}${action.slice(1).toLowerCase()} action recorded for ${updated.programme.name}.`,
+          description: [
+            graceOverride
+              ? `Approved ${updated.programme.name} past GRACE results that hadn't passed (override): ${graceOverride.reason}`
+              : `${action.charAt(0)}${action.slice(1).toLowerCase()} action recorded for ${updated.programme.name}.`,
+            phaseOverride
+              ? `Phase override: acted on Phase ${fromPhase}, which the ${phaseOverride.role.replaceAll("_", " ").toLowerCase()} role does not own. Reason: ${phaseOverride.reason}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" "),
           metadata: {
             transitionId: transition.id,
             fromPhase,
@@ -318,6 +337,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             ...(remarks?.trim() && { remarks: remarks.trim() }),
             ...(requiredEvidence && { reference }),
             ...(graceOverride && { graceOverride }),
+            ...(phaseOverride && { phaseOverride, flagged: true }),
           },
         },
         tx,

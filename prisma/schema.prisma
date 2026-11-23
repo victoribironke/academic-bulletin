@@ -609,6 +609,9 @@ model PhaseTransition {
   // Set when an approval went ahead although GRACE results hadn't passed:
   // the reason given and the results it covered (lib/submissions/grace-gate.ts)
   graceOverride  Json?
+  // Set when someone acted on a phase they do not own (task D4): the reason
+  // given and the role they acted in. Flagged on the programme and in the log.
+  phaseOverride  Json?
 
   // Foreign Keys
   submissionId  String

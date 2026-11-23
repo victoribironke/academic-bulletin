@@ -9,7 +9,8 @@ import {
   DEFAULT_PHASE_OWNERS,
   PHASE_CLEARING_ACTIONS,
   clearedPreviousGate,
-  getAllowedWorkflowActions,
+  getWorkflowAccess,
+  PHASE_OVERRIDE_REASON_LENGTH,
   type PhaseOwnerRule,
   type SubmissionAction,
 } from "@/lib/submissions/workflow";
@@ -65,19 +66,22 @@ export type SubmissionWorkflow = {
   graceGate: GraceGateSummary | null;
   /** Set while Submit waits for the cycle's submissions to open (F0). */
   submitClosed: { opensAt: string; message: string } | null;
+  /** D4: the caller doesn't own this phase; acting needs a reason this long. */
+  override: { minLength: number } | null;
 };
 
 export async function getSubmissionWorkflow(
   user: { id: string; role: UserRole },
   submission: { id: string; currentPhase: number; status: SubmissionStatus },
 ): Promise<SubmissionWorkflow> {
-  const allowed = getAllowedWorkflowActions({
+  const access = getWorkflowAccess({
     role: user.role,
     userId: user.id,
     currentPhase: submission.currentPhase,
     currentStatus: submission.status,
     owners: await loadPhaseOwners(),
   });
+  const allowed = access.actions;
   const previousActor = await previousGateActorId(submission.id, submission.currentPhase);
   const blocked = allowed.some((action) => clearedPreviousGate(action, user.id, previousActor));
 
@@ -92,6 +96,8 @@ export async function getSubmissionWorkflow(
       ? summarizeGraceGate(await getGraceGate(submission.id), user.role)
       : null,
     submitClosed: actions.includes("SUBMIT") ? await closedSubmit(submission.id) : null,
+    override:
+      access.viaOverride && actions.length > 0 ? { minLength: PHASE_OVERRIDE_REASON_LENGTH.min } : null,
   };
 }
 

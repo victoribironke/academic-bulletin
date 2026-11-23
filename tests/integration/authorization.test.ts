@@ -10,6 +10,11 @@ const authState = vi.hoisted(() => ({
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 // after() needs a real request scope; workflow emails aren't under test here.
+// D4: a Super Administrator acting outside their own phase gives a reason.
+// Helpers send this one; the "phase overrides (D4)" tests check the refusals.
+const SUPER_ADMIN_OVERRIDE = { reason: "Test: Super Administrator acting outside their own phase." };
+const overrideFor = (userId: string) => (userId === "test-super" ? { override: SUPER_ADMIN_OVERRIDE } : {});
+
 vi.mock("next/server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next/server")>()),
   after: vi.fn(),
@@ -1014,7 +1019,7 @@ describe("route authorization", () => {
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action, remarks }),
+            body: JSON.stringify({ action, remarks, ...overrideFor(userId) }),
           },
         ),
         { params: Promise.resolve({ id: submissionId }) },
@@ -1252,7 +1257,7 @@ describe("route authorization", () => {
         new NextRequest(`http://localhost/api/submissions/${submissionId}/transition`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action, ...extra }),
+          body: JSON.stringify({ action, ...overrideFor(userId), ...extra }),
         }),
         { params: Promise.resolve({ id: submissionId }) },
       );
@@ -2347,6 +2352,7 @@ describe("HOD browsing within their school", () => {
       requiredEvidence: null,
       graceGate: null,
       submitClosed: null,
+      override: null,
     });
     const submit = await transitionSubmission(
       new NextRequest(`http://localhost/api/submissions/${sibling.submission}/transition`, {
@@ -2938,7 +2944,7 @@ describe("phase owners and separation of duties", () => {
       new NextRequest(`http://localhost/api/submissions/${submissionId}/transition`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, ...extra }),
+        body: JSON.stringify({ action, ...overrideFor(userId), ...extra }),
       }),
       { params: Promise.resolve({ id: submissionId }) },
     );
@@ -3114,7 +3120,7 @@ describe("workflow ledger", () => {
       new NextRequest(`http://localhost/api/submissions/${submissionId}/transition`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, remarks }),
+        body: JSON.stringify({ action, remarks, ...overrideFor(userId) }),
       }),
       { params: Promise.resolve({ id: submissionId }) },
     );
@@ -4798,7 +4804,7 @@ describe("Priority 1 proof on a fresh draft", () => {
       new NextRequest(`http://localhost/api/submissions/${id}/transition`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, ...extra }),
+        body: JSON.stringify({ action, ...overrideFor(userId), ...extra }),
       }),
       { params: Promise.resolve({ id }) },
     );
@@ -5079,5 +5085,96 @@ describe("Priority 1 proof on a fresh draft", () => {
     ).rejects.toThrow(/phase_transitions row/);
     expect(await ledgerRows()).toBe(9);
     expect(await state()).toEqual({ currentPhase: 10, status: "APPROVED" });
+  });
+});
+
+// D4: each phase is locked to its owner on the server. Anyone else who may
+// step in (a Super Administrator anywhere, an Academic Planning admin at
+// School Board Harmonisation) acts only through a flagged override with a
+// reason of at least 20 characters. A Head of Department never can.
+describe("phase overrides (D4)", () => {
+  const cycleId = "d4-cycle";
+  const submissionId = "d4-submission";
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.create({ data: { id: cycleId, name: "D4 overrides", createdById: ids.super } });
+    await prisma.submission.create({
+      data: { id: submissionId, title: "D4 Bulletin", programmeId: ids.programmeA, createdById: ids.hod, cycleId },
+    });
+    await prepareDraftForSubmit(submissionId);
+  });
+
+  afterAll(async () => {
+    await prisma.submission.deleteMany({ where: { id: submissionId } });
+    await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+  });
+
+  const act = (userId: string, action: string, extra: object = {}) => {
+    authState.userId = userId;
+    return transitionSubmission(
+      new NextRequest(`http://localhost/api/submissions/${submissionId}/transition`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ...extra }),
+      }),
+      { params: Promise.resolve({ id: submissionId }) },
+    );
+  };
+  const workflowFor = async (userId: string) => {
+    authState.userId = userId;
+    const response = await getSubmission(
+      new NextRequest(`http://localhost/api/submissions/${submissionId}`),
+      { params: Promise.resolve({ id: submissionId }) },
+    );
+    return (await response.json()).workflow;
+  };
+
+  it("asks a Super Administrator for a 20-character reason outside their own phase", async () => {
+    expect((await workflowFor(ids.hod)).override).toBeNull();
+    expect(await workflowFor(ids.super)).toMatchObject({ actions: ["SUBMIT"], override: { minLength: 20 } });
+
+    const bare = await act(ids.super, "SUBMIT");
+    expect(bare.status).toBe(403);
+    expect(await bare.json()).toMatchObject({ code: "OVERRIDE_REASON_REQUIRED" });
+    const short = await act(ids.super, "SUBMIT", { override: { reason: "Head is unavailable" } }); // 19
+    expect(short.status).toBe(403);
+    expect(await prisma.phaseTransition.count({ where: { submissionId } })).toBe(0);
+  });
+
+  it("lets the owner act without one, and never lets a Head of Department approve", async () => {
+    expect((await act(ids.hod, "SUBMIT")).status).toBe(200);
+    const row = await prisma.phaseTransition.findFirstOrThrow({ where: { submissionId, toPhase: 2 } });
+    expect(row.phaseOverride).toBeNull();
+
+    expect((await act(ids.hod, "APPROVE", { override: { reason: "I would like to approve my own work." } })).status).toBe(403);
+  });
+
+  it("flags an Academic Planning admin's override at Phase 2 on the ledger and in the log", async () => {
+    expect((await workflowFor(ids.dean)).override).toBeNull();
+    expect(await workflowFor(ids.admin)).toMatchObject({ override: { minLength: 20 } });
+    expect((await act(ids.admin, "APPROVE")).status).toBe(403);
+
+    const reason = "The Dean is on leave until January; approved on the Deputy Vice-Chancellor's instruction.";
+    expect((await act(ids.admin, "APPROVE", { override: { reason } })).status).toBe(200);
+    const row = await prisma.phaseTransition.findFirstOrThrow({ where: { submissionId, toPhase: 3 } });
+    expect(row.phaseOverride).toEqual({ reason, role: "ADMIN" });
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { action: "SUBMISSION_APPROVE", entityId: submissionId },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(log.description).toContain("Phase override");
+    expect(log.metadata).toMatchObject({ flagged: true, phaseOverride: { reason } });
+
+    // The programme shows it.
+    authState.userId = ids.hod;
+    const page = await (
+      await getSubmission(new NextRequest(`http://localhost/api/submissions/${submissionId}`), {
+        params: Promise.resolve({ id: submissionId }),
+      })
+    ).json();
+    expect(page.phaseTransitions.find((t: { toPhase: number }) => t.toPhase === 3).phaseOverride).toEqual({
+      reason,
+      role: "ADMIN",
+    });
   });
 });

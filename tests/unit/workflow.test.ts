@@ -4,6 +4,7 @@ import {
   canEditSubmissionAtStage,
   clearedPreviousGate,
   getAllowedWorkflowActions,
+  getWorkflowAccess,
   resolveWorkflowTransition,
   type PhaseOwnerRule,
 } from "@/lib/submissions/workflow";
@@ -106,13 +107,15 @@ describe("submission workflow", () => {
   });
 
   it("does not expose another stage's actions to a role", () => {
+    // D4, Appendix B: an Academic Planning admin acts at School Board
+    // Harmonisation only through a flagged override with a reason.
     expect(
-      getAllowedWorkflowActions({
+      getWorkflowAccess({
         role: "ADMIN",
         currentPhase: 2,
         currentStatus: "IN_REVIEW",
       }),
-    ).toEqual([]);
+    ).toEqual({ actions: ["APPROVE", "RETURN"], viaOverride: true });
     expect(
       getAllowedWorkflowActions({
         role: "DEAN",

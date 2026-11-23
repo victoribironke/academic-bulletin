@@ -180,6 +180,8 @@ interface PhaseTransition {
   action: string;
   remarks: string | null;
   transitionedAt: string;
+  /** D4: set when someone acted on a phase they do not own. */
+  phaseOverride?: { reason: string; role: string } | null;
   performedBy: {
     firstName: string;
     lastName: string;
@@ -471,6 +473,9 @@ export default function SubmissionDetailPage({
   // Approving past GRACE results that haven't passed (allowed roles only)
   const [graceOverrideOn, setGraceOverrideOn] = useState(false);
   const [graceOverrideReason, setGraceOverrideReason] = useState("");
+  // D4: acting on a phase you don't own needs a written reason.
+  const [phaseOverrideReason, setPhaseOverrideReason] = useState("");
+  const [submitOverrideOpen, setSubmitOverrideOpen] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [submitBlockers, setSubmitBlockers] = useState<string[] | null>(null);
 
@@ -520,6 +525,9 @@ export default function SubmissionDetailPage({
     (hasPermission("comment:submission") || hasPermission("review:submission")) &&
     isAssignedSubmission;
   const canSubmit = workflowActions.includes("SUBMIT");
+  const phaseOverride = submission?.workflow?.override ?? null;
+  const phaseOverrideReasonOk =
+    !phaseOverride || phaseOverrideReason.trim().length >= phaseOverride.minLength;
   // F0: Submit stays off, with the reason shown, until submissions open.
   const submitClosed = submission?.workflow?.submitClosed ?? null;
   const canApprove = workflowActions.includes("APPROVE");
@@ -891,6 +899,7 @@ export default function SubmissionDetailPage({
             approvingWithOverride && {
               graceOverride: { reason: graceOverrideReason.trim() },
             }),
+          ...(phaseOverride && { override: { reason: phaseOverrideReason.trim() } }),
         }),
       });
 
@@ -940,6 +949,7 @@ export default function SubmissionDetailPage({
     setReviewReference("");
     setGraceOverrideOn(false);
     setGraceOverrideReason("");
+    setPhaseOverrideReason("");
     setReviewAction(action);
   };
 
@@ -1158,6 +1168,27 @@ export default function SubmissionDetailPage({
       (a, b) =>
         new Date(b.transitionedAt).getTime() - new Date(a.transitionedAt).getTime(),
     )[0];
+  const overrides = (submission.phaseTransitions ?? []).filter((t) => t.phaseOverride);
+  const phaseOverrideField = phaseOverride ? (
+    <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+      <Label htmlFor="phase-override-reason">
+        Override reason (at least {phaseOverride.minLength} characters)
+      </Label>
+      <p className="text-xs">
+        You don&apos;t own this phase. Your reason is flagged on the programme and in the Activity Log.
+      </p>
+      <Textarea
+        id="phase-override-reason"
+        rows={3}
+        value={phaseOverrideReason}
+        onChange={(event) => setPhaseOverrideReason(event.target.value)}
+        className="bg-background text-foreground"
+      />
+      <p className="text-xs">
+        {phaseOverrideReason.trim().length} of {phaseOverride.minLength} characters
+      </p>
+    </div>
+  ) : null;
   const openCommentCount = submission.comments.filter((c) => c.status === "OPEN").length;
   const commentCountFor = (key: string) =>
     submission.comments.filter((c) => c.section === key && c.status === "OPEN").length;
@@ -1195,6 +1226,27 @@ export default function SubmissionDetailPage({
       />
 
       <PhaseTracker currentPhase={submission.currentPhase} status={submission.status} />
+
+      {/* D4: overrides are flagged on the programme. */}
+      {overrides.length > 0 && (
+        <Alert className="border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+          <AlertTriangle className="size-4" />
+          <AlertDescription className="text-inherit">
+            <p className="font-medium">
+              {overrides.length === 1 ? "1 phase override" : `${overrides.length} phase overrides`} on this
+              programme
+            </p>
+            <ul className="mt-1 space-y-1 text-sm">
+              {overrides.map((t) => (
+                <li key={t.id}>
+                  {t.performedBy.firstName} {t.performedBy.lastName} acted on Phase {t.fromPhase} on{" "}
+                  {new Date(t.transitionedAt).toLocaleDateString()}: {t.phaseOverride?.reason}
+                </li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Revision requested: show the reviewer's remarks up front */}
       {submission.status === "CORRECTIONS_REQUIRED" && latestSendBack && (
@@ -1286,7 +1338,14 @@ export default function SubmissionDetailPage({
                 <div className="flex flex-col items-start gap-1">
                   <Button
                     variant="default"
-                    onClick={() => handleTransition("SUBMIT")}
+                    onClick={() => {
+                      if (phaseOverride) {
+                        setPhaseOverrideReason("");
+                        setSubmitOverrideOpen(true);
+                      } else {
+                        void handleTransition("SUBMIT");
+                      }
+                    }}
                     disabled={Boolean(submitClosed)}
                     aria-describedby={submitClosed ? "submit-closed-note" : undefined}
                   >
@@ -2390,6 +2449,7 @@ export default function SubmissionDetailPage({
               />
             </div>
           )}
+          {phaseOverride && phaseOverrideField}
           <div className="space-y-2">
             <Label htmlFor="review-remarks">
               {reviewAction === "APPROVE" ? "Remarks (optional)" : "What needs to change?"}
@@ -2425,7 +2485,8 @@ export default function SubmissionDetailPage({
                 (reviewAction === "APPROVE" &&
                   Boolean(requiredEvidence) &&
                   !reviewReference.trim()) ||
-                (reviewAction === "APPROVE" && approvalStoppedByGrace)
+                (reviewAction === "APPROVE" && approvalStoppedByGrace) ||
+                !phaseOverrideReasonOk
               }
               className={
                 reviewAction === "APPROVE"
@@ -2471,6 +2532,34 @@ export default function SubmissionDetailPage({
           </ul>
           <DialogFooter>
             <Button onClick={() => setSubmitBlockers(null)}>Got it</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* D4: Submit on a phase you don't own is an override. */}
+      <Dialog open={submitOverrideOpen} onOpenChange={(open) => !isTransitioning && setSubmitOverrideOpen(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{submitActionLabel} as an override?</DialogTitle>
+            <DialogDescription>
+              You don&apos;t own Phase {submission.currentPhase}. Submitting here is an override: it is flagged on
+              this programme and in the Activity Log with your reason.
+            </DialogDescription>
+          </DialogHeader>
+          {phaseOverrideField}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSubmitOverrideOpen(false)} disabled={isTransitioning}>
+              Cancel
+            </Button>
+            <Button
+              disabled={isTransitioning || !phaseOverrideReasonOk}
+              onClick={async () => {
+                await handleTransition("SUBMIT");
+                setSubmitOverrideOpen(false);
+              }}
+            >
+              {isTransitioning && <Loader2 className="animate-spin" />}
+              {submitActionLabel} with override
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -151,6 +151,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           requiredEvidence: null,
           graceGate: null,
           submitClosed: null,
+          override: null,
         },
       });
     }

@@ -93,3 +93,5 @@ updates-2-feb-2026.md
 !prisma/migrations/20261123160000_cycle_submissions_open_at/migration.sql
 !prisma/migrations/20261123170000_code_standard/
 !prisma/migrations/20261123170000_code_standard/migration.sql
+!prisma/migrations/20261123180000_phase_override/
+!prisma/migrations/20261123180000_phase_override/migration.sql
