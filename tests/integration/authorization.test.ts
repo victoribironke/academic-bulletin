@@ -59,7 +59,7 @@ import { DELETE as deleteDepartment } from "@/app/api/departments/[id]/route";
 import { DELETE as deleteProgramme } from "@/app/api/programmes/[id]/route";
 import { DELETE as deleteUser, PATCH as updateUser } from "@/app/api/users/[id]/route";
 import { adminCreateUser } from "@/app/actions/admin";
-import { GET as listCourses } from "@/app/api/courses/route";
+import { GET as listCourses, POST as createCourseRow } from "@/app/api/courses/route";
 import { POST as transitionSubmission } from "@/app/api/submissions/[id]/transition/route";
 import { getSubmissionWorkflow } from "@/lib/submissions/phase-owners";
 import { PHILOSOPHY_GRACE_MESSAGE } from "@/lib/submissions/grace-gate";
@@ -87,7 +87,7 @@ import { GET as getCurrentUser } from "@/app/api/users/me/route";
 import { POST as bulkImportStaff } from "@/app/api/staff/bulk/route";
 import { POST as createStaff } from "@/app/api/staff/route";
 import { DELETE as deleteStaff, PATCH as updateStaff } from "@/app/api/staff/[id]/route";
-import { DELETE as deleteCourseRow } from "@/app/api/courses/[id]/route";
+import { DELETE as deleteCourseRow, PATCH as updateCourseRow } from "@/app/api/courses/[id]/route";
 import { DELETE as deleteComment } from "@/app/api/submissions/[id]/comments/[commentId]/route";
 import { DELETE as deleteCycle } from "@/app/api/cycles/[id]/route";
 import { GET as listArchive } from "@/app/api/archive/route";
@@ -1521,7 +1521,7 @@ describe("route authorization", () => {
     await prisma.masterCourse.deleteMany({ where: { code: { startsWith: "PGN " } } });
   });
 
-  it("automatically preloads the central GST pool into an HoD submission", async () => {
+  it("preloads the central GST pool into an HoD submission, locked (W1)", async () => {
     authState.userId = ids.hod;
     await prisma.submission.update({
       where: { id: ids.submission },
@@ -1544,6 +1544,9 @@ describe("route authorization", () => {
       },
     });
 
+    // The Registry routes preload drafts when a course is added (G6: reading
+    // the list no longer does).
+    await preloadRegistryCoursesForSubmission(ids.submission);
     const response = await listCourses(
       new Request(
         `http://localhost/api/courses?submissionId=${ids.submission}`,
@@ -1554,6 +1557,8 @@ describe("route authorization", () => {
       expect.arrayContaining([
         expect.objectContaining({
           code: "GST 111",
+          isGeneralEducation: true,
+          isMandatory: true,
           masterCourse: expect.objectContaining({
             ownership: "INSTITUTIONAL",
           }),
@@ -5176,5 +5181,88 @@ describe("phase overrides (D4)", () => {
       reason,
       role: "ADMIN",
     });
+  });
+});
+
+// G6: a course the department removes stays removed, even when the Registry
+// is uploaded again; W1: the General Education block can't be changed or
+// removed by a department.
+describe("removed courses stay removed (G6) and General Education is locked (W1)", () => {
+  const cycleId = "g6-cycle";
+  const submissionId = "g6-submission";
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.create({ data: { id: cycleId, name: "G6", createdById: ids.super } });
+    await prisma.submission.create({
+      data: { id: submissionId, title: "G6 Bulletin", programmeId: ids.programmeA, createdById: ids.hod, cycleId },
+    });
+    await prisma.masterCourse.createMany({
+      data: [
+        { id: "g6-gst", code: "GST 118", title: "Locked general course", units: 2, type: "GST_NUC", ownership: "INSTITUTIONAL", level: 100, semester: 1 },
+        { id: "g6-dept", code: "GXZ 201", title: "Departmental registry course", units: 3, type: "CORE", ownership: "DEPARTMENT", level: 200, semester: 2, ownerDeptId: ids.departmentA },
+      ],
+    });
+    await prisma.programmeCourse.create({ data: { programmeId: ids.programmeA, courseId: "g6-dept" } });
+    await preloadRegistryCoursesForSubmission(submissionId);
+  });
+
+  afterAll(async () => {
+    await prisma.submission.deleteMany({ where: { id: submissionId } });
+    await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+    await prisma.programmeCourse.deleteMany({ where: { courseId: { in: ["g6-gst", "g6-dept"] } } });
+    await prisma.masterCourse.deleteMany({ where: { id: { in: ["g6-gst", "g6-dept"] } } });
+  });
+
+  const row = (code: string) =>
+    prisma.course.findUnique({ where: { code_submissionId: { code, submissionId } } });
+  const call = <T,>(handler: (request: Request, context: { params: Promise<{ id: string }> }) => Promise<T>, id: string, method: string, body: object) => {
+    authState.userId = ids.hod;
+    return handler(
+      new Request(`http://localhost/api/courses/${id}`, { method, body: JSON.stringify(body) }),
+      { params: Promise.resolve({ id }) },
+    );
+  };
+
+  it("keeps a removed Registry course out of the draft when the Registry is preloaded again", async () => {
+    const course = await row("GXZ 201");
+    expect(course).not.toBeNull();
+    expect(((await call(deleteCourseRow, course!.id, "DELETE", { confirm: "DELETE" })) as Response).status).toBe(200);
+    expect(await row("GXZ 201")).toBeNull();
+    expect(
+      (await prisma.submission.findUniqueOrThrow({ where: { id: submissionId } })).dismissedRegistryCourseIds,
+    ).toEqual(["g6-dept"]);
+
+    // A later Registry upload, and reading the list, leave it out.
+    await preloadRegistryCoursesForSubmission(submissionId);
+    authState.userId = ids.hod;
+    await listCourses(new Request(`http://localhost/api/courses?submissionId=${submissionId}`));
+    expect(await row("GXZ 201")).toBeNull();
+
+    // Adding it back on purpose clears the mark.
+    authState.userId = ids.hod;
+    const added = await createCourseRow(
+      new Request("http://localhost/api/courses", {
+        method: "POST",
+        body: JSON.stringify({ submissionId, code: "GXZ 201", title: "Departmental registry course", units: 3, semester: 2, level: 200, masterCourseId: "g6-dept" }),
+      }),
+    );
+    expect(added.status).toBe(201);
+    expect(
+      (await prisma.submission.findUniqueOrThrow({ where: { id: submissionId } })).dismissedRegistryCourseIds,
+    ).toEqual([]);
+  });
+
+  it("refuses a department's change or removal of a General Education row", async () => {
+    const gst = await row("GST 118");
+    expect(gst).not.toBeNull();
+    const removed = (await call(deleteCourseRow, gst!.id, "DELETE", { confirm: "DELETE" })) as Response;
+    expect(removed.status).toBe(403);
+    expect(await removed.json()).toMatchObject({ code: "GENERAL_EDUCATION_LOCKED" });
+    const changed = (await call(updateCourseRow, gst!.id, "PATCH", { units: 3 })) as Response;
+    expect(changed.status).toBe(403);
+    // Saving it unchanged (the course table saves every row) is fine.
+    const same = (await call(updateCourseRow, gst!.id, "PATCH", { code: "GST 118", units: 2, semester: 1, level: 100 })) as Response;
+    expect(same.status).toBe(200);
+    expect(await row("GST 118")).toMatchObject({ units: 2 });
   });
 });

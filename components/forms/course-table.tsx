@@ -656,6 +656,9 @@ export function CourseTable({
                 }
               }
             }
+          } else if (course.isMandatory) {
+            // W1: General Education rows are locked; nothing to save.
+            continue;
           } else {
             const res = await fetch(`/api/courses/${course.id}`, {
               method: "PATCH",

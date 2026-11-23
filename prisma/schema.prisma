@@ -356,6 +356,9 @@ model Submission {
   status       SubmissionStatus @default(DRAFT)
   submittedAt  DateTime?
   approvedAt   DateTime?
+  /// Registry courses the department removed from this draft, so a later
+  /// Registry upload doesn't put them back (task G6).
+  dismissedRegistryCourseIds String[] @default([])
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 

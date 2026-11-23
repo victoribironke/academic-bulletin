@@ -14,9 +14,14 @@ import {
 import {
   canReadSubmission,
   getApiUser,
+  isAdministrator,
   requireApiUser,
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
+import {
+  GENERAL_EDUCATION_LOCKED_MESSAGE,
+  isGeneralEducationMaster,
+} from "@/lib/courses/general-education";
 import { AUTOSAVE_COALESCE_MINUTES, recordActivity } from "@/lib/activity-log";
 import { synchronizeCourseGraceAssessment } from "@/lib/courses/grace-compliance";
 import { requireDeleteConfirmation } from "@/lib/archive";
@@ -92,7 +97,10 @@ export async function PATCH(
     } = body;
 
     // Check if course exists
-    const existing = await prisma.course.findUnique({ where: { id } });
+    const existing = await prisma.course.findUnique({
+      where: { id },
+      include: { masterCourse: { select: { type: true, ownership: true } } },
+    });
     if (!existing) {
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
     }
@@ -107,6 +115,36 @@ export async function PATCH(
         { error: gate.message },
         { status: gate.status },
       );
+    }
+
+    // W1: a General Education row is the General Education desk's. A save
+    // that changes nothing is fine; any change from a department is refused.
+    if (isGeneralEducationMaster(existing.masterCourse) && !isAdministrator(user!)) {
+      const asked = { code, title, units, status, semester, level, prerequisites };
+      const current = {
+        code: existing.code,
+        title: existing.title,
+        units: existing.units,
+        status: existing.status,
+        semester: existing.semester,
+        level: existing.level,
+        prerequisites: existing.prerequisites ?? "",
+      };
+      const changes = (Object.keys(asked) as (keyof typeof asked)[]).filter((key) => {
+        const value = asked[key];
+        if (value === undefined) return false;
+        if (key === "semester") return parseCourseSemester(value) !== current.semester;
+        if (key === "code") return formatCourseCode(String(value)) !== current.code;
+        if (key === "prerequisites") return (value ?? "") !== current.prerequisites;
+        return value !== current[key];
+      });
+      if (changes.length > 0) {
+        return NextResponse.json(
+          { error: GENERAL_EDUCATION_LOCKED_MESSAGE, code: "GENERAL_EDUCATION_LOCKED" },
+          { status: 403 },
+        );
+      }
+      return NextResponse.json(existing);
     }
 
     // Validate course code if provided
@@ -194,7 +232,10 @@ export async function DELETE(
     const { id } = await params;
 
     // Check if course exists
-    const existing = await prisma.course.findUnique({ where: { id } });
+    const existing = await prisma.course.findUnique({
+      where: { id },
+      include: { masterCourse: { select: { type: true, ownership: true } } },
+    });
     if (!existing) {
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
     }
@@ -208,6 +249,15 @@ export async function DELETE(
       return NextResponse.json(
         { error: gate.message },
         { status: gate.status },
+      );
+    }
+
+    // W1: a department can't remove the General Education block.
+    const generalEducation = isGeneralEducationMaster(existing.masterCourse);
+    if (generalEducation && !isAdministrator(user!)) {
+      return NextResponse.json(
+        { error: GENERAL_EDUCATION_LOCKED_MESSAGE, code: "GENERAL_EDUCATION_LOCKED" },
+        { status: 403 },
       );
     }
 
@@ -229,6 +279,20 @@ export async function DELETE(
         tx,
       );
       await tx.course.delete({ where: { id } });
+      // G6: a Registry course the department removed stays removed when the
+      // Registry is uploaded again. (General Education always comes back.)
+      if (existing.masterCourseId && !generalEducation) {
+        const submission = await tx.submission.findUniqueOrThrow({
+          where: { id: existing.submissionId },
+          select: { dismissedRegistryCourseIds: true },
+        });
+        if (!submission.dismissedRegistryCourseIds.includes(existing.masterCourseId)) {
+          await tx.submission.update({
+            where: { id: existing.submissionId },
+            data: { dismissedRegistryCourseIds: { push: existing.masterCourseId } },
+          });
+        }
+      }
     });
 
     return NextResponse.json({ success: true });

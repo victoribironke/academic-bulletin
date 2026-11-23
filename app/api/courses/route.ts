@@ -11,7 +11,7 @@ import {
   requireApiUser,
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
-import { preloadGstCoursesForSubmission } from "@/lib/courses/gst-pool";
+import { isGeneralEducationMaster } from "@/lib/courses/general-education";
 import { recordActivity } from "@/lib/activity-log";
 import { currentCourseGraceState } from "@/lib/courses/grace-compliance";
 import {
@@ -41,9 +41,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // University-wide GST courses are centrally managed and automatically
-    // appear in every editable programme submission.
-    await preloadGstCoursesForSubmission(submissionId);
+    // Reading the list never adds courses (G6: a course the department
+    // removed used to come back here). Registry courses are added when a
+    // draft is created and when the Registry changes.
 
     const where: Record<string, unknown> = { submissionId };
     if (level) where.level = parseInt(level);
@@ -81,11 +81,14 @@ export async function GET(request: Request) {
     // Reading the list never queues or runs a GRACE check: a description whose
     // text changed since its last check is shown as waiting, not rewritten.
     return NextResponse.json(
-      courses.map((course) =>
-        course.description
-          ? { ...course, description: currentCourseGraceState(course.title, course.description) }
-          : course,
-      ),
+      courses.map((course) => {
+        // W1: the General Education block is locked for departments.
+        const locked = isGeneralEducationMaster(course.masterCourse);
+        const withFlags = { ...course, isGeneralEducation: locked, isMandatory: locked };
+        return course.description
+          ? { ...withFlags, description: currentCourseGraceState(course.title, course.description) }
+          : withFlags;
+      }),
     );
   } catch (error) {
     console.error("Failed to fetch courses:", error);
@@ -196,6 +199,22 @@ export async function POST(request: Request) {
         { error: "A course with this title already exists in this submission" },
         { status: 409 },
       );
+    }
+
+    // G6: adding a Registry course back clears its "removed" mark.
+    if (masterCourseId) {
+      const draft = await prisma.submission.findUnique({
+        where: { id: submissionId },
+        select: { dismissedRegistryCourseIds: true },
+      });
+      if (draft?.dismissedRegistryCourseIds.includes(masterCourseId)) {
+        await prisma.submission.update({
+          where: { id: submissionId },
+          data: {
+            dismissedRegistryCourseIds: draft.dismissedRegistryCourseIds.filter((courseId) => courseId !== masterCourseId),
+          },
+        });
+      }
     }
 
     const course = await prisma.course.create({

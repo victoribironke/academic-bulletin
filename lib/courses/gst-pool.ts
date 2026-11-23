@@ -1,6 +1,7 @@
 import prisma from "@/lib/prisma";
 import { prepareCourseGraceState } from "@/lib/courses/grace-compliance";
 import { titleKey, uniqueTitle } from "@/lib/courses/unique-title";
+import { isGeneralEducationMaster } from "@/lib/courses/general-education";
 
 const EDITABLE_SUBMISSION_STATUSES = ["DRAFT", "CORRECTIONS_REQUIRED"] as const;
 
@@ -22,7 +23,7 @@ export async function preloadRegistryCoursesForSubmission(
 ): Promise<RegistryPreloadResult> {
   const submission = await prisma.submission.findUnique({
     where: { id: submissionId },
-    select: { id: true, programmeId: true, status: true },
+    select: { id: true, programmeId: true, status: true, dismissedRegistryCourseIds: true },
   });
 
   if (
@@ -67,12 +68,18 @@ export async function preloadRegistryCoursesForSubmission(
     orderBy: [{ level: "asc" }, { semester: "asc" }, { code: "asc" }],
   });
 
-  if (registryCourses.length === 0) {
+  // G6: courses the department removed stay removed. The General Education
+  // block (rule W1) is in every draft, so it is always put back.
+  const dismissed = new Set(submission.dismissedRegistryCourseIds);
+  const wanted = registryCourses.filter(
+    (course) => !dismissed.has(course.id) || isGeneralEducationMaster(course),
+  );
+  if (wanted.length === 0) {
     return { submissionId, available: 0, added: 0, linked: 0 };
   }
 
   await prisma.programmeCourse.createMany({
-    data: registryCourses.map((course) => ({
+    data: wanted.map((course) => ({
       programmeId: submission.programmeId,
       courseId: course.id,
       isCore: true,
@@ -91,7 +98,7 @@ export async function preloadRegistryCoursesForSubmission(
   let added = 0;
   let linked = 0;
 
-  for (const master of registryCourses) {
+  for (const master of wanted) {
     const programmeLink = master.programmeLinks[0];
     const effectiveType = programmeLink?.typeOverride ?? master.type;
     const wasPresent = existingCodes.has(master.code);
@@ -174,7 +181,7 @@ export async function preloadRegistryCoursesForSubmission(
 
   return {
     submissionId,
-    available: registryCourses.length,
+    available: wanted.length,
     added,
     linked,
   };
