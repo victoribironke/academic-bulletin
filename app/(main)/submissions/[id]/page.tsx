@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, use, useCallback, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useUser, usePermission } from "@/contexts/user-context";
 import {
@@ -418,15 +419,23 @@ export default function SubmissionDetailPage({
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [activeSection, setActiveSectionState] = useState("deans_hods");
+  // T1: "?section=courses" opens the draft on that section (links from My desk).
+  const searchParams = useSearchParams();
+  const requestedSection = searchParams.get("section");
+  const firstSection =
+    requestedSection && sections.some((section) => section.key === requestedSection)
+      ? requestedSection
+      : "deans_hods";
+  const [activeSection, setActiveSectionState] = useState(firstSection);
   // Sections opened so far; their editors stay mounted once visited.
   const [visitedSections, setVisitedSections] = useState<Set<string>>(
-    () => new Set(["deans_hods"]),
+    () => new Set([firstSection]),
   );
   const setActiveSection = (key: string) => {
     setActiveSectionState(key);
     setVisitedSections((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
   };
+
   // These sections have their own Save button inside the section.
   const sectionSavesSeparately = ["staff", "courses", "descriptions"].includes(activeSection);
   const [hasChanges, setHasChanges] = useState(false);

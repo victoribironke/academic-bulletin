@@ -97,6 +97,7 @@ import { openCycle, planOpenCycle } from "@/lib/cycles/open";
 import { GET as readPolicyRoute, POST as uploadPolicyRoute } from "@/app/api/policy/route";
 import { BUILT_IN_POLICY_ID } from "@/lib/policy/library";
 import { GET as readHelpDetails } from "@/app/api/help/route";
+import { GET as readWaitingWork } from "@/app/api/desk/waiting/route";
 import { GET as listArchive } from "@/app/api/archive/route";
 import { POST as restoreArchived } from "@/app/api/archive/[id]/restore/route";
 import { confirmationMatches } from "@/lib/archive";
@@ -6040,6 +6041,78 @@ describe("the quick start's help details (H1)", () => {
       expect((await (await readHelpDetails()).json()).officer).toBeNull();
     } finally {
       await prisma.user.update({ where: { id: ids.hod }, data: { schoolId: ids.schoolA } });
+    }
+  });
+});
+
+describe("what is waiting on each desk (T1)", () => {
+  const cycleId = "t1-cycle";
+  type Waiting = { kind: string; programme: string; text: string; href: string; waited: string | null };
+  const waiting = async (userId: string) => {
+    authState.userId = userId;
+    const response = await readWaitingWork();
+    expect(response.status).toBe(200);
+    return ((await response.json()) as { items: Waiting[] }).items;
+  };
+
+  beforeAll(async () => {
+    const day = 24 * 60 * 60 * 1000;
+    await prisma.reviewCycle.create({
+      data: { id: cycleId, name: "T1 cycle", createdById: ids.super, isActive: true, startedAt: new Date(Date.now() + day) },
+    });
+    await prisma.programme.createMany({
+      data: [
+        { id: "t1-prog-review", name: "T1 Review Programme", code: "TSA-T1-REV", departmentId: ids.departmentA },
+        { id: "t1-prog-vetting", name: "T1 Vetting Programme", code: "TSA-T1-VET", departmentId: ids.departmentA },
+      ],
+    });
+    await prisma.submission.createMany({
+      data: [
+        { id: "t1-draft", title: "T1 Draft", programmeId: ids.programmeA, createdById: ids.hod, cycleId, status: "CORRECTIONS_REQUIRED", currentPhase: 1, createdAt: new Date(Date.now() - 5 * day) },
+        { id: "t1-other", title: "T1 Other", programmeId: ids.programmeB, createdById: ids.super, cycleId, status: "IN_REVIEW", currentPhase: 2 },
+        { id: "t1-review", title: "T1 Review", programmeId: "t1-prog-review", createdById: ids.hod, cycleId, status: "IN_REVIEW", currentPhase: 2 },
+        { id: "t1-vetting", title: "T1 Vetting", programmeId: "t1-prog-vetting", createdById: ids.hod, cycleId, status: "IN_REVIEW", currentPhase: 3 },
+      ],
+    });
+    await prisma.phaseTransition.createMany({
+      data: [
+        { submissionId: "t1-draft", fromPhase: 2, toPhase: 1, action: "REQUEST_REVISION", remarks: "Add the employability list.", performedById: ids.dean, transitionedAt: new Date(Date.now() - 2 * day) },
+        { submissionId: "t1-review", fromPhase: 1, toPhase: 2, action: "SUBMIT", performedById: ids.hod, transitionedAt: new Date(Date.now() - 3 * day) },
+      ],
+    });
+    await prisma.comment.create({ data: { submissionId: "t1-draft", authorId: ids.dean, content: "Check the staff list.", phase: 2 } });
+  });
+
+  afterAll(async () => {
+    await prisma.submission.deleteMany({ where: { cycleId } });
+    await prisma.programme.deleteMany({ where: { id: { in: ["t1-prog-review", "t1-prog-vetting"] } } });
+    await prisma.reviewCycle.delete({ where: { id: cycleId } });
+  });
+
+  it("gives a Head the revision first, then comments, then unfinished sections, each opening the right screen", async () => {
+    const items = await waiting(ids.hod);
+    expect(items.map((item) => item.kind)).toEqual(["REVISION_REQUESTED", "OPEN_COMMENTS", "SECTIONS_TO_FINISH"]);
+    expect(items[0]).toMatchObject({ text: "Revision requested: Add the employability list.", href: "/submissions/t1-draft", waited: "waiting 2 days" });
+    expect(items[1].text).toBe("1 open comment to answer");
+    expect(items[2].text).toMatch(/^[78] of 8 sections to finish: Deans & HODs, /);
+    expect(items[2].href).toBe("/submissions/t1-draft?section=deans_hods");
+    expect(items[2].waited).toBe("waiting 5 days");
+  });
+
+  it("gives a Dean only their own school's programmes waiting for review", async () => {
+    const items = await waiting(ids.dean);
+    expect(items).toEqual([
+      expect.objectContaining({ kind: "WAITING_FOR_REVIEW", programme: "T1 Review Programme", waited: "waiting 3 days" }),
+    ]);
+  });
+
+  it("gives Academic Planning the vetting queue, and an officer only their own school's", async () => {
+    expect((await waiting(ids.admin)).map((item) => item.programme)).toEqual(["T1 Vetting Programme"]);
+    await prisma.user.update({ where: { id: ids.admin }, data: { schoolId: ids.schoolB } });
+    try {
+      expect(await waiting(ids.admin)).toEqual([]);
+    } finally {
+      await prisma.user.update({ where: { id: ids.admin }, data: { schoolId: null } });
     }
   });
 });

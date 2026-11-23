@@ -11,6 +11,7 @@ import { CalendarClock } from "lucide-react";
 import type { Countdown, DeadlineStatus } from "@/lib/calendar/countdown";
 import type { PhaseListRow } from "@/lib/calendar/desk";
 import { cn } from "@/lib/utils";
+import { WaitingWork } from "@/components/desk/waiting-work";
 
 type ProgrammeDeadline = {
   submissionId: string;
@@ -143,6 +144,8 @@ export function DeadlinesPanel() {
   return (
     <section className="space-y-3" aria-label="Deadlines">
       {desk && <CountdownCard countdown={desk} title={`Your deadline: ${desk.label}`} />}
+      {/* T1: the desk's own waiting work, with "Do this next". */}
+      <WaitingWork />
 
       {programmes && programmes.length > 0 && (
         <div className="rounded-lg border bg-card">
