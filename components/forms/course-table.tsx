@@ -32,6 +32,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2, Save, BookOpen, Import, History, Upload } from "lucide-react";
+import {
+  MAX_COURSE_UNITS,
+  MIN_COURSE_UNITS,
+  courseSemesterShortLabel,
+  parseCourseSemester,
+} from "@/lib/courses/course-rules";
+
+/** How the semester picker shows a sessional course with no semester. */
+const SESSIONAL_VALUE = "S";
 import { toast } from "sonner";
 import { BulkImportDialog } from "@/components/imports/bulk-import-dialog";
 import { TableToolbar } from "@/components/shared/table-toolbar";
@@ -73,7 +82,7 @@ interface MasterCourse {
   units: number;
   type: string;
   level: number;
-  semester: number;
+  semester: number | null;
   ownership: string;
   ownerDepartment?: { code: string; name: string };
   ownerSchool?: { code: string; name: string };
@@ -99,7 +108,7 @@ interface PreviousCourse {
   title: string;
   units: number;
   status: "CORE" | "ELECTIVE";
-  semester: number;
+  semester: number | null;
   level: number;
   prerequisites?: string;
   description?: {
@@ -126,7 +135,8 @@ interface Course {
   title: string;
   units: number;
   status: "CORE" | "ELECTIVE";
-  semester: number;
+  /** 1, 2, or "S" in the table for a sessional course with no semester (B13). */
+  semester: number | string | null;
   level: number;
   prerequisites: string;
   masterCourseId?: string;
@@ -202,7 +212,11 @@ export function CourseTable({
       const ids = new Set<string>();
       courses.forEach((course: Course) => {
         if (grouped[course.level]) {
-          grouped[course.level].push(course);
+          // The semester picker shows a sessional course (no semester) as "S".
+          grouped[course.level].push({
+            ...course,
+            semester: course.semester ?? SESSIONAL_VALUE,
+          });
         }
         if (course.id) {
           ids.add(course.id);
@@ -533,14 +547,17 @@ export function CourseTable({
       options: [
         { value: "1", label: "1st" },
         { value: "2", label: "2nd" },
+        { value: SESSIONAL_VALUE, label: "Sessional" },
       ],
       required: true,
-      width: "90px",
+      width: "110px",
     },
     {
       key: "units",
       header: "Units",
       type: "number",
+      min: MIN_COURSE_UNITS,
+      max: MAX_COURSE_UNITS,
       required: true,
       width: "70px",
     },
@@ -580,10 +597,8 @@ export function CourseTable({
 
           const courseData = {
             ...course,
-            semester:
-              typeof course.semester === "string"
-                ? parseInt(course.semester)
-                : course.semester,
+            // 1, 2, or null for a sessional course (B13)
+            semester: parseCourseSemester(course.semester) ?? null,
             submissionId,
           };
 
@@ -726,16 +741,14 @@ export function CourseTable({
   // Calculate totals
   const getTotals = (level: number) => {
     const courses = coursesByLevel[level] || [];
-    const sem1 = courses.filter(
-      (c) => c.semester === 1 || c.semester.toString() === "1",
-    );
-    const sem2 = courses.filter(
-      (c) => c.semester === 2 || c.semester.toString() === "2",
-    );
+    const sem1 = courses.filter((c) => parseCourseSemester(c.semester) === 1);
+    const sem2 = courses.filter((c) => parseCourseSemester(c.semester) === 2);
+    const sessional = courses.filter((c) => parseCourseSemester(c.semester) === null);
 
     return {
       sem1Units: sem1.reduce((sum, c) => sum + (c.units || 0), 0),
       sem2Units: sem2.reduce((sum, c) => sum + (c.units || 0), 0),
+      sessionalUnits: sessional.reduce((sum, c) => sum + (c.units || 0), 0),
       total: courses.reduce((sum, c) => sum + (c.units || 0), 0),
     };
   };
@@ -860,6 +873,11 @@ export function CourseTable({
                   <span>
                     2nd Semester: <strong>{totals.sem2Units}</strong> units
                   </span>
+                  {totals.sessionalUnits > 0 && (
+                    <span>
+                      Sessional: <strong>{totals.sessionalUnits}</strong> units
+                    </span>
+                  )}
                   <span>
                     Total: <strong>{totals.total}</strong> units
                   </span>
@@ -977,7 +995,7 @@ export function CourseTable({
                           <TableCell className="p-2">{mc.title}</TableCell>
                           <TableCell className="p-2">{mc.units}</TableCell>
                           <TableCell className="p-2">{mc.level}</TableCell>
-                          <TableCell className="p-2">{mc.semester}</TableCell>
+                          <TableCell className="p-2">{courseSemesterShortLabel(mc.semester)}</TableCell>
                           <TableCell className="p-2">
                             <Badge
                               variant="outline"
@@ -1055,7 +1073,7 @@ export function CourseTable({
           { label: "Code", value: (row) => row.code },
           { label: "Title", value: (row) => row.title },
           { label: "Level", value: (row) => row.level },
-          { label: "Semester", value: (row) => row.semester },
+          { label: "Semester", value: (row) => courseSemesterShortLabel(row.semester) },
           { label: "Units", value: (row) => row.units },
         ]}
         validateRows={(rows) => {
@@ -1184,7 +1202,7 @@ export function CourseTable({
                           <TableCell className="p-2">{pc.title}</TableCell>
                           <TableCell className="p-2">{pc.units}</TableCell>
                           <TableCell className="p-2">{pc.level}</TableCell>
-                          <TableCell className="p-2">{pc.semester}</TableCell>
+                          <TableCell className="p-2">{courseSemesterShortLabel(pc.semester)}</TableCell>
                           <TableCell className="p-2">
                             <Badge variant="outline">{pc.status}</Badge>
                           </TableCell>

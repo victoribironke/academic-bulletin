@@ -87,3 +87,5 @@ updates-2-feb-2026.md
 /tmp/
 !prisma/migrations/20261120090000_add_grace_override_to_ledger/
 !prisma/migrations/20261120090000_add_grace_override_to_ledger/migration.sql
+!prisma/migrations/20261123150000_sessional_courses_and_unit_range/
+!prisma/migrations/20261123150000_sessional_courses_and_unit_range/migration.sql

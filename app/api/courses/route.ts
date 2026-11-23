@@ -14,6 +14,12 @@ import {
 import { preloadGstCoursesForSubmission } from "@/lib/courses/gst-pool";
 import { recordActivity } from "@/lib/activity-log";
 import { currentCourseGraceState } from "@/lib/courses/grace-compliance";
+import {
+  SEMESTER_RULE_MESSAGE,
+  UNITS_RULE_MESSAGE,
+  isValidCourseUnits,
+  parseCourseSemester,
+} from "@/lib/courses/course-rules";
 
 // GET /api/courses - Get courses for a submission
 export async function GET(request: Request) {
@@ -111,13 +117,11 @@ export async function POST(request: Request) {
       !code ||
       !title ||
       units === undefined ||
-      !semester ||
       !level
     ) {
       return NextResponse.json(
         {
-          error:
-            "submissionId, code, title, units, semester, and level are required",
+          error: "submissionId, code, title, units and level are required",
         },
         { status: 400 },
       );
@@ -147,12 +151,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate semester
-    if (![1, 2].includes(semester)) {
-      return NextResponse.json(
-        { error: "Invalid semester. Must be 1 or 2" },
-        { status: 400 },
-      );
+    // Units 0 to 12; semester 1, 2 or none for a sessional course (B13)
+    if (!isValidCourseUnits(units)) {
+      return NextResponse.json({ error: UNITS_RULE_MESSAGE }, { status: 400 });
+    }
+    const parsedSemester = parseCourseSemester(semester);
+    if (parsedSemester === undefined) {
+      return NextResponse.json({ error: SEMESTER_RULE_MESSAGE }, { status: 400 });
     }
 
     const user = await getApiUser();
@@ -199,7 +204,7 @@ export async function POST(request: Request) {
         title: formattedTitle,
         units,
         status: status || "CORE",
-        semester,
+        semester: parsedSemester,
         level,
         submissionId,
         prerequisites: prerequisites || null,

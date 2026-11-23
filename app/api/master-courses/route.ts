@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import {
+  SEMESTER_RULE_MESSAGE,
+  UNITS_RULE_MESSAGE,
+  isValidCourseUnits,
+  parseCourseSemester,
+} from "@/lib/courses/course-rules";
+import {
   formatCourseTitle,
   formatCourseCode,
   isValidCourseCode,
@@ -21,7 +27,6 @@ const VALID_COURSE_TYPES = [
 ];
 const VALID_OWNERSHIP = ["DEPARTMENT", "SCHOOL", "INSTITUTIONAL"];
 const VALID_LEVELS = [100, 200, 300, 400, 500, 600];
-const VALID_SEMESTERS = [1, 2];
 
 // GET /api/master-courses - Get all master courses with filters
 export async function GET(request: Request) {
@@ -104,8 +109,9 @@ export async function GET(request: Request) {
       if (VALID_LEVELS.includes(levelNum)) where.level = levelNum;
     }
     if (semester) {
-      const semNum = parseInt(semester);
-      if (VALID_SEMESTERS.includes(semNum)) where.semester = semNum;
+      // "1", "2", or "sessional" for courses with no semester (B13)
+      const semNum = parseCourseSemester(semester);
+      if (semNum !== undefined) where.semester = semNum;
     }
 
     if (query) {
@@ -238,9 +244,9 @@ export async function POST(request: Request) {
     } = body;
 
     // Required field validation
-    if (!code || !title || !units || !level || !semester) {
+    if (!code || !title || units === undefined || units === null || !level) {
       return NextResponse.json(
-        { error: "Code, title, units, level, and semester are required" },
+        { error: "Code, title, units and level are required" },
         { status: 400 },
       );
     }
@@ -290,19 +296,13 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    if (!VALID_SEMESTERS.includes(semester)) {
-      return NextResponse.json(
-        { error: "Invalid semester. Must be 1 or 2" },
-        { status: 400 },
-      );
+    // Semester 1, 2 or none (sessional); units 0 to 12 (B13)
+    const parsedSemester = parseCourseSemester(semester);
+    if (parsedSemester === undefined) {
+      return NextResponse.json({ error: SEMESTER_RULE_MESSAGE }, { status: 400 });
     }
-
-    // Units validation
-    if (typeof units !== "number" || units < 1 || units > 6) {
-      return NextResponse.json(
-        { error: "Units must be a number between 1 and 6" },
-        { status: 400 },
-      );
+    if (!isValidCourseUnits(units)) {
+      return NextResponse.json({ error: UNITS_RULE_MESSAGE }, { status: 400 });
     }
 
     // Ownership validation based on type
@@ -367,7 +367,7 @@ export async function POST(request: Request) {
         type: type || "CORE",
         ownership: resolvedOwnership,
         level,
-        semester,
+        semester: parsedSemester,
         description: description || null,
         learningOutcomes: Array.isArray(learningOutcomes)
           ? learningOutcomes

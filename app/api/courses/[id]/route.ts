@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import {
+  SEMESTER_RULE_MESSAGE,
+  UNITS_RULE_MESSAGE,
+  isValidCourseUnits,
+  parseCourseSemester,
+} from "@/lib/courses/course-rules";
+import {
   formatCourseTitle,
   formatCourseCode,
   isValidCourseCode,
@@ -117,16 +123,20 @@ export async function PATCH(
     const updateData: Record<string, unknown> = {};
     if (code !== undefined) updateData.code = formatCourseCode(code);
     if (title !== undefined) updateData.title = formatCourseTitle(title);
-    if (units !== undefined) updateData.units = units;
+    if (units !== undefined) {
+      if (!isValidCourseUnits(units)) {
+        return NextResponse.json({ error: UNITS_RULE_MESSAGE }, { status: 400 });
+      }
+      updateData.units = units;
+    }
     if (status !== undefined) updateData.status = status;
     if (semester !== undefined) {
-      if (![1, 2].includes(semester)) {
-        return NextResponse.json(
-          { error: "Invalid semester. Must be 1 or 2" },
-          { status: 400 },
-        );
+      // 1, 2, or null for a sessional course with no semester (B13)
+      const parsedSemester = parseCourseSemester(semester);
+      if (parsedSemester === undefined) {
+        return NextResponse.json({ error: SEMESTER_RULE_MESSAGE }, { status: 400 });
       }
-      updateData.semester = semester;
+      updateData.semester = parsedSemester;
     }
     if (level !== undefined) updateData.level = level;
     if (prerequisites !== undefined)

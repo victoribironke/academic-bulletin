@@ -9,7 +9,7 @@ export interface ImportableCourse {
   code: string;
   title: string;
   units: number;
-  semester: number;
+  semester: number | null;
   level: number;
   status?: "CORE" | "ELECTIVE";
   type?: string;
@@ -28,7 +28,7 @@ export interface ImportedCourseDraft {
   title: string;
   units: number;
   status: "CORE" | "ELECTIVE";
-  semester: number;
+  semester: number | null;
   level: number;
   prerequisites: string;
   masterCourseId?: string;

@@ -419,9 +419,9 @@ model Course {
   id            String       @id @default(cuid())
   code          String // e.g., "COS 101"
   title         String // e.g., "Introduction to Computing Sciences" - sentence case
-  units         Int // Credit units
+  units         Int // Credit units, 0 to 12 (task B13)
   status        CourseStatus @default(CORE) // Core or Elective
-  semester      Int // 1 or 2
+  semester      Int? // 1 or 2; empty for a sessional course with no semester (B13, rule W17)
   level         Int // 100, 200, 300, 400
   prerequisites String? // Display string for prerequisites
   createdAt     DateTime     @default(now())
@@ -665,11 +665,11 @@ model MasterCourse {
   id                    String          @id @default(cuid())
   code                  String          @unique // e.g., "COS 101"
   title                 String // Sentence case enforced programmatically
-  units                 Int
+  units                 Int // 0 to 12 (task B13)
   type                  CourseType      @default(CORE)
   ownership             CourseOwnership @default(DEPARTMENT)
-  level                 Int // 100, 200, 300, 400, 500
-  semester              Int // 1 or 2
+  level                 Int // 100, 200, 300, 400, 500, 600
+  semester              Int? // 1 or 2; empty for a sessional course with no semester (B13, rule W17)
   description           String? // Short Registry summary
   learningOutcomes      Json? // Central starting outcomes for GST/shared courses
   courseContent         String? // Central starting course description/content

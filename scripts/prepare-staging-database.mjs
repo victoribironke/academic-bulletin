@@ -32,9 +32,13 @@ if (push.status !== 0) {
 
 // 2. Database rules the schema can't express, exactly as the live site has
 //    them. Each statement is safe to run again.
-const ledgerGuards = readFileSync(
-  join(process.cwd(), "prisma/migrations/20261105140100_ledger_guards/migration.sql"),
-  "utf8",
+// Rerunnable migrations that add rules the schema can't express.
+const RULE_MIGRATIONS = [
+  "20261105140100_ledger_guards",
+  "20261123150000_sessional_courses_and_unit_range",
+];
+const ruleSql = RULE_MIGRATIONS.map((name) =>
+  readFileSync(join(process.cwd(), "prisma/migrations", name, "migration.sql"), "utf8"),
 );
 const phaseOwnerChecks = `
 DO $$
@@ -52,12 +56,12 @@ END $$;`;
 const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await client.connect();
 try {
-  await client.query(ledgerGuards);
+  for (const sql of ruleSql) await client.query(sql);
   await client.query(phaseOwnerChecks);
   const { rows } = await client.query(
     `SELECT count(*)::int AS tables FROM information_schema.tables WHERE table_schema = 'public'`,
   );
-  console.log(`Test site database ready: ${rows[0].tables} tables, ledger guards and phase-owner checks in place.`);
+  console.log(`Test site database ready: ${rows[0].tables} tables; ledger guards, course rules and phase-owner checks in place.`);
 } finally {
   await client.end();
 }

@@ -22,7 +22,7 @@ interface MasterCourseUpdate {
   title?: string;
   units?: number;
   level?: number;
-  semester?: number;
+  semester?: number | null;
   type?: string;
   learningOutcomes?: string[];
   courseContent?: string | null;

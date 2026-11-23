@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import {
+  SEMESTER_RULE_MESSAGE,
+  UNITS_RULE_MESSAGE,
+  isValidCourseUnits,
+  parseCourseSemester,
+} from "@/lib/courses/course-rules";
+import {
   formatCourseTitle,
   isValidCourseCode,
   formatCourseCode,
@@ -26,7 +32,6 @@ const VALID_COURSE_TYPES = [
 ];
 const VALID_OWNERSHIP = ["DEPARTMENT", "SCHOOL", "INSTITUTIONAL"];
 const VALID_LEVELS = [100, 200, 300, 400, 500, 600];
-const VALID_SEMESTERS = [1, 2];
 
 // GET /api/master-courses/[id] - Get a single master course
 export async function GET(
@@ -152,11 +157,8 @@ export async function PATCH(
     }
     if (title !== undefined) updateData.title = formatCourseTitle(title);
     if (units !== undefined) {
-      if (typeof units !== "number" || units < 1 || units > 6) {
-        return NextResponse.json(
-          { error: "Units must be between 1 and 6" },
-          { status: 400 },
-        );
+      if (!isValidCourseUnits(units)) {
+        return NextResponse.json({ error: UNITS_RULE_MESSAGE }, { status: 400 });
       }
       updateData.units = units;
     }
@@ -185,13 +187,12 @@ export async function PATCH(
       updateData.level = level;
     }
     if (semester !== undefined) {
-      if (!VALID_SEMESTERS.includes(semester)) {
-        return NextResponse.json(
-          { error: "Invalid semester" },
-          { status: 400 },
-        );
+      // 1, 2, or null for a sessional course with no semester (B13)
+      const parsedSemester = parseCourseSemester(semester);
+      if (parsedSemester === undefined) {
+        return NextResponse.json({ error: SEMESTER_RULE_MESSAGE }, { status: 400 });
       }
-      updateData.semester = semester;
+      updateData.semester = parsedSemester;
     }
     if (description !== undefined) updateData.description = description || null;
     if (learningOutcomes !== undefined) {

@@ -24,6 +24,9 @@ export interface Column<T> {
   key: keyof T;
   header: string;
   type: "text" | "number" | "select" | "readonly" | "combobox";
+  /** Lowest and highest value for a number column. */
+  min?: number;
+  max?: number;
   placeholder?: string;
   options?: { value: string; label: string }[];
   width?: string;
@@ -142,7 +145,10 @@ export function DynamicTable<T extends Record<string, unknown>>({
         return (
           <Input
             type="number"
-            value={(value as number) || ""}
+            // Show 0 as 0: a course can carry 0 units (B13).
+            value={value === undefined || value === null ? "" : (value as number)}
+            min={column.min}
+            max={column.max}
             onChange={(e) =>
               updateCell(rowIndex, column.key, parseInt(e.target.value) || 0)
             }

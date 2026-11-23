@@ -55,6 +55,12 @@ import {
   validateMasterCourseImportRows,
   type MasterCourseImportData,
 } from "@/lib/imports/courses";
+import {
+  MAX_COURSE_UNITS,
+  MIN_COURSE_UNITS,
+  courseSemesterShortLabel,
+  parseCourseSemester,
+} from "@/lib/courses/course-rules";
 
 // Types
 interface MasterCourse {
@@ -65,7 +71,8 @@ interface MasterCourse {
   type: string;
   ownership: string;
   level: number;
-  semester: number;
+  /** 1, 2, or null for a sessional course with no semester (B13). */
+  semester: number | null;
   description?: string;
   learningOutcomes?: string[];
   courseContent?: string;
@@ -115,7 +122,14 @@ const OWNERSHIP_TYPES = [
 ];
 
 const LEVELS = [100, 200, 300, 400, 500, 600];
-const SEMESTERS = [1, 2];
+/** Semester picker values: "1", "2", or "S" for a sessional course (B13). */
+const SEMESTER_CHOICES = [
+  { value: "1", label: "First Semester" },
+  { value: "2", label: "Second Semester" },
+  { value: "S", label: "Sessional (no semester)" },
+];
+const semesterChoice = (semester: number | null) => (semester === 1 || semester === 2 ? String(semester) : "S");
+const semesterFromChoice = (value: string) => parseCourseSemester(value) ?? null;
 
 export function MasterCourseManager({
   departmentId,
@@ -141,7 +155,7 @@ export function MasterCourseManager({
     title: "",
     units: 2,
     level: 100,
-    semester: 1,
+    semester: 1 as number | null,
     description: "",
     learningOutcomes: "",
     courseContent: "",
@@ -215,7 +229,7 @@ export function MasterCourseManager({
     type: "CORE",
     ownership: "DEPARTMENT",
     level: 100,
-    semester: 1,
+    semester: 1 as number | null,
     description: "",
     learningOutcomes: [] as string[],
     courseContent: "",
@@ -616,7 +630,7 @@ export function MasterCourseManager({
               <TableCell>{getCourseTypeBadge(course.type)}</TableCell>
               <TableCell>{getOwnershipBadge(course)}</TableCell>
               <TableCell>{course.level}</TableCell>
-              <TableCell>{course.semester}</TableCell>
+              <TableCell>{courseSemesterShortLabel(course.semester)}</TableCell>
               <TableCell>
                 <Badge variant="outline">
                   {course._count?.programmeLinks || 0}
@@ -779,8 +793,8 @@ export function MasterCourseManager({
                 <Label>Units</Label>
                 <Input
                   type="number"
-                  min={1}
-                  max={6}
+                  min={MIN_COURSE_UNITS}
+                  max={MAX_COURSE_UNITS}
                   value={newCourse.units}
                   onChange={(e) =>
                     setNewCourse({
@@ -871,18 +885,18 @@ export function MasterCourseManager({
               <div>
                 <Label>Semester</Label>
                 <Select
-                  value={newCourse.semester.toString()}
+                  value={semesterChoice(newCourse.semester)}
                   onValueChange={(v) =>
-                    setNewCourse({ ...newCourse, semester: parseInt(v) })
+                    setNewCourse({ ...newCourse, semester: semesterFromChoice(v) })
                   }
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {SEMESTERS.map((s) => (
-                      <SelectItem key={s} value={s.toString()}>
-                        {s === 1 ? "First" : "Second"}
+                    {SEMESTER_CHOICES.map((choice) => (
+                      <SelectItem key={choice.value} value={choice.value}>
+                        {choice.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1014,8 +1028,8 @@ export function MasterCourseManager({
                 <Label>Units</Label>
                 <Input
                   type="number"
-                  min={1}
-                  max={6}
+                  min={MIN_COURSE_UNITS}
+                  max={MAX_COURSE_UNITS}
                   value={editDraft.units}
                   onChange={(event) =>
                     setEditDraft({
@@ -1046,16 +1060,16 @@ export function MasterCourseManager({
               <div>
                 <Label>Semester</Label>
                 <Select
-                  value={String(editDraft.semester)}
+                  value={semesterChoice(editDraft.semester)}
                   onValueChange={(value) =>
-                    setEditDraft({ ...editDraft, semester: Number(value) })
+                    setEditDraft({ ...editDraft, semester: semesterFromChoice(value) })
                   }
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {SEMESTERS.map((semester) => (
-                      <SelectItem key={semester} value={String(semester)}>
-                        {semester === 1 ? "First" : "Second"} Semester
+                    {SEMESTER_CHOICES.map((choice) => (
+                      <SelectItem key={choice.value} value={choice.value}>
+                        {choice.label}
                       </SelectItem>
                     ))}
                   </SelectContent>

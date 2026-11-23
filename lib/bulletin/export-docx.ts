@@ -19,6 +19,7 @@ import {
   VerticalAlign,
   WidthType,
 } from "docx";
+import { courseSemesterLabel, courseSemesterOrder } from "@/lib/courses/course-rules";
 import type {
   BulletinCourse,
   BulletinData,
@@ -401,7 +402,8 @@ function admissionSection(programme: BulletinProgramme): DocElement[] {
 }
 
 function groupCourses(courses: BulletinCourse[]) {
-  const grouped = new Map<number, Map<number, BulletinCourse[]>>();
+  // Semester is null for a sessional course with no semester (B13).
+  const grouped = new Map<number, Map<number | null, BulletinCourse[]>>();
   courses.forEach((course) => {
     if (!grouped.has(course.level)) grouped.set(course.level, new Map());
     const semesters = grouped.get(course.level)!;
@@ -417,8 +419,8 @@ function courseStructureSection(programme: BulletinProgramme): DocElement[] {
   if (grouped.size === 0) return [...elements, paragraph("No course structure has been provided.", { italic: true })];
   [...grouped.entries()].sort(([a], [b]) => a - b).forEach(([level, semesters]) => {
     elements.push(heading(`${level} Level`, 2));
-    [...semesters.entries()].sort(([a], [b]) => a - b).forEach(([semester, courses]) => {
-      elements.push(paragraph(`${semester === 1 ? "First" : "Second"} Semester`, { bold: true }));
+    [...semesters.entries()].sort(([a], [b]) => courseSemesterOrder(a) - courseSemesterOrder(b)).forEach(([semester, courses]) => {
+      elements.push(paragraph(courseSemesterLabel(semester), { bold: true }));
       const rows = courses.map((course) => [
         course.code,
         course.title,

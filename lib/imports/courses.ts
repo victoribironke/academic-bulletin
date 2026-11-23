@@ -11,13 +11,22 @@ import {
   type TemplateColumn,
   type ValidatedImportRow,
 } from "@/lib/imports/spreadsheet";
+import {
+  MAX_COURSE_UNITS,
+  MIN_COURSE_UNITS,
+  SEMESTER_RULE_MESSAGE,
+  UNITS_RULE_MESSAGE,
+  isValidCourseUnits,
+  parseCourseSemester,
+} from "@/lib/courses/course-rules";
 
 export interface CourseImportData {
   code: string;
   title: string;
   units: number;
   status: "CORE" | "ELECTIVE";
-  semester: number;
+  /** 1, 2, or null for a sessional course with no semester (B13). */
+  semester: number | null;
   level: number;
   prerequisites: string;
   learningOutcomes: string[];
@@ -33,7 +42,8 @@ export interface MasterCourseImportData {
   type: "GENERAL" | "CORE" | "ELECTIVE" | "REQUIRED" | "GST_NUC" | "GST_BU";
   ownership: "DEPARTMENT" | "SCHOOL" | "INSTITUTIONAL";
   level: number;
-  semester: number;
+  /** 1, 2, or null for a sessional course with no semester (B13). */
+  semester: number | null;
   description: string;
   learningOutcomes: string[];
   courseContent: string;
@@ -48,12 +58,32 @@ export interface MasterCourseImportData {
   discoverable: boolean;
 }
 
+const UNIT_OPTIONS = Array.from(
+  { length: MAX_COURSE_UNITS - MIN_COURSE_UNITS + 1 },
+  (_, index) => String(MIN_COURSE_UNITS + index),
+);
+
+/** Reads the Semester cell: 1, 2, or null for a sessional course. */
+function readSemester(
+  raw: SpreadsheetRecord,
+  errors: string[],
+  warnings: string[],
+): number | null {
+  const semester = parseCourseSemester(importText(getImportValue(raw, ["Semester", "Sem"])));
+  if (semester === undefined) {
+    errors.push(SEMESTER_RULE_MESSAGE);
+    return null;
+  }
+  if (semester === null) warnings.push("No semester: added as a sessional course that runs the whole year.");
+  return semester;
+}
+
 export const COURSE_TEMPLATE_COLUMNS: TemplateColumn[] = [
   { key: "code", label: "Course Code", required: true, guidance: "Use a code such as COS 101." },
   { key: "title", label: "Course Title", required: true },
-  { key: "units", label: "Units", required: true, options: ["1", "2", "3", "4", "5", "6"] },
+  { key: "units", label: "Units", required: true, options: UNIT_OPTIONS, guidance: `A whole number from ${MIN_COURSE_UNITS} to ${MAX_COURSE_UNITS}.` },
   { key: "status", label: "Status", required: true, options: ["CORE", "ELECTIVE"] },
-  { key: "semester", label: "Semester", required: true, options: ["1", "2"] },
+  { key: "semester", label: "Semester", options: ["1", "2", "Sessional"], guidance: "1 or 2; leave empty or write Sessional for a course that runs the whole year (for example MBBS)." },
   { key: "level", label: "Level", required: true, options: ["100", "200", "300", "400", "500", "600"] },
   { key: "prerequisites", label: "Prerequisites", guidance: "Optional course codes or prerequisite description." },
   { key: "learningOutcomes", label: "Learning Outcomes", guidance: "Separate multiple outcomes with |, semicolons, or new lines." },
@@ -79,11 +109,11 @@ export const COURSE_TEMPLATE_EXAMPLES = [[
 export const MASTER_COURSE_TEMPLATE_COLUMNS: TemplateColumn[] = [
   { key: "code", label: "Course Code", required: true },
   { key: "title", label: "Course Title", required: true },
-  { key: "units", label: "Units", required: true, options: ["1", "2", "3", "4", "5", "6"] },
+  { key: "units", label: "Units", required: true, options: UNIT_OPTIONS, guidance: `A whole number from ${MIN_COURSE_UNITS} to ${MAX_COURSE_UNITS}.` },
   { key: "type", label: "Course Type", required: true, options: ["GENERAL", "CORE", "ELECTIVE", "REQUIRED", "GST_NUC", "GST_BU"] },
   { key: "ownership", label: "Ownership", required: true, options: ["DEPARTMENT", "SCHOOL", "INSTITUTIONAL"] },
   { key: "level", label: "Level", required: true, options: ["100", "200", "300", "400", "500", "600"] },
-  { key: "semester", label: "Semester", required: true, options: ["1", "2"] },
+  { key: "semester", label: "Semester", options: ["1", "2", "Sessional"], guidance: "1 or 2; leave empty or write Sessional for a course that runs the whole year (for example MBBS)." },
   { key: "description", label: "Description" },
   { key: "learningOutcomes", label: "Learning Outcomes" },
   { key: "courseContent", label: "Course Content" },
@@ -127,8 +157,10 @@ function normalizedEnum(value: unknown): string {
     .replace(/^_+|_+$/g, "");
 }
 
+/** A number from a cell; NaN when the cell is empty, so an empty Units cell is never read as 0 units. */
 function numberValue(value: unknown): number {
-  return Number(importText(value));
+  const text = importText(value);
+  return text === "" ? Number.NaN : Number(text);
 }
 
 function learningOutcomes(value: unknown): string[] {
@@ -191,15 +223,14 @@ export function validateCourseImportRows(
     const title = formatCourseTitle(rawTitle);
     const units = numberValue(getImportValue(raw, ["Units", "Credit Units"]));
     const statusInput = normalizedEnum(getImportValue(raw, ["Status", "Course Status"]) || "CORE");
-    const semester = numberValue(getImportValue(raw, ["Semester", "Sem"]));
+    const semester = readSemester(raw, errors, warnings);
     const level = numberValue(getImportValue(raw, ["Level"]));
     const prerequisites = importText(getImportValue(raw, ["Prerequisites", "Prerequisite"]));
 
     if (!isValidCourseCode(rawCode)) errors.push("Invalid course code; use a format such as COS 101 or BU-COS 101.");
     if (!title) errors.push("Course Title is required.");
-    if (!Number.isInteger(units) || units < 1 || units > 6) errors.push("Units must be a whole number from 1 to 6.");
+    if (!isValidCourseUnits(units)) errors.push(UNITS_RULE_MESSAGE);
     if (!["CORE", "ELECTIVE"].includes(statusInput)) errors.push("Status must be CORE or ELECTIVE.");
-    if (![1, 2].includes(semester)) errors.push("Semester must be 1 or 2.");
     if (!allowedLevels.includes(level)) errors.push(`Level must be one of: ${allowedLevels.join(", ")}.`);
 
     const duplicate = courseDuplicateKeys({ code, title });
@@ -257,17 +288,16 @@ export function validateMasterCourseImportRows(
     const type = normalizedEnum(getImportValue(raw, ["Course Type", "Type"]) || "CORE");
     const ownership = normalizedEnum(getImportValue(raw, ["Ownership"]) || "DEPARTMENT");
     const level = numberValue(getImportValue(raw, ["Level"]));
-    const semester = numberValue(getImportValue(raw, ["Semester", "Sem"]));
+    const semester = readSemester(raw, errors, warnings);
     const ownerDepartmentCode = importText(getImportValue(raw, ["Owner Department Code", "Department Code"])).toUpperCase();
     const ownerSchoolCode = importText(getImportValue(raw, ["Owner School Code", "School Code"])).toUpperCase();
 
     if (!isValidCourseCode(rawCode)) errors.push("Invalid course code; use a format such as GST 101 or BU-GST 112.");
     if (!title) errors.push("Course Title is required.");
-    if (!Number.isInteger(units) || units < 1 || units > 6) errors.push("Units must be a whole number from 1 to 6.");
+    if (!isValidCourseUnits(units)) errors.push(UNITS_RULE_MESSAGE);
     if (!types.includes(type)) errors.push("Invalid Course Type.");
     if (!ownerships.includes(ownership)) errors.push("Invalid Ownership.");
     if (![100, 200, 300, 400, 500, 600].includes(level)) errors.push("Level must be 100, 200, 300, 400, 500, or 600.");
-    if (![1, 2].includes(semester)) errors.push("Semester must be 1 or 2.");
     if (ownership === "DEPARTMENT" && !ownerDepartmentCode) errors.push("Owner Department Code is required.");
     if (ownership === "SCHOOL" && !ownerSchoolCode) errors.push("Owner School Code is required.");
     if (["GST_NUC", "GST_BU"].includes(type) && ownership !== "INSTITUTIONAL") {

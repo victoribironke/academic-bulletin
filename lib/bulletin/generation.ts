@@ -29,7 +29,8 @@ export interface BulletinCourse {
   title: string;
   units: number;
   status: string;
-  semester: number;
+  /** 1, 2, or null for a sessional course with no semester (B13). */
+  semester: number | null;
   level: number;
   prerequisites?: string;
   ownership?: string;

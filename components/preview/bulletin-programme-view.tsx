@@ -21,17 +21,23 @@ export function BulletinProgrammeView({
   );
 
   // Helper to group courses
+  // Sessional courses have no semester (B13, rule W17) and get their own table.
   const groupedCourses = programme.courses.reduce(
     (acc, course) => {
-      if (!acc[course.level]) acc[course.level] = { sem1: [], sem2: [] };
+      if (!acc[course.level]) acc[course.level] = { sem1: [], sem2: [], sessional: [] };
       if (course.semester === 1) {
         acc[course.level].sem1.push(course);
-      } else {
+      } else if (course.semester === 2) {
         acc[course.level].sem2.push(course);
+      } else {
+        acc[course.level].sessional.push(course);
       }
       return acc;
     },
-    {} as Record<number, { sem1: BulletinCourse[]; sem2: BulletinCourse[] }>,
+    {} as Record<
+      number,
+      { sem1: BulletinCourse[]; sem2: BulletinCourse[]; sessional: BulletinCourse[] }
+    >,
   );
 
   return (
@@ -317,104 +323,61 @@ export function BulletinProgrammeView({
             <div key={level} className="mb-6">
               <h3 className="font-semibold mb-3">{level} Level</h3>
 
-              {/* First Semester */}
-              {semesters.sem1.length > 0 && (
-                <div className="mb-4">
-                  <h4 className="font-medium mb-2 text-muted-foreground">
-                    First Semester
-                  </h4>
-                  <table className="w-full border-collapse border text-xs">
-                    <thead>
-                      <tr className="bg-muted">
-                        <th className="border p-2 text-left">S/N</th>
-                        <th className="border p-2 text-left">Course Code</th>
-                        <th className="border p-2 text-left">Course Title</th>
-                        <th className="border p-2 text-center">Units</th>
-                        <th className="border p-2 text-center">Status</th>
-                        <th className="border p-2 text-center">
-                          Prerequisites
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {semesters.sem1.map((course, i) => (
-                        <tr key={course.code}>
-                          <td className="border p-2">{i + 1}</td>
-                          <td className="border p-2">{course.code}</td>
-                          <td className="border p-2">{course.title}</td>
-                          <td className="border p-2 text-center">
-                            {course.units}
-                          </td>
-                          <td className="border p-2 text-center">
-                            {course.status === "CORE" ? "C" : "E"}
-                          </td>
-                          <td className="border p-2 text-center">
-                            {course.prerequisites || "-"}
-                          </td>
+              {(
+                [
+                  ["First Semester", semesters.sem1],
+                  ["Second Semester", semesters.sem2],
+                  ["Sessional (no semester)", semesters.sessional],
+                ] as const
+              ).map(([label, courses]) =>
+                courses.length > 0 && (
+                  <div key={label} className="mb-4">
+                    <h4 className="font-medium mb-2 text-muted-foreground">
+                      {label}
+                    </h4>
+                    <table className="w-full border-collapse border text-xs">
+                      <thead>
+                        <tr className="bg-muted">
+                          <th className="border p-2 text-left">S/N</th>
+                          <th className="border p-2 text-left">Course Code</th>
+                          <th className="border p-2 text-left">Course Title</th>
+                          <th className="border p-2 text-center">Units</th>
+                          <th className="border p-2 text-center">Status</th>
+                          <th className="border p-2 text-center">
+                            Prerequisites
+                          </th>
                         </tr>
-                      ))}
-                      <tr className="font-semibold bg-muted">
-                        <td colSpan={3} className="border p-2 text-right">
-                          Total Units:
-                        </td>
-                        <td className="border p-2 text-center">
-                          {semesters.sem1.reduce((sum, c) => sum + c.units, 0)}
-                        </td>
-                        <td className="border p-2" colSpan={2}></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* Second Semester */}
-              {semesters.sem2.length > 0 && (
-                <div className="mb-4">
-                  <h4 className="font-medium mb-2 text-muted-foreground">
-                    Second Semester
-                  </h4>
-                  <table className="w-full border-collapse border text-xs">
-                    <thead>
-                      <tr className="bg-muted">
-                        <th className="border p-2 text-left">S/N</th>
-                        <th className="border p-2 text-left">Course Code</th>
-                        <th className="border p-2 text-left">Course Title</th>
-                        <th className="border p-2 text-center">Units</th>
-                        <th className="border p-2 text-center">Status</th>
-                        <th className="border p-2 text-center">
-                          Prerequisites
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {semesters.sem2.map((course, i) => (
-                        <tr key={course.code}>
-                          <td className="border p-2">{i + 1}</td>
-                          <td className="border p-2">{course.code}</td>
-                          <td className="border p-2">{course.title}</td>
-                          <td className="border p-2 text-center">
-                            {course.units}
+                      </thead>
+                      <tbody>
+                        {courses.map((course, i) => (
+                          <tr key={course.code}>
+                            <td className="border p-2">{i + 1}</td>
+                            <td className="border p-2">{course.code}</td>
+                            <td className="border p-2">{course.title}</td>
+                            <td className="border p-2 text-center">
+                              {course.units}
+                            </td>
+                            <td className="border p-2 text-center">
+                              {course.status === "CORE" ? "C" : "E"}
+                            </td>
+                            <td className="border p-2 text-center">
+                              {course.prerequisites || "-"}
+                            </td>
+                          </tr>
+                        ))}
+                        <tr className="font-semibold bg-muted">
+                          <td colSpan={3} className="border p-2 text-right">
+                            Total Units:
                           </td>
                           <td className="border p-2 text-center">
-                            {course.status === "CORE" ? "C" : "E"}
+                            {courses.reduce((sum, c) => sum + c.units, 0)}
                           </td>
-                          <td className="border p-2 text-center">
-                            {course.prerequisites || "-"}
-                          </td>
+                          <td className="border p-2" colSpan={2}></td>
                         </tr>
-                      ))}
-                      <tr className="font-semibold bg-muted">
-                        <td colSpan={3} className="border p-2 text-right">
-                          Total Units:
-                        </td>
-                        <td className="border p-2 text-center">
-                          {semesters.sem2.reduce((sum, c) => sum + c.units, 0)}
-                        </td>
-                        <td className="border p-2" colSpan={2}></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+                      </tbody>
+                    </table>
+                  </div>
+                ),
               )}
             </div>
           ))}
