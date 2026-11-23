@@ -11,7 +11,7 @@
  * changed, so running it again, or after a Head has started, is safe.
  */
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { prepareCourseGraceState } from "@/lib/courses/grace-compliance";
+import { prepareCourseGraceState, prepareCourseGraceStates } from "@/lib/courses/grace-compliance";
 import { titleKey, uniqueTitle } from "@/lib/courses/unique-title";
 import {
   generalEducationBlockFor,
@@ -235,6 +235,32 @@ export async function loadRegistryCourses(db: Database, codes: string[]): Promis
   );
 }
 
+type RegistryDetailsSource = {
+  learningOutcomes: Prisma.JsonValue | null;
+  courseContent: string | null;
+  description: string | null;
+  labWork: string | null;
+  entrepreneurialAspect: string | null;
+};
+type ProgrammeOverrides = {
+  learningOutcomesOverride: Prisma.JsonValue | null;
+  courseContentOverride: string | null;
+} | null | undefined;
+
+/** The Registry's shared details for a course, with the programme's own wording first; null when there are none. */
+function registryDetails(master: RegistryDetailsSource, programmeLink: ProgrammeOverrides) {
+  const outcomes = programmeLink?.learningOutcomesOverride ?? master.learningOutcomes;
+  const learningOutcomes = Array.isArray(outcomes)
+    ? outcomes.filter((item): item is string => typeof item === "string" && item.trim() !== "")
+    : [];
+  const courseContent =
+    programmeLink?.courseContentOverride?.trim() || master.courseContent?.trim() || master.description?.trim() || "";
+  const labWork = master.labWork?.trim() || null;
+  const entrepreneurialAspect = master.entrepreneurialAspect?.trim() || null;
+  if (learningOutcomes.length === 0 && !courseContent && !labWork && !entrepreneurialAspect) return null;
+  return { learningOutcomes, courseContent, labWork, entrepreneurialAspect };
+}
+
 /**
  * Starts a draft course's details from the Registry's shared description,
  * when the Registry has one and the draft doesn't yet. Heads of Department
@@ -246,40 +272,23 @@ export async function seedRegistryDescription(
     courseId: string;
     submissionId: string;
     title: string;
-    master: {
-      learningOutcomes: Prisma.JsonValue | null;
-      courseContent: string | null;
-      description: string | null;
-      labWork: string | null;
-      entrepreneurialAspect: string | null;
-    };
-    programmeLink?: {
-      learningOutcomesOverride: Prisma.JsonValue | null;
-      courseContentOverride: string | null;
-    } | null;
+    master: RegistryDetailsSource;
+    programmeLink?: ProgrammeOverrides;
   },
 ): Promise<boolean> {
-  const { master, programmeLink } = input;
-  const outcomes = programmeLink?.learningOutcomesOverride ?? master.learningOutcomes;
-  const learningOutcomes = Array.isArray(outcomes)
-    ? outcomes.filter((item): item is string => typeof item === "string" && item.trim() !== "")
-    : [];
-  const courseContent =
-    programmeLink?.courseContentOverride?.trim() || master.courseContent?.trim() || master.description?.trim() || "";
-  const hasDetails =
-    learningOutcomes.length > 0 || courseContent || master.labWork?.trim() || master.entrepreneurialAspect?.trim();
-  if (!hasDetails) return false;
+  const details = registryDetails(input.master, input.programmeLink);
+  if (!details) return false;
   const existing = await db.courseDescription.findUnique({ where: { courseId: input.courseId }, select: { id: true } });
   if (existing) return false;
-  const graceState = await prepareCourseGraceState(db, { title: input.title, learningOutcomes, courseContent });
+  const graceState = await prepareCourseGraceState(db, { title: input.title, ...details });
   await db.courseDescription.create({
     data: {
       courseId: input.courseId,
       submissionId: input.submissionId,
-      courseContent: courseContent || null,
-      learningOutcomes,
-      labWork: master.labWork?.trim() || null,
-      entrepreneurialAspect: master.entrepreneurialAspect?.trim() || null,
+      courseContent: details.courseContent || null,
+      learningOutcomes: details.learningOutcomes,
+      labWork: details.labWork,
+      entrepreneurialAspect: details.entrepreneurialAspect,
       ...graceState,
     },
   });
@@ -287,66 +296,137 @@ export async function seedRegistryDescription(
 }
 
 /**
+ * The same for every Registry-linked row of a draft that has no details yet,
+ * in a few queries. Picks up rows a stopped run left without details.
+ */
+export async function seedRegistryDescriptions(
+  db: Database,
+  draft: { id: string; programmeId: string },
+): Promise<number> {
+  const rows = await db.course.findMany({
+    where: { submissionId: draft.id, masterCourseId: { not: null }, description: { is: null } },
+    select: {
+      id: true,
+      title: true,
+      masterCourse: {
+        select: {
+          learningOutcomes: true,
+          courseContent: true,
+          description: true,
+          labWork: true,
+          entrepreneurialAspect: true,
+          programmeLinks: {
+            where: { programmeId: draft.programmeId },
+            select: { learningOutcomesOverride: true, courseContentOverride: true },
+          },
+        },
+      },
+    },
+  });
+  const candidates = rows.flatMap((row) => {
+    const details = row.masterCourse && registryDetails(row.masterCourse, row.masterCourse.programmeLinks[0]);
+    return details ? [{ row, details }] : [];
+  });
+  if (candidates.length === 0) return 0;
+  const states = await prepareCourseGraceStates(
+    db,
+    candidates.map(({ row, details }) => ({ title: row.title, ...details })),
+  );
+  const created = await db.courseDescription.createMany({
+    data: candidates.map(({ row, details }, index) => ({
+      courseId: row.id,
+      submissionId: draft.id,
+      courseContent: details.courseContent || null,
+      learningOutcomes: details.learningOutcomes,
+      labWork: details.labWork,
+      entrepreneurialAspect: details.entrepreneurialAspect,
+      ...states[index],
+    })),
+    skipDuplicates: true,
+  });
+  return created.count;
+}
+
+/**
  * Adds the planned rows to the draft, links Registry courses to the
- * programme, and starts their details from the Registry. Returns how many
- * rows were added.
+ * programme, and starts details from the Registry for linked rows that have
+ * none. Returns how many rows and details were added.
  */
 export async function applyCourseStructure(
   db: Database,
   draft: { id: string; programmeId: string },
   plan: StructurePlan,
 ): Promise<{ added: number; descriptions: number }> {
-  if (plan.courses.length === 0) return { added: 0, descriptions: 0 };
-  const created = await db.course.createManyAndReturn({
-    data: plan.courses.map((course) => ({
-      submissionId: draft.id,
-      code: course.code,
-      title: course.title,
-      units: course.units,
-      level: course.level,
-      semester: course.semester,
-      status: course.status,
-      prerequisites: course.prerequisites,
-      masterCourseId: course.masterCourseId,
-    })),
-    skipDuplicates: true,
-    select: { id: true, title: true, masterCourseId: true },
-  });
-
-  const masterIds = [...new Set(created.map((course) => course.masterCourseId).filter((id): id is string => Boolean(id)))];
-  if (masterIds.length === 0) return { added: created.length, descriptions: 0 };
-  await db.programmeCourse.createMany({
-    data: masterIds.map((courseId) => ({ programmeId: draft.programmeId, courseId, isCore: true })),
-    skipDuplicates: true,
-  });
-  const masters = await db.masterCourse.findMany({
-    where: { id: { in: masterIds } },
-    select: {
-      id: true,
-      learningOutcomes: true,
-      courseContent: true,
-      description: true,
-      labWork: true,
-      entrepreneurialAspect: true,
-      programmeLinks: {
-        where: { programmeId: draft.programmeId },
-        select: { learningOutcomesOverride: true, courseContentOverride: true },
-      },
-    },
-  });
-  const masterById = new Map(masters.map((master) => [master.id, master]));
-  let descriptions = 0;
-  for (const course of created) {
-    const master = course.masterCourseId ? masterById.get(course.masterCourseId) : undefined;
-    if (!master) continue;
-    const seeded = await seedRegistryDescription(db, {
-      courseId: course.id,
-      submissionId: draft.id,
-      title: course.title,
-      master,
-      programmeLink: master.programmeLinks[0] ?? null,
+  const created = plan.courses.length
+    ? await db.course.createMany({
+        data: plan.courses.map((course) => ({
+          submissionId: draft.id,
+          code: course.code,
+          title: course.title,
+          units: course.units,
+          level: course.level,
+          semester: course.semester,
+          status: course.status,
+          prerequisites: course.prerequisites,
+          masterCourseId: course.masterCourseId,
+        })),
+        skipDuplicates: true,
+      })
+    : { count: 0 };
+  const masterIds = [
+    ...new Set(plan.courses.map((course) => course.masterCourseId).filter((id): id is string => Boolean(id))),
+  ];
+  if (masterIds.length > 0) {
+    await db.programmeCourse.createMany({
+      data: masterIds.map((courseId) => ({ programmeId: draft.programmeId, courseId, isCore: true })),
+      skipDuplicates: true,
     });
-    if (seeded) descriptions += 1;
   }
-  return { added: created.length, descriptions };
+  const descriptions = await seedRegistryDescriptions(db, draft);
+  return { added: created.count, descriptions };
+}
+
+/**
+ * Registry courses linked to the programme whose codes aren't in `codes`
+ * (the draft's rows once pre-filled). Read only.
+ */
+export async function registryLinksOutside(
+  db: Database,
+  programmeId: string,
+  codes: Set<string>,
+): Promise<{ id: string; code: string }[]> {
+  const links = await db.programmeCourse.findMany({
+    where: { programmeId, course: { discoverable: true } },
+    select: { course: { select: { id: true, code: true } } },
+  });
+  return links
+    .map((link) => link.course)
+    .filter((course) => !codes.has(course.code))
+    .sort((a, b) => a.code.localeCompare(b.code));
+}
+
+/**
+ * A draft pre-filled from file 02 follows file 02 (E1). Registry courses
+ * linked to its programme but not in it are marked as removed, as when a
+ * Head removes one (G6), so a later Registry upload doesn't add them. A
+ * Head can still add one on purpose, which clears the mark. Nothing in the
+ * Registry changes. Returns how many were newly marked.
+ */
+export async function keepRegistryLinksOut(
+  db: Database,
+  draftId: string,
+  courseIds: string[],
+): Promise<number> {
+  const draft = await db.submission.findUniqueOrThrow({
+    where: { id: draftId },
+    select: { dismissedRegistryCourseIds: true },
+  });
+  const already = new Set(draft.dismissedRegistryCourseIds);
+  const fresh = [...new Set(courseIds)].filter((id) => !already.has(id));
+  if (fresh.length === 0) return 0;
+  await db.submission.update({
+    where: { id: draftId },
+    data: { dismissedRegistryCourseIds: [...draft.dismissedRegistryCourseIds, ...fresh] },
+  });
+  return fresh.length;
 }

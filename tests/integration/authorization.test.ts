@@ -122,7 +122,13 @@ import { GET as getDashboardStats } from "@/app/api/dashboard/stats/route";
 import { courseGraceContentHash } from "@/lib/courses/grace-compliance";
 import { preloadRegistryCoursesForSubmission } from "@/lib/courses/gst-pool";
 import { GENERAL_EDUCATION_BLOCK } from "@/lib/courses/general-education";
-import { applyCourseStructure, loadRegistryCourses, planCourseStructure } from "@/lib/courses/course-structure";
+import {
+  applyCourseStructure,
+  keepRegistryLinksOut,
+  loadRegistryCourses,
+  planCourseStructure,
+  registryLinksOutside,
+} from "@/lib/courses/course-structure";
 import { GET as getDeadlines } from "@/app/api/calendar/desk/route";
 import { type CalendarSettings, applyCalendarSettings } from "@/lib/calendar/settings";
 import { type RosterRow, applyRoster, planRoster } from "@/lib/people/roster";
@@ -5350,9 +5356,24 @@ describe("removed courses stay removed (G6) and General Education is locked (W1)
       const again = planCourseStructure({ levels: [100, 200, 300, 400], rows, registry, existing });
       expect(again.courses).toEqual([]);
       expect((await applyCourseStructure(prisma, { id: draftId, programmeId: ids.programmeA }, again)).added).toBe(0);
+
+      // A Registry course linked to the programme but not in file 02 stays
+      // out, even when a later Registry upload preloads the draft.
+      await prisma.masterCourse.create({
+        data: { id: "e1-extra", code: "GXZ 488", title: "Linked elsewhere", units: 2, type: "CORE", ownership: "DEPARTMENT", level: 400, semester: 1, ownerDeptId: ids.departmentA },
+      });
+      await prisma.programmeCourse.create({ data: { programmeId: ids.programmeA, courseId: "e1-extra" } });
+      const outside = await registryLinksOutside(prisma, ids.programmeA, new Set(existing.map((course) => course.code)));
+      expect(outside.map((course) => course.code)).toContain("GXZ 488");
+      expect(await keepRegistryLinksOut(prisma, draftId, outside.map((course) => course.id))).toBe(outside.length);
+      expect(await keepRegistryLinksOut(prisma, draftId, outside.map((course) => course.id))).toBe(0);
+      await preloadRegistryCoursesForSubmission(draftId);
+      expect(await prisma.course.findUnique({ where: { code_submissionId: { code: "GXZ 488", submissionId: draftId } } })).toBeNull();
     } finally {
       await prisma.submission.delete({ where: { id: draftId } });
       await prisma.reviewCycle.delete({ where: { id: "e1-cycle" } });
+      await prisma.programmeCourse.deleteMany({ where: { courseId: "e1-extra" } });
+      await prisma.masterCourse.deleteMany({ where: { id: "e1-extra" } });
     }
   });
 });

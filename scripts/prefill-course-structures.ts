@@ -52,9 +52,8 @@ type Line = string;
 async function main() {
   const { default: prisma } = await import("../lib/prisma");
   const { readStructureWorkbook } = await import("../lib/courses/read-structures");
-  const { applyCourseStructure, loadRegistryCourses, planCourseStructure } = await import(
-    "../lib/courses/course-structure"
-  );
+  const { applyCourseStructure, keepRegistryLinksOut, loadRegistryCourses, planCourseStructure, registryLinksOutside } =
+    await import("../lib/courses/course-structure");
   const { GENERAL_EDUCATION_BLOCK, programmeLevels } = await import("../lib/courses/general-education");
   const { loadCodeLookups } = await import("../lib/units/code-aliases");
   const { formatCourseCode } = await import("../lib/validation/name-format");
@@ -120,8 +119,10 @@ async function main() {
       levels: number[];
       plan: Plan;
       note: string | null;
+      outside: { id: string; code: string }[];
       added?: number;
       descriptions?: number;
+      keptOut?: number;
     }[] = [];
     for (const target of chosen) {
       const programme = programmeById.get(target.programmeId)!;
@@ -142,11 +143,26 @@ async function main() {
             ? "New programme: General Education block only; its course list comes with file 11."
             : "No rows in file 02: General Education block only."
           : null;
-      const result: (typeof results)[number] = { programme, draftId: target.draftId, levels, plan, note };
+      // The draft follows file 02: Registry links outside it stay out (G6 mark).
+      // Programmes with no file 02 list (the new ones) keep their links.
+      const outside =
+        programmeRows.length > 0
+          ? await registryLinksOutside(
+              prisma,
+              programme.id,
+              new Set([...existing.map((course) => course.code), ...plan.courses.map((course) => course.code)]),
+            )
+          : [];
+      const result: (typeof results)[number] = { programme, draftId: target.draftId, levels, plan, note, outside };
       if (confirm && target.draftId && editable) {
         const applied = await applyCourseStructure(prisma, { id: target.draftId, programmeId: programme.id }, plan);
         result.added = applied.added;
         result.descriptions = applied.descriptions;
+        result.keptOut = await keepRegistryLinksOut(
+          prisma,
+          target.draftId,
+          outside.map((course) => course.id),
+        );
       }
       results.push(result);
     }
@@ -177,6 +193,7 @@ async function main() {
       `- Codes listed twice for one programme (first kept): ${notesOf("LISTED_TWICE").length}`,
       `- Rows that aren't course codes or have no valid level or semester: ${notesOf("BAD_ROW").length}`,
       `- Courses not in the Registry yet (added from file 02; linked once the Registry has them): ${notesOf("NOT_IN_REGISTRY").length}`,
+      `- Registry courses linked to a programme but not in its file 02 list (kept out of the draft${confirm ? `; newly marked: ${results.reduce((total, item) => total + (item.keptOut ?? 0), 0)}` : ""}): ${results.reduce((total, item) => total + item.outside.length, 0)} in ${results.filter((item) => item.outside.length > 0).length} programmes`,
       ...(unmatched.size > 0
         ? [`- Programme codes in file 02 that match no programme: ${[...unmatched].map(([code, count]) => `${code} (${count} rows)`).join(", ")}`]
         : []),
@@ -194,6 +211,19 @@ async function main() {
       lines.push(`### ${heading}`, "");
       for (const { programme, note } of found) {
         lines.push(`- ${programme.name} (${programme.code}), file 02 row ${note.rowNumber ?? "?"}: ${note.message}`);
+      }
+      lines.push("");
+    }
+    const withOutside = results.filter((item) => item.outside.length > 0);
+    if (withOutside.length > 0) {
+      lines.push(
+        "### Registry links outside file 02",
+        "",
+        "These Registry courses are linked to the programme but aren't in its file 02 list, so they are kept out of the draft (a Head can still add one). DAP may want to remove the links in Master Courses.",
+        "",
+      );
+      for (const item of withOutside) {
+        lines.push(`- ${item.programme.name} (${item.programme.code}), ${item.outside.length}: ${item.outside.map((course) => course.code).join(", ")}`);
       }
       lines.push("");
     }

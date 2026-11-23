@@ -117,6 +117,65 @@ export async function prepareCourseGraceState(
   };
 }
 
+/**
+ * prepareCourseGraceState for many courses at once, in two queries instead
+ * of one per course (used when pre-filling whole drafts, task E1).
+ */
+export async function prepareCourseGraceStates(
+  db: GraceDb,
+  inputs: CourseGraceInput[],
+): Promise<CourseGraceState[]> {
+  const prepared = inputs.map((input) => {
+    const courseContent = input.courseContent?.trim() || "";
+    const learningOutcomes = normalizeLearningOutcomes(input.learningOutcomes);
+    return {
+      title: input.title.trim(),
+      courseContent,
+      learningOutcomes,
+      contentHash: courseGraceContentHash({ ...input, courseContent, learningOutcomes }),
+    };
+  });
+  const firstByHash = new Map<string, (typeof prepared)[number]>();
+  for (const item of prepared) {
+    if (item.contentHash && !firstByHash.has(item.contentHash)) firstByHash.set(item.contentHash, item);
+  }
+  if (firstByHash.size > 0) {
+    await db.graceAssessment.createMany({
+      data: [...firstByHash.values()].map((item) => ({
+        contentHash: item.contentHash!,
+        title: item.title,
+        courseContent: item.courseContent,
+        learningOutcomes: item.learningOutcomes,
+      })),
+      skipDuplicates: true,
+    });
+  }
+  const assessments =
+    firstByHash.size > 0
+      ? await db.graceAssessment.findMany({ where: { contentHash: { in: [...firstByHash.keys()] } } })
+      : [];
+  const byHash = new Map(assessments.map((assessment) => [assessment.contentHash, assessment]));
+  return prepared.map((item) => {
+    const assessment = item.contentHash ? byHash.get(item.contentHash) : undefined;
+    if (!item.contentHash || !assessment) {
+      return {
+        graceStatus: "PENDING",
+        graceContentHash: null,
+        gracePass: false,
+        graceResult: Prisma.JsonNull,
+        graceCheckedAt: null,
+      };
+    }
+    return {
+      graceStatus: assessment.status,
+      graceContentHash: item.contentHash,
+      gracePass: assessment.status === "COMPLIANT",
+      graceResult: persistedResult(assessment.result),
+      graceCheckedAt: assessment.checkedAt,
+    };
+  });
+}
+
 export async function synchronizeCourseGraceAssessment(
   courseId: string,
   db: GraceDb = prisma,
