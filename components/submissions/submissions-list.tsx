@@ -288,7 +288,8 @@ export function SubmissionsList({
                     )}
                     onClick={() => router.push(`/submissions/${submission.id}`)}
                   >
-                    <TableCell>
+                    {/* Q2: names wrap instead of widening the table. */}
+                    <TableCell className="min-w-48 whitespace-normal">
                       <div className="flex flex-wrap items-center gap-2">
                         <Link
                           href={`/submissions/${submission.id}`}
@@ -306,7 +307,7 @@ export function SubmissionsList({
                         {submission.programme.department.school.code}
                       </p>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="whitespace-normal">
                       <p className="text-sm font-medium">Phase {submission.currentPhase}</p>
                       <p className="text-xs text-muted-foreground">
                         {PHASE_NAMES[submission.currentPhase]}

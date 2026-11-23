@@ -328,13 +328,13 @@ export default function ActivityLogPage() {
                         <TableCell className="align-top text-sm whitespace-nowrap text-muted-foreground">
                           {formatTime(item.createdAt)}
                         </TableCell>
-                        <TableCell className="align-top">
+                        <TableCell className="align-top whitespace-normal">
                           {item.actor ? (
                             <div>
                               <p className="text-sm font-medium">
                                 {item.actor.firstName} {item.actor.lastName}
                               </p>
-                              <p className="text-xs text-muted-foreground">
+                              <p className="text-xs break-all text-muted-foreground">
                                 {item.actor.email}
                               </p>
                             </div>
@@ -342,7 +342,8 @@ export default function ActivityLogPage() {
                             <span className="text-sm text-muted-foreground">System</span>
                           )}
                         </TableCell>
-                        <TableCell className="align-top">
+                        {/* Q2: long descriptions wrap instead of widening the table. */}
+                        <TableCell className="min-w-56 align-top whitespace-normal">
                           <p className="text-sm">{item.description}</p>
                           <p className="mt-1 text-xs text-muted-foreground">
                             {readable(item.action)}
