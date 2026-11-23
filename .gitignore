@@ -103,3 +103,5 @@ updates-2-feb-2026.md
 !prisma/migrations/20261123210000_roster_people/migration.sql
 !prisma/migrations/20261123220000_mfa_trusted_devices/
 !prisma/migrations/20261123220000_mfa_trusted_devices/migration.sql
+!prisma/migrations/20261123230000_archived_cycles/
+!prisma/migrations/20261123230000_archived_cycles/migration.sql

@@ -31,6 +31,7 @@ import {
   getGraceGate,
   readGraceOverride,
 } from "@/lib/submissions/grace-gate";
+import { refuseIfArchived } from "@/lib/cycles/archive";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -91,6 +92,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!(await canViewSubmission(user, id))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+    const archived = await refuseIfArchived(id);
+    if (archived) return archived;
     // Get current submission
     const submission = await prisma.submission.findUnique({
       where: { id },

@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { currentVerification, mfaRequiredFor } from "@/lib/mfa/policy";
 import { canEditSubmissionAtStage } from "@/lib/submissions/workflow";
 import { isNamedPhaseOwner, loadPhaseOwners } from "@/lib/submissions/phase-owners";
+import { ARCHIVED_DRAFT_MESSAGE, isSubmissionArchived } from "@/lib/cycles/archive";
 import type { UserRole } from "@prisma/client";
 
 export interface ApiUser {
@@ -156,6 +157,7 @@ export async function canViewSubmission(
     where: { id: submissionId },
     select: {
       currentPhase: true,
+      cycle: { select: { archivedAt: true } },
       programme: {
         select: {
           id: true,
@@ -165,6 +167,8 @@ export async function canViewSubmission(
     },
   });
   if (!submission) return false;
+  // Drafts of an archived cycle (task A2) are for Academic Planning only.
+  if (submission.cycle?.archivedAt) return false;
 
   if (user.role === "HOD") {
     if (submission.programme.department.id === user.departmentId) return true;
@@ -202,9 +206,13 @@ export async function canReadSubmission(
 
   const submission = await prisma.submission.findUnique({
     where: { id: submissionId },
-    select: { programme: { select: { department: { select: { schoolId: true } } } } },
+    select: {
+      cycle: { select: { archivedAt: true } },
+      programme: { select: { department: { select: { schoolId: true } } } },
+    },
   });
-  return submission?.programme.department.schoolId === user.schoolId;
+  if (!submission || submission.cycle?.archivedAt) return false;
+  return submission.programme.department.schoolId === user.schoolId;
 }
 
 /** Read-only department access, with the same HOD school rule as above. */
@@ -238,6 +246,7 @@ export async function canWriteSubmission(
     select: {
       status: true,
       currentPhase: true,
+      cycle: { select: { archivedAt: true } },
       programme: {
         select: {
           id: true,
@@ -250,6 +259,8 @@ export async function canWriteSubmission(
   if (!submission) {
     return false;
   }
+  // An archived cycle's drafts are read-only for everyone (task A2).
+  if (submission.cycle?.archivedAt) return false;
 
   const owners = await loadPhaseOwners();
   if (
@@ -290,6 +301,9 @@ export async function requireSubmissionWriteAccess(
   }
   const allowed = await canWriteSubmission(user, submissionId);
   if (!allowed) {
+    if (await isSubmissionArchived(submissionId)) {
+      return { ok: false, status: 409, message: ARCHIVED_DRAFT_MESSAGE };
+    }
     return {
       ok: false,
       status: 403,

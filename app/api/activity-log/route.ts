@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
+import { archivedEntityIds, withoutArchivedEntries } from "@/lib/cycles/archive";
 
 function parseDate(value: string | null) {
   if (!value) return null;
@@ -29,7 +30,12 @@ export async function GET(request: NextRequest) {
       Math.max(10, Number(searchParams.get("pageSize")) || 25),
     );
 
-    const where: Prisma.ActivityLogWhereInput = {
+    // Entries about an archived cycle and its drafts (task A2) are left out
+    // unless the page asks for them with ?archived=include.
+    const includeArchived = searchParams.get("archived") === "include";
+    const hidden = includeArchived ? [] : await archivedEntityIds();
+
+    const filters: Prisma.ActivityLogWhereInput = {
       ...(action && { action }),
       ...(entityType && { entityType }),
       ...(actorId && { actorId }),
@@ -46,6 +52,7 @@ export async function GET(request: NextRequest) {
         ],
       }),
     };
+    const where: Prisma.ActivityLogWhereInput = { AND: [filters, withoutArchivedEntries(hidden)] };
 
     const [items, total, actionGroups, entityGroups, actors] =
       await prisma.$transaction([
@@ -85,6 +92,7 @@ export async function GET(request: NextRequest) {
       page,
       pageSize,
       pageCount: Math.max(1, Math.ceil(total / pageSize)),
+      archivedHidden: hidden.length > 0,
       filters: {
         actions: actionGroups.map((group) => group.action),
         entityTypes: entityGroups.map((group) => group.entityType),

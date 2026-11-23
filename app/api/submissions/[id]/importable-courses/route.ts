@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { canViewSubmission, requireApiUser } from "@/lib/api-auth";
+import { NOT_IN_ARCHIVED_CYCLE } from "@/lib/cycles/archive";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -67,6 +68,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         programmeId: submission.programmeId,
         id: { not: id },
         status: { in: ["APPROVED", "DRAFT", "IN_REVIEW"] },
+        // Not from an archived (test) cycle, task A2.
+        AND: [NOT_IN_ARCHIVED_CYCLE],
       },
       select: {
         id: true,

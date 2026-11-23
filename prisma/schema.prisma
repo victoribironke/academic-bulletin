@@ -459,6 +459,12 @@ model ReviewCycle {
   workingWeek       String[]  @default(["MON", "TUE", "WED", "THU", "FRI"])
   /// { weekdays: "18:00-08:00", sabbath: "Friday 18:00 to Saturday 19:00" }
   quietHours        Json?
+  /// Task A2 (DEC5): an archived cycle keeps its drafts, comments, photos and
+  /// log entries where they are, read-only, and is left out of every
+  /// dashboard, count and default view until it is restored.
+  isTest       Boolean   @default(false)
+  archivedAt   DateTime?
+  archivedById String?
   createdById String
 
   createdBy    User               @relation(fields: [createdById], references: [id])

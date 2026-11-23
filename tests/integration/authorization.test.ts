@@ -89,7 +89,10 @@ import { POST as createStaff } from "@/app/api/staff/route";
 import { DELETE as deleteStaff, PATCH as updateStaff } from "@/app/api/staff/[id]/route";
 import { DELETE as deleteCourseRow, PATCH as updateCourseRow } from "@/app/api/courses/[id]/route";
 import { DELETE as deleteComment } from "@/app/api/submissions/[id]/comments/[commentId]/route";
-import { DELETE as deleteCycle } from "@/app/api/cycles/[id]/route";
+import { DELETE as deleteCycle, PUT as updateCycle } from "@/app/api/cycles/[id]/route";
+import { GET as listCycles } from "@/app/api/cycles/route";
+import { GET as readCycleArchive, POST as archiveCycleRoute } from "@/app/api/cycles/[id]/archive/route";
+import { POST as restoreCycleRoute } from "@/app/api/cycles/[id]/restore/route";
 import { GET as listArchive } from "@/app/api/archive/route";
 import { POST as restoreArchived } from "@/app/api/archive/[id]/restore/route";
 import { confirmationMatches } from "@/lib/archive";
@@ -5638,5 +5641,184 @@ describe("remembered devices and resets (D11)", () => {
     expect(await refused.json()).toMatchObject({ code: "SUPER_ADMIN_ONLY" });
     expect((await reset(head.id, head.email)).status).toBe(200);
     expect((await prisma.user.findUniqueOrThrow({ where: { id: head.id } })).mfaEnabledAt).toBeNull();
+  });
+});
+
+describe("archiving the test cycle (A2)", () => {
+  const cycleId = "a2-test-cycle";
+  const draftId = "a2-test-draft";
+  const params = (id: string) => ({ params: Promise.resolve({ id }) });
+  const post = (url: string, body?: object) =>
+    new Request(`http://localhost${url}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      ...(body && { body: JSON.stringify(body) }),
+    });
+  const visibleIds = async () => {
+    const response = await listSubmissions(new NextRequest("http://localhost/api/submissions"));
+    expect(response.status).toBe(200);
+    return ((await response.json()) as { id: string }[]).map((draft) => draft.id);
+  };
+  const dashboardTotal = async () =>
+    (await (await getDashboardStats(new Request("http://localhost/api/dashboard/stats"))).json()).submissions
+      .total as number;
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.create({
+      data: { id: cycleId, name: "2026/2027 Bulletin Review Cycle (A2 test)", createdById: ids.super, isActive: false },
+    });
+    await prisma.submission.create({
+      data: { id: draftId, title: "A2 draft", programmeId: ids.programmeA, createdById: ids.hod, cycleId, status: "DRAFT" },
+    });
+    await prisma.comment.create({
+      data: { submissionId: draftId, authorId: ids.admin, content: "Test comment", phase: 1 },
+    });
+    await recordActivity({
+      actorId: ids.hod,
+      action: "SUBMISSION_UPDATED",
+      entityType: "SUBMISSION",
+      entityId: draftId,
+      description: "A2 draft edited during testing.",
+    });
+  });
+
+  afterAll(async () => {
+    await prisma.comment.deleteMany({ where: { submissionId: draftId } });
+    await prisma.submission.deleteMany({ where: { id: draftId } });
+    await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+  });
+
+  it("needs ARCHIVE typed, then closes the cycle, tags it TEST and hides its drafts everywhere", async () => {
+    authState.userId = ids.admin;
+    expect(await visibleIds()).toContain(draftId);
+    const before = await dashboardTotal();
+
+    const summary = await readCycleArchive(new Request(`http://localhost/api/cycles/${cycleId}/archive`), params(cycleId));
+    expect(await summary.json()).toMatchObject({ drafts: 1, comments: 1, logEntries: 1 });
+
+    const unconfirmed = await archiveCycleRoute(post(`/api/cycles/${cycleId}/archive`, { isTest: true }), params(cycleId));
+    expect(unconfirmed.status).toBe(400);
+    expect(await unconfirmed.json()).toMatchObject({ code: "CONFIRMATION_REQUIRED" });
+
+    const archived = await archiveCycleRoute(
+      post(`/api/cycles/${cycleId}/archive`, { confirm: " archive ", isTest: true }),
+      params(cycleId),
+    );
+    expect(archived.status).toBe(200);
+    const cycle = await prisma.reviewCycle.findUniqueOrThrow({ where: { id: cycleId } });
+    expect(cycle).toMatchObject({ isActive: false, isTest: true, archivedById: ids.admin });
+    expect(cycle.archivedAt).not.toBeNull();
+    expect(cycle.closedAt).not.toBeNull();
+    // Nothing was deleted.
+    expect(await prisma.comment.count({ where: { submissionId: draftId } })).toBe(1);
+
+    // Dashboards, lists and the cycle list leave it out.
+    expect(await visibleIds()).not.toContain(draftId);
+    expect(await dashboardTotal()).toBe(before - 1);
+    const cycles = (await (await listCycles(new Request("http://localhost/api/cycles"))).json()) as { id: string }[];
+    expect(cycles.map((item) => item.id)).not.toContain(cycleId);
+    const onlyArchived = (await (
+      await listCycles(new Request("http://localhost/api/cycles?archived=only"))
+    ).json()) as { id: string; isTest: boolean; archivedBy: { firstName: string } | null }[];
+    expect(onlyArchived).toHaveLength(1);
+    expect(onlyArchived[0]).toMatchObject({ id: cycleId, isTest: true });
+    expect(onlyArchived[0].archivedBy).not.toBeNull();
+
+    // Academic Planning can still open the cycle's drafts on purpose.
+    const fromArchive = await listSubmissions(new NextRequest(`http://localhost/api/submissions?cycleId=${cycleId}`));
+    expect(((await fromArchive.json()) as { id: string }[]).map((draft) => draft.id)).toEqual([draftId]);
+
+    // The log hides the draft's entries by default but shows the archiving.
+    const log = await (await listActivities(new NextRequest("http://localhost/api/activity-log?pageSize=100"))).json();
+    const descriptions = (log.items as { description: string; action: string }[]).map((item) => item.description);
+    expect(descriptions).not.toContain("A2 draft edited during testing.");
+    expect(log.items.some((item: { action: string }) => item.action === "REVIEW_CYCLE_ARCHIVED")).toBe(true);
+    expect(log.archivedHidden).toBe(true);
+    const everything = await (
+      await listActivities(new NextRequest("http://localhost/api/activity-log?pageSize=100&archived=include"))
+    ).json();
+    expect((everything.items as { description: string }[]).map((item) => item.description)).toContain(
+      "A2 draft edited during testing.",
+    );
+  });
+
+  it("keeps the drafts read-only, and hidden from Heads and Deans", async () => {
+    // A Head of Department of that department no longer sees it.
+    authState.userId = ids.hod;
+    expect(await visibleIds()).not.toContain(draftId);
+    const asHead = await listSubmissions(new NextRequest(`http://localhost/api/submissions?cycleId=${cycleId}`));
+    expect(await asHead.json()).toEqual([]);
+    const opened = await getSubmission(new NextRequest(`http://localhost/api/submissions/${draftId}`), params(draftId));
+    expect(opened.status).toBe(403);
+
+    // Academic Planning reads it, with no actions.
+    authState.userId = ids.super;
+    const read = await getSubmission(new NextRequest(`http://localhost/api/submissions/${draftId}`), params(draftId));
+    expect(read.status).toBe(200);
+    const body = await read.json();
+    expect(body.cycle).toMatchObject({ isTest: true });
+    expect(body.workflow).toMatchObject({ actions: [], canEdit: false });
+
+    // Every change is refused, even by a Super Administrator.
+    const comment = await createComment(
+      new NextRequest(`http://localhost/api/submissions/${draftId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: "Late comment", type: "SUGGESTION" }),
+      }),
+      params(draftId),
+    );
+    expect(comment.status).toBe(409);
+    expect(await comment.json()).toMatchObject({ code: "CYCLE_ARCHIVED" });
+    const step = await transitionSubmission(
+      new NextRequest(`http://localhost/api/submissions/${draftId}/transition`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "SUBMIT", ...overrideFor(ids.super) }),
+      }),
+      params(draftId),
+    );
+    expect(step.status).toBe(409);
+    const course = await createCourseRow(
+      new Request("http://localhost/api/courses", {
+        method: "POST",
+        body: JSON.stringify({ submissionId: draftId, code: "GXZ 301", title: "Archived row", units: 3, semester: 1, level: 300 }),
+      }),
+    );
+    expect(course.status).toBe(409);
+    const reopen = await updateCycle(
+      new Request(`http://localhost/api/cycles/${cycleId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: true }),
+      }),
+      params(cycleId),
+    );
+    expect(reopen.status).toBe(409);
+    expect(await reopen.json()).toMatchObject({ code: "CYCLE_ARCHIVED" });
+    const twice = await archiveCycleRoute(post(`/api/cycles/${cycleId}/archive`, { confirm: "ARCHIVE" }), params(cycleId));
+    expect(twice.status).toBe(409);
+  });
+
+  it("restores the cycle whole, closed and still tagged TEST", async () => {
+    authState.userId = ids.hod;
+    const refused = await restoreCycleRoute(post(`/api/cycles/${cycleId}/restore`), params(cycleId));
+    expect(refused.status).toBe(403);
+
+    authState.userId = ids.admin;
+    const restored = await restoreCycleRoute(post(`/api/cycles/${cycleId}/restore`), params(cycleId));
+    expect(restored.status).toBe(200);
+    expect(await restored.json()).toMatchObject({ summary: { drafts: 1, comments: 1 } });
+    const cycle = await prisma.reviewCycle.findUniqueOrThrow({ where: { id: cycleId } });
+    expect(cycle).toMatchObject({ archivedAt: null, isActive: false, isTest: true });
+    expect(await visibleIds()).toContain(draftId);
+
+    authState.userId = ids.hod;
+    expect(await visibleIds()).toContain(draftId);
+
+    authState.userId = ids.admin;
+    const again = await restoreCycleRoute(post(`/api/cycles/${cycleId}/restore`), params(cycleId));
+    expect(again.status).toBe(409);
+    expect(await again.json()).toMatchObject({ code: "NOT_ARCHIVED" });
   });
 });

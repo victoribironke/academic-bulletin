@@ -15,6 +15,7 @@ import prisma from "@/lib/prisma";
 import { getSiteUrl } from "@/lib/site-url";
 import { PHASE_NAMES, TOTAL_PHASES } from "@/lib/submissions/phases";
 import { isEmailConfigured, sendEmail } from "./resend";
+import { NOT_IN_ARCHIVED_CYCLE } from "@/lib/cycles/archive";
 
 export function escapeHtml(value: string): string {
   return value
@@ -174,7 +175,13 @@ export async function sendDailyDigests(now = new Date()): Promise<DigestResult> 
     // Older code marked sent rows in notifiedAt. This code never sets it but
     // still honours it, so a row emailed between the migration and the deploy
     // isn't emailed again.
-    where: { notification: null, notifiedAt: null, transitionedAt: { gte: since, lte: now } },
+    // Nothing from an archived cycle (task A2).
+    where: {
+      notification: null,
+      notifiedAt: null,
+      transitionedAt: { gte: since, lte: now },
+      submission: NOT_IN_ARCHIVED_CYCLE,
+    },
     orderBy: { transitionedAt: "asc" },
     select: {
       id: true,
@@ -286,7 +293,7 @@ export async function sendDailyDigests(now = new Date()): Promise<DigestResult> 
         select: { id: true, email: true },
       }),
       prisma.submission.count({
-        where: { status: "IN_REVIEW", currentPhase: { gte: 3 } },
+        where: { AND: [NOT_IN_ARCHIVED_CYCLE], status: "IN_REVIEW", currentPhase: { gte: 3 } },
       }),
     ]);
 

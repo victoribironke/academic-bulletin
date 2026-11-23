@@ -13,6 +13,7 @@ import {
   getTitleDisplay,
   staffRankLabel,
 } from "@/lib/validation/name-format";
+import { NOT_IN_ARCHIVED_CYCLE } from "@/lib/cycles/archive";
 
 // Types
 export type ExportLevel = "department" | "school" | "institution";
@@ -127,6 +128,7 @@ export async function generateDepartmentBulletin(
       : {
           programmeId,
           status: "APPROVED",
+          AND: [NOT_IN_ARCHIVED_CYCLE],
         },
     include: {
       courses: {
@@ -289,6 +291,7 @@ export async function generateSchoolBulletin(
         where: {
           programmeId: prog.id,
           status: "APPROVED",
+          AND: [NOT_IN_ARCHIVED_CYCLE],
         },
         include: {
           courses: {
@@ -446,6 +449,7 @@ export async function generateInstitutionBulletin(): Promise<BulletinData> {
           where: {
             programmeId: prog.id,
             status: "APPROVED",
+            AND: [NOT_IN_ARCHIVED_CYCLE],
           },
           include: {
             courses: {

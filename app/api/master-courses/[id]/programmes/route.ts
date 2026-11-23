@@ -4,6 +4,7 @@ import { requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
 import { preloadRegistryCoursesForSubmission } from "@/lib/courses/gst-pool";
 import { requireDeleteConfirmation } from "@/lib/archive";
+import { NOT_IN_ARCHIVED_CYCLE } from "@/lib/cycles/archive";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -142,6 +143,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         where: {
           programmeId: { in: newProgrammeIds },
           status: { in: ["DRAFT", "CORRECTIONS_REQUIRED"] },
+          AND: [NOT_IN_ARCHIVED_CYCLE],
         },
         select: { id: true },
       });

@@ -46,6 +46,8 @@ type ActivityResponse = {
   total: number;
   page: number;
   pageCount: number;
+  /** True when entries about an archived cycle were left out (task A2). */
+  archivedHidden?: boolean;
   filters: {
     actions: string[];
     entityTypes: string[];
@@ -99,6 +101,8 @@ export default function ActivityLogPage() {
   // "YYYY-MM-DD" from the date input, or "" for every day.
   const [date, setDate] = useState("");
   const [page, setPage] = useState(1);
+  // Entries about archived cycles are left out unless asked for (task A2).
+  const [showArchived, setShowArchived] = useState(false);
 
   const canView = hasPermission("view:audit");
 
@@ -113,6 +117,7 @@ export default function ActivityLogPage() {
     if (action !== "all") params.set("action", action);
     if (entityType !== "all") params.set("entityType", entityType);
     if (actorId !== "all") params.set("actorId", actorId);
+    if (showArchived) params.set("archived", "include");
     if (date) {
       // Midnight to midnight in the viewer's own time zone.
       const start = new Date(`${date}T00:00:00`);
@@ -144,7 +149,7 @@ export default function ActivityLogPage() {
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [action, actorId, canView, date, entityType, page, query, reloadKey]);
+  }, [action, actorId, canView, date, entityType, page, query, reloadKey, showArchived]);
 
   const hasFilters = useMemo(
     () =>
@@ -260,6 +265,24 @@ export default function ActivityLogPage() {
           </>
         }
       />
+
+      {(showArchived || data?.archivedHidden) && (
+        <p className="text-sm text-muted-foreground">
+          {showArchived
+            ? "Showing entries about archived cycles too."
+            : "Entries about archived cycles and their drafts are hidden."}{" "}
+          <Button
+            variant="link"
+            className="h-auto p-0"
+            onClick={() => {
+              setShowArchived((value) => !value);
+              setPage(1);
+            }}
+          >
+            {showArchived ? "Hide them" : "Show them"}
+          </Button>
+        </p>
+      )}
 
       {failed ? (
         <ErrorState onRetry={() => setReloadKey((key) => key + 1)} />

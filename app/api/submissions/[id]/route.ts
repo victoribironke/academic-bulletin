@@ -15,6 +15,7 @@ import { unsafeMarkupReason } from "@/lib/html/safe-html";
 import { inUseResponse, requireDeleteConfirmation } from "@/lib/archive";
 import { photoNotUploadedHere } from "@/lib/images/photo-urls";
 import { isValidMinimumCgpa, minimumCgpaRuleMessage } from "@/lib/submissions/cgpa-rule";
+import { refuseIfArchived } from "@/lib/cycles/archive";
 
 /** Content columns that aren't anything a person wrote. */
 const BOOKKEEPING_FIELDS = new Set([
@@ -70,6 +71,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const submission = await prisma.submission.findUnique({
       where: { id },
       include: {
+        // Task A2: the page says when the draft is in an archived cycle.
+        cycle: { select: { name: true, isTest: true, archivedAt: true } },
         programme: {
           select: {
             id: true,
@@ -144,6 +147,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           ...transition,
           remarks: null,
         })),
+        workflow: {
+          actions: [],
+          canEdit: false,
+          clearedPreviousGate: false,
+          requiredEvidence: null,
+          graceGate: null,
+          submitClosed: null,
+          override: null,
+        },
+      });
+    }
+
+    // An archived cycle's draft is read-only for everyone: no actions.
+    if (submission.cycle?.archivedAt) {
+      return NextResponse.json({
+        ...submission,
         workflow: {
           actions: [],
           canEdit: false,
@@ -404,6 +423,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (user.role !== "SUPER_ADMIN") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+    const archived = await refuseIfArchived(id);
+    if (archived) return archived;
 
     // The workflow ledger is permanent, so a bulletin that has moved through
     // any phase can't be deleted with it.

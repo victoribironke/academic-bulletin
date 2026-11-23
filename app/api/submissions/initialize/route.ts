@@ -31,6 +31,12 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       );
     }
+    if (cycle.archivedAt) {
+      return NextResponse.json(
+        { error: `${cycle.name} is in the Archive; restore it before adding drafts.`, code: "CYCLE_ARCHIVED" },
+        { status: 409 }
+      );
+    }
 
     // 1. Get all programmes
     const programmes = await prisma.programme.findMany();

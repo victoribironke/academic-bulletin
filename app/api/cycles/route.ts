@@ -5,14 +5,26 @@ import { requireApiUser } from "@/lib/api-auth";
 import { serverTimer } from "@/lib/server-timing";
 import { recordActivity } from "@/lib/activity-log";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const timer = serverTimer();
     const auth = await requireApiUser();
     timer.mark("auth");
     if (!auth.ok) return auth.response;
 
+    // Archived cycles (task A2) are left out unless Academic Planning asks:
+    // ?archived=only for the Archive page, ?archived=include for everything.
+    const archived = new URL(request.url).searchParams.get("archived");
+    const isAdmin = auth.user.role === "ADMIN" || auth.user.role === "SUPER_ADMIN";
+    const where =
+      isAdmin && archived === "only"
+        ? { archivedAt: { not: null } }
+        : isAdmin && archived === "include"
+          ? {}
+          : { archivedAt: null };
+
     const cycles = await prisma.reviewCycle.findMany({
+      where,
       orderBy: { startedAt: "desc" },
       include: {
         createdBy: {
@@ -26,8 +38,23 @@ export async function GET() {
         },
       },
     });
+    // Who archived each archived cycle, for the Archive page.
+    const archiverIds = [...new Set(cycles.map((cycle) => cycle.archivedById).filter((id): id is string => Boolean(id)))];
+    const archivers = archiverIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: archiverIds } },
+          select: { id: true, firstName: true, lastName: true },
+        })
+      : [];
+    const archiverById = new Map(archivers.map((user) => [user.id, user]));
     timer.mark("db");
-    return NextResponse.json(cycles, { headers: { "Server-Timing": timer.header() } });
+    return NextResponse.json(
+      cycles.map((cycle) => ({
+        ...cycle,
+        archivedBy: cycle.archivedById ? (archiverById.get(cycle.archivedById) ?? null) : null,
+      })),
+      { headers: { "Server-Timing": timer.header() } },
+    );
   } catch (error) {
     console.error("Failed to fetch review cycles", error);
     return NextResponse.json(

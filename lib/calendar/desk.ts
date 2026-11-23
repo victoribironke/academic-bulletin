@@ -53,7 +53,7 @@ const key = (date: Date | null) => (date ? date.toISOString().slice(0, 10) : nul
 /** The active cycle's calendar, or null when no cycle has one loaded. */
 export async function loadActiveCycleCalendar(): Promise<CycleCalendar | null> {
   const cycle = await prisma.reviewCycle.findFirst({
-    where: { isActive: true, phases: { some: {} } },
+    where: { isActive: true, archivedAt: null, phases: { some: {} } },
     orderBy: { startedAt: "desc" },
     include: { phases: true, checkpoints: true, holidays: true, quietPeriods: true, extensions: true },
   });

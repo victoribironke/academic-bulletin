@@ -5,6 +5,7 @@ import { preloadGstCoursesForSubmission } from "@/lib/courses/gst-pool";
 import { calculateSubmissionProgress } from "@/lib/submissions/progress";
 import { recordActivity } from "@/lib/activity-log";
 import { TOTAL_PHASES } from "@/lib/submissions/phases";
+import { NOT_IN_ARCHIVED_CYCLE } from "@/lib/cycles/archive";
 
 const SUBMISSION_STATUSES = [
   "DRAFT",
@@ -77,8 +78,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Invalid phase filter." }, { status: 400 });
     }
 
+    // An archived cycle's drafts (task A2) are left out, unless Academic
+    // Planning opens that cycle from the Archive.
+    const isAdministrator = auth.user.role === "ADMIN" || auth.user.role === "SUPER_ADMIN";
+    const showArchived =
+      isAdministrator &&
+      Boolean(cycleId) &&
+      Boolean(
+        await prisma.reviewCycle.findFirst({
+          where: { id: cycleId!, archivedAt: { not: null } },
+          select: { id: true },
+        }),
+      );
+
     const submissions = await prisma.submission.findMany({
       where: {
+        ...(!showArchived && { AND: [NOT_IN_ARCHIVED_CYCLE] }),
         ...(status && {
           status: status as
             | "DRAFT"
@@ -210,6 +225,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Title, programme, and cycle are required" },
         { status: 400 },
+      );
+    }
+
+    // No new drafts in an archived cycle (task A2).
+    const targetCycle = await prisma.reviewCycle.findUnique({
+      where: { id: cycleId },
+      select: { archivedAt: true, name: true },
+    });
+    if (!targetCycle) {
+      return NextResponse.json({ error: "Review cycle not found" }, { status: 404 });
+    }
+    if (targetCycle.archivedAt) {
+      return NextResponse.json(
+        { error: `${targetCycle.name} is in the Archive; restore it before adding drafts.`, code: "CYCLE_ARCHIVED" },
+        { status: 409 },
       );
     }
 

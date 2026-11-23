@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { canViewSubmission, requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
+import { refuseIfArchived } from "@/lib/cycles/archive";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -59,6 +60,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!(await canViewSubmission(auth.user, id))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+    const archived = await refuseIfArchived(id);
+    if (archived) return archived;
 
     const body = await request.json();
     const { content, section, type } = body;

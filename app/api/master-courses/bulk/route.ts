@@ -10,6 +10,7 @@ import { recordActivity } from "@/lib/activity-log";
 import { preloadRegistryCoursesForSubmission } from "@/lib/courses/gst-pool";
 import { matchProgrammeNames } from "@/lib/courses/programme-matching";
 import { type CodeLookup, loadCodeLookups } from "@/lib/units/code-aliases";
+import { NOT_IN_ARCHIVED_CYCLE } from "@/lib/cycles/archive";
 
 const MAX_IMPORT_ROWS = 5000;
 
@@ -204,6 +205,7 @@ export async function POST(request: Request) {
     const editableSubmissions = await prisma.submission.findMany({
       where: {
         status: { in: ["DRAFT", "CORRECTIONS_REQUIRED"] },
+        AND: [NOT_IN_ARCHIVED_CYCLE],
         ...(!affectsEveryProgramme && {
           programmeId: { in: [...affectedProgrammeIds] },
         }),

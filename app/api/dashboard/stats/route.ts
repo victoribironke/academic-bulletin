@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
 import type { Prisma } from "@prisma/client";
+import { NOT_IN_ARCHIVED_CYCLE } from "@/lib/cycles/archive";
 
 // GET /api/dashboard/stats - Get dashboard statistics
 export async function GET(request: Request) {
@@ -32,7 +33,8 @@ export async function GET(request: Request) {
         ? auth.user.schoolId
         : searchParams.get("schoolId");
 
-    const whereClause: Prisma.SubmissionWhereInput = {};
+    // Drafts of archived cycles (task A2) never count.
+    const whereClause: Prisma.SubmissionWhereInput = { AND: [NOT_IN_ARCHIVED_CYCLE] };
     if (auth.user.role === "PROGRAMME_COORDINATOR") {
       whereClause.programmeId = { in: auth.user.programmeIds };
     } else if (departmentId) {

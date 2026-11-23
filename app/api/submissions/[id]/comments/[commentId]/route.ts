@@ -7,6 +7,7 @@ import {
 } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
 import { requireDeleteConfirmation } from "@/lib/archive";
+import { refuseIfArchived } from "@/lib/cycles/archive";
 
 interface RouteParams {
   params: Promise<{ id: string; commentId: string }>;
@@ -21,6 +22,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (!(await canViewSubmission(auth.user, id))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+    const archived = await refuseIfArchived(id);
+    if (archived) return archived;
 
     const body = await request.json();
     const { status, content } = body;
@@ -96,6 +99,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (!(await canViewSubmission(auth.user, id))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+    const archived = await refuseIfArchived(id);
+    if (archived) return archived;
 
     const existing = await prisma.comment.findFirst({
       where: { id: commentId, submissionId: id },

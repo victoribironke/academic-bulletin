@@ -28,6 +28,24 @@ export async function PUT(
       return NextResponse.json({ error: opensAt.message }, { status: 400 });
     }
 
+    // An archived cycle (task A2) is restored from the Archive before anything else.
+    const existing = await prisma.reviewCycle.findUnique({
+      where: { id },
+      select: { archivedAt: true, name: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Review cycle not found" }, { status: 404 });
+    }
+    if (existing.archivedAt) {
+      return NextResponse.json(
+        {
+          error: `${existing.name} is in the Archive. Restore it from the Archive before changing or reopening it.`,
+          code: "CYCLE_ARCHIVED",
+        },
+        { status: 409 },
+      );
+    }
+
     // Build update data safely
     const dataToUpdate: Record<string, unknown> = {};
     if (name !== undefined) dataToUpdate.name = name;

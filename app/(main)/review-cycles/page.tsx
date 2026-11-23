@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,7 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CalendarClock, Loader2, Pencil, Plus, Power, Trash2 } from "lucide-react";
+import { Archive, CalendarClock, Loader2, Pencil, Plus, Power, Trash2 } from "lucide-react";
 import { useDeleteRecord } from "@/components/shared/delete-record-dialog";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableCard } from "@/components/shared/table-toolbar";
@@ -37,6 +39,7 @@ type ReviewCycle = {
   name: string;
   description: string | null;
   isActive: boolean;
+  isTest?: boolean;
   startedAt: string;
   closedAt: string | null;
   createdBy: {
@@ -69,6 +72,57 @@ export default function ReviewCyclesPage() {
   const [error, setError] = useState("");
 
   const canManage = hasPermission("manage:cycles");
+
+  // Archiving a whole cycle (task A2): typed ARCHIVE, optional TEST tag.
+  const [archiving, setArchiving] = useState<ReviewCycle | null>(null);
+  const [archiveSummary, setArchiveSummary] = useState<{
+    drafts: number;
+    comments: number;
+    transitions: number;
+    logEntries: number;
+  } | null>(null);
+  const [archiveTyped, setArchiveTyped] = useState("");
+  const [archiveAsTest, setArchiveAsTest] = useState(false);
+  const [archiveBusy, setArchiveBusy] = useState(false);
+  const [archiveError, setArchiveError] = useState("");
+
+  const openArchive = (cycle: ReviewCycle) => {
+    setArchiving(cycle);
+    setArchiveSummary(null);
+    setArchiveTyped("");
+    setArchiveAsTest(Boolean(cycle.isTest));
+    setArchiveError("");
+    fetch(`/api/cycles/${cycle.id}/archive`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((summary) => setArchiveSummary(summary))
+      .catch(() => setArchiveSummary(null));
+  };
+
+  const confirmArchive = async () => {
+    if (!archiving) return;
+    setArchiveBusy(true);
+    setArchiveError("");
+    try {
+      const res = await fetch(`/api/cycles/${archiving.id}/archive`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: archiveTyped, isTest: archiveAsTest }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast.success(`${archiving.name} was moved to the Archive.`);
+        setArchiving(null);
+        fetchData();
+      } else {
+        setArchiveError(data.error || "Couldn't archive the cycle. Please try again.");
+      }
+    } catch {
+      setArchiveError("Couldn't archive the cycle. Please try again.");
+    } finally {
+      setArchiveBusy(false);
+    }
+  };
+  const archiveReady = archiveTyped.trim().toUpperCase() === "ARCHIVE";
 
   const fetchData = () => setReloadKey((k) => k + 1);
 
@@ -239,7 +293,14 @@ export default function ReviewCyclesPage() {
               {cycles.map((cycle) => (
                 <TableRow key={cycle.id}>
                   <TableCell>
-                    <p className="font-medium">{cycle.name}</p>
+                    <p className="font-medium">
+                      {cycle.name}
+                      {cycle.isTest && (
+                        <Badge variant="outline" className="ml-2 align-middle">
+                          TEST
+                        </Badge>
+                      )}
+                    </p>
                     {cycle.description && (
                       <p className="line-clamp-1 text-xs text-muted-foreground">
                         {cycle.description}
@@ -276,6 +337,15 @@ export default function ReviewCyclesPage() {
                         <span className="hidden sm:inline">
                           {cycle.isActive ? "Close" : "Reopen"}
                         </span>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openArchive(cycle)}
+                        aria-label={`Archive ${cycle.name}`}
+                      >
+                        <Archive />
+                        <span className="hidden sm:inline">Archive</span>
                       </Button>
                       <Button
                         variant="ghost"
@@ -385,6 +455,77 @@ export default function ReviewCyclesPage() {
         </DialogContent>
       </Dialog>
       {deleteDialog}
+
+      <Dialog
+        open={archiving !== null}
+        onOpenChange={(open) => {
+          if (!open && !archiveBusy) setArchiving(null);
+        }}
+      >
+        <DialogContent>
+          {archiving && (
+            <form
+              className="space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (archiveReady && !archiveBusy) confirmArchive();
+              }}
+            >
+              <DialogHeader>
+                <DialogTitle>Archive {archiving.name}?</DialogTitle>
+                <DialogDescription>
+                  The cycle closes and moves to the Archive
+                  {archiveSummary
+                    ? ` with its ${archiveSummary.drafts} drafts, ${archiveSummary.comments} comments, ${archiveSummary.transitions} workflow steps and ${archiveSummary.logEntries} log entries`
+                    : " with its drafts, comments and log entries"}
+                  . Nothing is deleted. The drafts become read-only, Heads and Deans no
+                  longer see them, and they drop out of every dashboard, count and list.
+                  You can restore the cycle from the Archive.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="archive-as-test"
+                  checked={archiveAsTest}
+                  onCheckedChange={(checked) => setArchiveAsTest(checked === true)}
+                  disabled={archiveBusy}
+                  className="mt-0.5"
+                />
+                <Label htmlFor="archive-as-test" className="text-sm font-normal leading-snug">
+                  Tag it TEST (a cycle used for testing, not a real bulletin round)
+                </Label>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="archive-confirm">Type ARCHIVE to confirm</Label>
+                <Input
+                  id="archive-confirm"
+                  value={archiveTyped}
+                  onChange={(event) => setArchiveTyped(event.target.value)}
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                  disabled={archiveBusy}
+                />
+                {archiveError && <p className="text-sm text-destructive">{archiveError}</p>}
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setArchiving(null)}
+                  disabled={archiveBusy}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={!archiveReady || archiveBusy}>
+                  {archiveBusy ? <Loader2 className="animate-spin" /> : <Archive />}
+                  Archive cycle
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

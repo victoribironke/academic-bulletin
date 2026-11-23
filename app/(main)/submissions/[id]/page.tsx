@@ -54,6 +54,7 @@ import {
   Loader2,
   Plus,
   AlertCircle,
+  Archive,
   Users,
   BookOpen,
   FileText,
@@ -157,6 +158,8 @@ interface Submission {
   phaseTransitions: PhaseTransition[];
   /** What the signed-in person may do now, worked out by the server. */
   workflow?: SubmissionWorkflow & { canEdit: boolean };
+  /** Task A2: set when the draft's cycle is in the Archive. */
+  cycle?: { name: string; isTest: boolean; archivedAt: string | null } | null;
 }
 
 interface Comment {
@@ -1229,6 +1232,18 @@ export default function SubmissionDetailPage({
       <PhaseTracker currentPhase={submission.currentPhase} status={submission.status} />
       {/* C3: this programme's deadline, next to the phase steps. */}
       <ProgrammeCountdown submissionId={submission.id} />
+
+      {/* A2: a draft of an archived cycle opens read-only. */}
+      {submission.cycle?.archivedAt && (
+        <Alert>
+          <Archive className="h-4 w-4" />
+          <AlertDescription>
+            This draft belongs to {submission.cycle.name}
+            {submission.cycle.isTest ? ", a TEST cycle," : ","} which is in the Archive. It is
+            read-only; restore the cycle from the Archive to work on it.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* D4: overrides are flagged on the programme. */}
       {overrides.length > 0 && (
