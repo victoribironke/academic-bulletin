@@ -26,10 +26,12 @@ function createPrismaClient() {
       ssl: {
         rejectUnauthorized: false,
       },
-      // Each serverless instance gets its own small pool, so many instances
-      // together stay well under Postgres's connection limit.
-      max: 3,
-      idleTimeoutMillis: 10000, // Close idle connections after 10 seconds
+      // Railway runs one long-lived server, so connections are kept warm
+      // (task S1): a request after a quiet spell no longer pays for a new
+      // encrypted connection. Well under Postgres's limit of 100.
+      max: 10,
+      idleTimeoutMillis: 5 * 60_000, // Close idle connections after 5 minutes
+      keepAlive: true,
       connectionTimeoutMillis: 10000, // Timeout after 10 seconds if can't connect
     });
   }

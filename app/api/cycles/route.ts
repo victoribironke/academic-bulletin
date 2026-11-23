@@ -2,11 +2,14 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { parseSubmissionsOpenAt } from "@/lib/submissions/submission-window";
 import { requireApiUser } from "@/lib/api-auth";
+import { serverTimer } from "@/lib/server-timing";
 import { recordActivity } from "@/lib/activity-log";
 
 export async function GET() {
   try {
+    const timer = serverTimer();
     const auth = await requireApiUser();
+    timer.mark("auth");
     if (!auth.ok) return auth.response;
 
     const cycles = await prisma.reviewCycle.findMany({
@@ -23,7 +26,8 @@ export async function GET() {
         },
       },
     });
-    return NextResponse.json(cycles);
+    timer.mark("db");
+    return NextResponse.json(cycles, { headers: { "Server-Timing": timer.header() } });
   } catch (error) {
     console.error("Failed to fetch review cycles", error);
     return NextResponse.json(

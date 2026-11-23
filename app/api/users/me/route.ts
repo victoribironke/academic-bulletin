@@ -3,10 +3,13 @@ import prisma from "@/lib/prisma";
 import { getSessionAccess } from "@/auth";
 import { MFA_REQUIRED_RESPONSE } from "@/lib/api-auth";
 import { currentVerification, mfaRequiredFor } from "@/lib/mfa/policy";
+import { serverTimer } from "@/lib/server-timing";
 
 export async function GET() {
   try {
+    const timer = serverTimer();
     const access = await getSessionAccess();
+    timer.mark("auth");
     if (!access) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -41,6 +44,7 @@ export async function GET() {
       },
     });
 
+    timer.mark("db");
     if (!user) {
       return NextResponse.json(
         { error: "Account is not provisioned" },
@@ -64,15 +68,18 @@ export async function GET() {
       return NextResponse.json(MFA_REQUIRED_RESPONSE, { status: 401 });
     }
 
-    return NextResponse.json({
-      ...profile,
-      programmeIds: programmeAssignments.map(
-        (assignment) => assignment.programme.id,
-      ),
-      programmes: programmeAssignments.map(
-        (assignment) => assignment.programme,
-      ),
-    });
+    return NextResponse.json(
+      {
+        ...profile,
+        programmeIds: programmeAssignments.map(
+          (assignment) => assignment.programme.id,
+        ),
+        programmes: programmeAssignments.map(
+          (assignment) => assignment.programme,
+        ),
+      },
+      { headers: { "Server-Timing": timer.header() } },
+    );
   } catch (error) {
     console.error("Failed to fetch current user session:", error);
     return NextResponse.json(
