@@ -19,6 +19,7 @@ import {
   UserCog,
   Users,
   BookOpenText,
+  ClipboardList,
 } from "lucide-react";
 import {
   Sidebar,
@@ -106,6 +107,13 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/master-courses",
         icon: BookOpen,
         permission: "view:schools",
+      },
+      // B8: DAP's Registry completeness report.
+      {
+        title: "Registry Report",
+        href: "/reports/registry",
+        icon: ClipboardList,
+        roles: ["ADMIN", "SUPER_ADMIN"],
       },
       {
         title: "Staff",

@@ -98,6 +98,7 @@ import { GET as readPolicyRoute, POST as uploadPolicyRoute } from "@/app/api/pol
 import { BUILT_IN_POLICY_ID } from "@/lib/policy/library";
 import { GET as readHelpDetails } from "@/app/api/help/route";
 import { GET as readWaitingWork } from "@/app/api/desk/waiting/route";
+import { GET as readRegistryReport } from "@/app/api/reports/registry/route";
 import { GET as listArchive } from "@/app/api/archive/route";
 import { POST as restoreArchived } from "@/app/api/archive/[id]/restore/route";
 import { confirmationMatches } from "@/lib/archive";
@@ -6279,5 +6280,27 @@ describe("the Activity Log per cycle, in plain names (A4)", () => {
     const testCycle = await read(`&cycle=${testId}`);
     expect(testCycle.items.map((item) => item.description)).toEqual(expect.arrayContaining(["A4 test draft edited.", "A4 test cycle renamed."]));
     expect(current.cycles.find((item) => item.id === testId)).toMatchObject({ archived: true, current: false });
+  });
+});
+
+describe("the Registry completeness report (B8)", () => {
+  it("is for Academic Planning, quick, and downloads as a spreadsheet", async () => {
+    authState.userId = ids.hod;
+    expect((await readRegistryReport(new Request("http://localhost/api/reports/registry"))).status).toBe(403);
+
+    authState.userId = ids.admin;
+    const response = await readRegistryReport(new Request("http://localhost/api/reports/registry"));
+    expect(response.status).toBe(200);
+    const report = await response.json();
+    expect(report.tookMs).toBeLessThan(5000);
+    expect(report.programmes.map((programme: { code: string }) => programme.code)).toEqual(
+      expect.arrayContaining([(await prisma.programme.findUniqueOrThrow({ where: { id: ids.programmeA } })).code]),
+    );
+
+    const sheet = await readRegistryReport(new Request("http://localhost/api/reports/registry?format=xlsx"));
+    expect(sheet.status).toBe(200);
+    expect(sheet.headers.get("Content-Type")).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    expect(sheet.headers.get("Content-Disposition")).toMatch(/^attachment; filename="registry-completeness-\d{4}-\d{2}-\d{2}\.xlsx"$/);
+    expect((await sheet.arrayBuffer()).byteLength).toBeGreaterThan(1000);
   });
 });

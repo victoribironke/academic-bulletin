@@ -31,6 +31,8 @@ const SEGMENT_LABELS: Record<string, string> = {
   "activity-log": "Activity Log",
   archive: "Archive",
   policy: "Academic Policy",
+  reports: "Reports",
+  registry: "Registry Completeness",
 };
 
 type Crumb = { label: string; href: string };
