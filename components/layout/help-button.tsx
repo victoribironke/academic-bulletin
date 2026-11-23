@@ -10,7 +10,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { HelpCircle } from "lucide-react";
+import Link from "next/link";
+import { BookOpenText, HelpCircle } from "lucide-react";
 import { useUser } from "@/contexts/user-context";
 
 export function HelpButton() {
@@ -40,6 +41,21 @@ export function HelpButton() {
         </DialogHeader>
 
         <div className="space-y-6 py-4 text-sm">
+          {/* H9: the Academic Policy from every screen. */}
+          <Link
+            href="/policy"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-3 rounded-lg border bg-muted/40 p-3 hover:bg-muted"
+          >
+            <BookOpenText className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+            <span>
+              <span className="block font-medium text-foreground">Academic Policy</span>
+              <span className="block text-muted-foreground">
+                Contents and search, for example &quot;Academic Load&quot;.
+              </span>
+            </span>
+          </Link>
+
           <section className="space-y-2">
             <h3 className="font-semibold text-base">How Work Flows</h3>
             <p className="text-muted-foreground">

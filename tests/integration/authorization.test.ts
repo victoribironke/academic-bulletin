@@ -94,6 +94,8 @@ import { GET as listCycles } from "@/app/api/cycles/route";
 import { GET as readCycleArchive, POST as archiveCycleRoute } from "@/app/api/cycles/[id]/archive/route";
 import { POST as restoreCycleRoute } from "@/app/api/cycles/[id]/restore/route";
 import { openCycle, planOpenCycle } from "@/lib/cycles/open";
+import { GET as readPolicyRoute, POST as uploadPolicyRoute } from "@/app/api/policy/route";
+import { BUILT_IN_POLICY_ID } from "@/lib/policy/library";
 import { GET as listArchive } from "@/app/api/archive/route";
 import { POST as restoreArchived } from "@/app/api/archive/[id]/restore/route";
 import { confirmationMatches } from "@/lib/archive";
@@ -5957,5 +5959,53 @@ describe("opening the real cycle (A3)", () => {
         await prisma.reviewCycle.update({ where: { id: cycle.id }, data: { isActive: true, closedAt: cycle.closedAt } });
       }
     }
+  });
+});
+
+describe("the Academic Policy library (H9)", () => {
+  const upload = (body: object) =>
+    uploadPolicyRoute(
+      new Request("http://localhost/api/policy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
+  const read = (query = "") => readPolicyRoute(new Request(`http://localhost/api/policy${query}`));
+
+  afterAll(async () => {
+    await prisma.policyVersion.deleteMany({});
+  });
+
+  it("shows everyone the bundled policy; only Academic Planning uploads a new one, and earlier ones stay readable", async () => {
+    authState.userId = ids.hod;
+    const first = await read();
+    expect(first.status).toBe(200);
+    const policy = await first.json();
+    expect(policy.version).toMatchObject({ id: BUILT_IN_POLICY_ID, builtIn: true, isCurrent: true, label: "Updated September 8, 2025" });
+    expect(policy.version.note).toMatch(/under review/);
+    expect(policy.sections.find((section: { id: string }) => section.id === "academic-load")).toMatchObject({ title: "Academic Load" });
+
+    const content = readFileSync(join(process.cwd(), "data/policy/academic-policy-2025-09-08.md"), "utf8").replace(
+      "minimum of 16 credits",
+      "minimum of 15 credits",
+    );
+    expect((await upload({ label: "Updated January 15, 2027", content })).status).toBe(403);
+
+    authState.userId = ids.admin;
+    const bad = await upload({ label: "Updated January 15, 2027", content: "# Only a title" });
+    expect(bad.status).toBe(400);
+    const added = await upload({ label: "Updated January 15, 2027", content, sourceName: "policy-2027.md" });
+    expect(added.status).toBe(201);
+
+    authState.userId = ids.hod;
+    const current = await (await read()).json();
+    expect(current.version).toMatchObject({ label: "Updated January 15, 2027", isCurrent: true, builtIn: false });
+    expect(current.versions).toHaveLength(2);
+    expect(JSON.stringify(current.sections)).toContain("minimum of 15 credits");
+    const earlier = await (await read(`?version=${BUILT_IN_POLICY_ID}`)).json();
+    expect(earlier.version).toMatchObject({ builtIn: true, isCurrent: false });
+    expect(JSON.stringify(earlier.sections)).toContain("minimum of 16 credits");
+    expect((await read("?version=nope")).status).toBe(404);
   });
 });

@@ -909,3 +909,24 @@ model ProgrammeCourse {
   @@unique([programmeId, courseId])
   @@map("programme_courses")
 }
+
+/// The Academic Policy library (task H9): versions DAP uploads. Without
+/// one, the app shows the policy bundled with it (data/policy). Earlier
+/// versions stay readable.
+model PolicyVersion {
+  id           String   @id @default(cuid())
+  /// e.g. "Updated September 8, 2025"
+  label        String
+  /// Shown above the text, e.g. that the policy is under review.
+  note         String?
+  /// Where it came from, e.g. the Word file Senate voted.
+  sourceName   String?
+  /// The whole policy as markdown; split into sections when read.
+  content      String
+  isCurrent    Boolean  @default(false)
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("policy_versions")
+}

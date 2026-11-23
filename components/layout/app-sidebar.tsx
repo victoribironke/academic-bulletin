@@ -18,6 +18,7 @@ import {
   Network,
   UserCog,
   Users,
+  BookOpenText,
 } from "lucide-react";
 import {
   Sidebar,
@@ -82,6 +83,12 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/bulletins",
         icon: LibraryBig,
         roles: ["DEAN", "ADMIN", "SUPER_ADMIN"],
+      },
+      // H9: everyone can read the Academic Policy.
+      {
+        title: "Academic Policy",
+        href: "/policy",
+        icon: BookOpenText,
       },
     ],
   },
