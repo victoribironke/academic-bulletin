@@ -31,6 +31,8 @@ type Activity = {
   action: string;
   entityType: string;
   entityId: string | null;
+  /** A4: the record in plain words, never its ID. */
+  record?: { label: string; name: string | null };
   description: string;
   createdAt: string;
   actor: {
@@ -47,8 +49,9 @@ type ActivityResponse = {
   total: number;
   page: number;
   pageCount: number;
-  /** True when entries about an archived cycle were left out (task A2). */
-  archivedHidden?: boolean;
+  /** A4: the cycle shown, and the cycles to choose from. */
+  cycle?: { mode: "current" | "cycle" | "all"; id: string | null; name: string };
+  cycles?: { id: string; name: string; current: boolean; archived: boolean; isTest: boolean }[];
   filters: {
     actions: string[];
     entityTypes: string[];
@@ -95,8 +98,8 @@ export default function ActivityLogPage() {
   // "YYYY-MM-DD" from the date input, or "" for every day.
   const [date, setDate] = useState("");
   const [page, setPage] = useState(1);
-  // Entries about archived cycles are left out unless asked for (task A2).
-  const [showArchived, setShowArchived] = useState(false);
+  // A4: the log opens on the current cycle.
+  const [cycleChoice, setCycleChoice] = useState("current");
 
   const canView = hasPermission("view:audit");
 
@@ -111,7 +114,7 @@ export default function ActivityLogPage() {
     if (action !== "all") params.set("action", action);
     if (entityType !== "all") params.set("entityType", entityType);
     if (actorId !== "all") params.set("actorId", actorId);
-    if (showArchived) params.set("archived", "include");
+    if (cycleChoice !== "current") params.set("cycle", cycleChoice);
     if (date) {
       // Midnight to midnight in the viewer's own time zone.
       const start = new Date(`${date}T00:00:00`);
@@ -143,7 +146,7 @@ export default function ActivityLogPage() {
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [action, actorId, canView, date, entityType, page, query, reloadKey, showArchived]);
+  }, [action, actorId, canView, date, entityType, page, query, reloadKey, cycleChoice]);
 
   const hasFilters = useMemo(
     () =>
@@ -170,9 +173,36 @@ export default function ActivityLogPage() {
           setQuery(value);
           setPage(1);
         }}
-        searchPlaceholder="Search activity, person, or record ID"
+        searchPlaceholder="Search activity or person"
         filters={
           <>
+            <Select
+              value={cycleChoice}
+              onValueChange={(value) => {
+                setCycleChoice(value);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-full bg-card sm:w-64" aria-label="Cycle">
+                <SelectValue placeholder="Current cycle" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="current">
+                  {data?.cycles?.find((cycle) => cycle.current)
+                    ? `Current cycle: ${data.cycles.find((cycle) => cycle.current)!.name}`
+                    : "Current (no cycle running)"}
+                </SelectItem>
+                {data?.cycles
+                  ?.filter((cycle) => !cycle.current)
+                  .map((cycle) => (
+                    <SelectItem key={cycle.id} value={cycle.id}>
+                      {cycle.name}
+                      {cycle.archived ? ` (archived${cycle.isTest ? ", TEST" : ""})` : ""}
+                    </SelectItem>
+                  ))}
+                <SelectItem value="all">All cycles</SelectItem>
+              </SelectContent>
+            </Select>
             <Select
               value={action}
               onValueChange={(value) => {
@@ -260,21 +290,13 @@ export default function ActivityLogPage() {
         }
       />
 
-      {(showArchived || data?.archivedHidden) && (
+      {data?.cycle && (
         <p className="text-sm text-muted-foreground">
-          {showArchived
-            ? "Showing entries about archived cycles too."
-            : "Entries about archived cycles and their drafts are hidden."}{" "}
-          <Button
-            variant="link"
-            className="h-auto p-0"
-            onClick={() => {
-              setShowArchived((value) => !value);
-              setPage(1);
-            }}
-          >
-            {showArchived ? "Hide them" : "Show them"}
-          </Button>
+          {data.cycle.mode === "all"
+            ? "Showing every cycle's activity."
+            : data.cycle.id
+              ? `Showing activity in ${data.cycle.name}. Other cycles' entries are under the cycle list.`
+              : "No cycle is running: showing everything except archived cycles' activity."}
         </p>
       )}
 
@@ -350,10 +372,10 @@ export default function ActivityLogPage() {
                           </p>
                         </TableCell>
                         <TableCell className="hidden align-top text-sm text-muted-foreground @3xl:table-cell">
-                          {readable(item.entityType)}
-                          {item.entityId && (
-                            <span className="block max-w-48 truncate font-mono text-xs">
-                              {item.entityId}
+                          {item.record?.label ?? readable(item.entityType)}
+                          {item.record?.name && (
+                            <span className="block max-w-56 text-xs whitespace-normal text-foreground">
+                              {item.record.name}
                             </span>
                           )}
                         </TableCell>

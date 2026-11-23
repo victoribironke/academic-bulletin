@@ -5826,15 +5826,22 @@ describe("archiving the test cycle (A2)", () => {
     const fromArchive = await listSubmissions(new NextRequest(`http://localhost/api/submissions?cycleId=${cycleId}`));
     expect(((await fromArchive.json()) as { id: string }[]).map((draft) => draft.id)).toEqual([draftId]);
 
-    // The log hides the draft's entries by default but shows the archiving.
+    // A4: the archived cycle's entries, the archiving included, stay out of
+    // the current cycle's log and show under that cycle and All cycles.
     const log = await (await listActivities(new NextRequest("http://localhost/api/activity-log?pageSize=100"))).json();
     const descriptions = (log.items as { description: string; action: string }[]).map((item) => item.description);
     expect(descriptions).not.toContain("A2 draft edited during testing.");
-    expect(log.items.some((item: { action: string }) => item.action === "REVIEW_CYCLE_ARCHIVED")).toBe(true);
-    expect(log.archivedHidden).toBe(true);
+    expect(log.items.some((item: { action: string }) => item.action === "REVIEW_CYCLE_ARCHIVED")).toBe(false);
+    const ofCycle = await (
+      await listActivities(new NextRequest(`http://localhost/api/activity-log?pageSize=100&cycle=${cycleId}`))
+    ).json();
+    expect(ofCycle.cycle).toMatchObject({ mode: "cycle", id: cycleId });
+    expect((ofCycle.items as { description: string }[]).map((item) => item.description)).toContain("A2 draft edited during testing.");
+    expect(ofCycle.items.some((item: { action: string }) => item.action === "REVIEW_CYCLE_ARCHIVED")).toBe(true);
     const everything = await (
       await listActivities(new NextRequest("http://localhost/api/activity-log?pageSize=100&archived=include"))
     ).json();
+    expect(everything.cycle).toMatchObject({ mode: "all" });
     expect((everything.items as { description: string }[]).map((item) => item.description)).toContain(
       "A2 draft edited during testing.",
     );
@@ -6210,5 +6217,67 @@ describe("recall until the Dean opens it (D5)", () => {
     expect(body.code).toBe("OPENED_BY_DEAN");
     expect(body.error).toMatch(/^The Dean opened this programme on .*, so it can no longer be recalled\. .*"Request revision"/);
     expect(await prisma.submission.findUniqueOrThrow({ where: { id: "d5-late" } })).toMatchObject({ currentPhase: 2, status: "IN_REVIEW" });
+  });
+});
+
+describe("the Activity Log per cycle, in plain names (A4)", () => {
+  const realId = "a4-real-cycle";
+  const testId = "a4-test-cycle";
+  const day = 24 * 60 * 60 * 1000;
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.createMany({
+      data: [
+        { id: testId, name: "A4 test cycle", createdById: ids.super, isActive: false, isTest: true, archivedAt: new Date(), closedAt: new Date() },
+        { id: realId, name: "A4 real cycle", createdById: ids.super, isActive: true, startedAt: new Date(Date.now() + 2 * day) },
+      ],
+    });
+    await prisma.programme.create({ data: { id: "a4-prog", name: "A4 Programme of Study", code: "TSA-A4-PRG", departmentId: ids.departmentA } });
+    await prisma.submission.createMany({
+      data: [
+        { id: "a4-real-draft", title: "A4 real", programmeId: "a4-prog", createdById: ids.hod, cycleId: realId },
+        { id: "a4-test-draft", title: "A4 test", programmeId: ids.programmeA, createdById: ids.hod, cycleId: testId },
+      ],
+    });
+  });
+
+  afterAll(async () => {
+    await prisma.activityLog.deleteMany({ where: { cycleId: { in: [realId, testId] } } });
+    await prisma.submission.deleteMany({ where: { id: { in: ["a4-real-draft", "a4-test-draft"] } } });
+    await prisma.programme.deleteMany({ where: { id: "a4-prog" } });
+    await prisma.reviewCycle.deleteMany({ where: { id: { in: [realId, testId] } } });
+  });
+
+  it("puts every new entry in a cycle: its draft's, its cycle's, or the one running", async () => {
+    const real = await recordActivity({ actorId: ids.hod, action: "SUBMISSION_UPDATED", entityType: "SUBMISSION", entityId: "a4-real-draft", description: "A4 real draft edited." });
+    const test = await recordActivity({ actorId: ids.hod, action: "SUBMISSION_UPDATED", entityType: "SUBMISSION", entityId: "a4-test-draft", description: "A4 test draft edited." });
+    const cycle = await recordActivity({ actorId: ids.super, action: "REVIEW_CYCLE_UPDATED", entityType: "REVIEW_CYCLE", entityId: testId, description: "A4 test cycle renamed." });
+    const person = await recordActivity({ actorId: ids.admin, action: "USER_UPDATED", entityType: "USER", entityId: ids.hod, description: "A4 person updated." });
+    expect([real.cycleId, test.cycleId, cycle.cycleId, person.cycleId]).toEqual([realId, testId, testId, realId]);
+  });
+
+  it("opens on the current cycle, never shows the test cycle's events there, and names records instead of IDs", async () => {
+    authState.userId = ids.admin;
+    const read = async (query = "") =>
+      (await (await listActivities(new NextRequest(`http://localhost/api/activity-log?pageSize=100${query}`))).json()) as {
+        cycle: { mode: string; id: string | null; name: string };
+        cycles: { id: string; current: boolean; archived: boolean }[];
+        items: { description: string; entityId: string | null; record: { label: string; name: string | null } }[];
+      };
+    const current = await read();
+    expect(current.cycle).toMatchObject({ mode: "current", id: realId, name: "A4 real cycle" });
+    const descriptions = current.items.map((item) => item.description);
+    expect(descriptions).toEqual(expect.arrayContaining(["A4 real draft edited.", "A4 person updated."]));
+    expect(descriptions).not.toContain("A4 test draft edited.");
+    expect(descriptions).not.toContain("A4 test cycle renamed.");
+
+    const draftEntry = current.items.find((item) => item.description === "A4 real draft edited.")!;
+    expect(draftEntry.record).toEqual({ label: "Programme", name: "A4 Programme of Study" });
+    expect(current.items.find((item) => item.description === "A4 person updated.")!.record).toEqual({ label: "Person", name: "Test Hod" });
+    expect(JSON.stringify(current.items.map((item) => item.record))).not.toContain("a4-real-draft");
+
+    const testCycle = await read(`&cycle=${testId}`);
+    expect(testCycle.items.map((item) => item.description)).toEqual(expect.arrayContaining(["A4 test draft edited.", "A4 test cycle renamed."]));
+    expect(current.cycles.find((item) => item.id === testId)).toMatchObject({ archived: true, current: false });
   });
 });

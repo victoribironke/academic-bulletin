@@ -109,3 +109,5 @@ updates-2-feb-2026.md
 !prisma/migrations/20261124090000_policy_versions/migration.sql
 !prisma/migrations/20261124100000_dean_opened_at/
 !prisma/migrations/20261124100000_dean_opened_at/migration.sql
+!prisma/migrations/20261124110000_activity_log_cycles/
+!prisma/migrations/20261124110000_activity_log_cycles/migration.sql

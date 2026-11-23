@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 
-type ActivityDatabase = Pick<Prisma.TransactionClient, "activityLog">;
+type ActivityDatabase = Pick<Prisma.TransactionClient, "activityLog" | "submission" | "reviewCycle">;
 
 export type ActivityInput = {
   actorId?: string | null;
@@ -18,7 +18,29 @@ export type ActivityInput = {
    * are never edited.
    */
   coalesceWithinMinutes?: number;
+  /** The cycle the entry belongs to (task A4); worked out when not given. */
+  cycleId?: string | null;
 };
+
+/**
+ * Task A4: the cycle an entry belongs to. An entry about a draft belongs to
+ * the draft's cycle and one about a cycle to that cycle; anything else to
+ * the cycle running now (none when no cycle is running).
+ */
+async function cycleFor(input: ActivityInput, database: ActivityDatabase): Promise<string | null> {
+  if (input.cycleId !== undefined) return input.cycleId;
+  if (input.entityType === "REVIEW_CYCLE" && input.entityId) return input.entityId;
+  if (input.entityType === "SUBMISSION" && input.entityId) {
+    const draft = await database.submission.findUnique({ where: { id: input.entityId }, select: { cycleId: true } });
+    if (draft) return draft.cycleId;
+  }
+  const running = await database.reviewCycle.findFirst({
+    where: { isActive: true, archivedAt: null },
+    orderBy: { startedAt: "desc" },
+    select: { id: true },
+  });
+  return running?.id ?? null;
+}
 
 /** How long repeated autosaves by one person on one record count as one entry. */
 export const AUTOSAVE_COALESCE_MINUTES = 30;
@@ -56,6 +78,7 @@ export async function recordActivity(
       action: input.action,
       entityType: input.entityType,
       entityId,
+      cycleId: await cycleFor(input, database),
       description: input.description,
       ...(input.metadata !== undefined && { metadata: input.metadata }),
     },

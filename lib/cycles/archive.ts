@@ -9,7 +9,8 @@
  * - its drafts are read-only for everyone, and only Academic Planning can
  *   open them (from the Archive);
  * - every dashboard, count, list, reminder, bulletin and default view leaves
- *   them out, and so does the activity log unless asked to include them.
+ *   them out; the activity log's entries belong to their cycle (task A4), so
+ *   the current cycle's log never shows them.
  */
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
@@ -53,34 +54,6 @@ export async function isSubmissionArchived(submissionId: string): Promise<boolea
     select: { cycle: { select: { archivedAt: true } } },
   });
   return Boolean(submission?.cycle?.archivedAt);
-}
-
-/**
- * The record ids whose log entries the activity log leaves out by default:
- * archived cycles and their drafts (comments and course edits are logged
- * against the draft).
- */
-export async function archivedEntityIds(): Promise<string[]> {
-  const cycles = await prisma.reviewCycle.findMany({
-    where: { archivedAt: { not: null } },
-    select: { id: true, submissions: { select: { id: true } } },
-  });
-  return cycles.flatMap((cycle) => [cycle.id, ...cycle.submissions.map((draft) => draft.id)]);
-}
-
-/**
- * Activity log filter for the default view: no entries about archived
- * records, except the archiving and restoring themselves.
- */
-export function withoutArchivedEntries(ids: string[]): Prisma.ActivityLogWhereInput {
-  if (ids.length === 0) return {};
-  return {
-    OR: [
-      { entityId: null },
-      { entityId: { notIn: ids } },
-      { action: { in: [CYCLE_ARCHIVED_ACTION, CYCLE_RESTORED_ACTION] } },
-    ],
-  };
 }
 
 export type CycleArchiveSummary = {
