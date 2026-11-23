@@ -15,6 +15,7 @@ import { SHELL_END, SHELL_START, button, escapeHtml } from "@/lib/email/notifica
 import type { Countdown } from "@/lib/calendar/countdown";
 import { deskCountdown, loadActiveCycleCalendar } from "@/lib/calendar/desk";
 import { UNIVERSITY_DOMAIN, isUniversityEmail } from "@/lib/sign-in-access";
+import { dapOfficerFor } from "@/lib/people/officers";
 
 const ROLE_NAMES: Record<string, string> = {
   HOD: "Head of Department",
@@ -136,13 +137,7 @@ async function loadPerson(userId: string) {
         ? user.programmeAssignments.map((item) => item.programme.name).join(", ")
         : (user.department?.name ?? "your department");
   // The DAP officer named for the school on the roster (task D1).
-  const officer = user.schoolId
-    ? await prisma.user.findFirst({
-        where: { role: "ADMIN", isActive: true, schoolId: user.schoolId },
-        select: { title: true, firstName: true, lastName: true, email: true, whatsapp: true },
-        orderBy: { createdAt: "asc" },
-      })
-    : null;
+  const officer = await dapOfficerFor(user.schoolId);
   return { user, unit, officer };
 }
 
@@ -182,13 +177,7 @@ export async function sendInvitation(userId: string, now: Date = new Date()): Pr
           )
         : null,
       launchSession: process.env.INVITATION_LAUNCH_SESSION?.trim() || null,
-      helpContact: officer
-        ? {
-            name: [officer.title, officer.firstName, officer.lastName].filter(Boolean).join(" "),
-            email: officer.email,
-            whatsapp: officer.whatsapp,
-          }
-        : null,
+      helpContact: officer,
       generalHelp: process.env.INVITATION_HELP_CONTACT?.trim() || null,
       replyTo: process.env.INVITATION_REPLY_TO?.trim() || null,
     },

@@ -96,6 +96,7 @@ import { POST as restoreCycleRoute } from "@/app/api/cycles/[id]/restore/route";
 import { openCycle, planOpenCycle } from "@/lib/cycles/open";
 import { GET as readPolicyRoute, POST as uploadPolicyRoute } from "@/app/api/policy/route";
 import { BUILT_IN_POLICY_ID } from "@/lib/policy/library";
+import { GET as readHelpDetails } from "@/app/api/help/route";
 import { GET as listArchive } from "@/app/api/archive/route";
 import { POST as restoreArchived } from "@/app/api/archive/[id]/restore/route";
 import { confirmationMatches } from "@/lib/archive";
@@ -6007,5 +6008,38 @@ describe("the Academic Policy library (H9)", () => {
     expect(earlier.version).toMatchObject({ builtIn: true, isCurrent: false });
     expect(JSON.stringify(earlier.sections)).toContain("minimum of 16 credits");
     expect((await read("?version=nope")).status).toBe(404);
+  });
+});
+
+describe("the quick start's help details (H1)", () => {
+  afterAll(async () => {
+    await prisma.mfaVerification.deleteMany({ where: { userId: "h1-officer" } });
+    await prisma.user.deleteMany({ where: { id: "h1-officer" } });
+  });
+
+  it("names the DAP officer for the person's own school only", async () => {
+    await prisma.user.create({
+      data: {
+        id: "h1-officer",
+        email: "h1-officer@babcock.edu.ng",
+        firstName: "Ada",
+        lastName: "Officer",
+        title: "Mrs.",
+        whatsapp: "+2348030000001",
+        role: "ADMIN",
+        schoolId: ids.schoolA,
+      },
+    });
+    authState.userId = ids.hod;
+    const forHead = await (await readHelpDetails()).json();
+    expect(forHead.officer).toEqual({ name: "Mrs. Ada Officer", email: "h1-officer@babcock.edu.ng", whatsapp: "+2348030000001" });
+
+    // A Head in another school doesn't get this officer.
+    await prisma.user.update({ where: { id: ids.hod }, data: { schoolId: ids.schoolB } });
+    try {
+      expect((await (await readHelpDetails()).json()).officer).toBeNull();
+    } finally {
+      await prisma.user.update({ where: { id: ids.hod }, data: { schoolId: ids.schoolA } });
+    }
   });
 });

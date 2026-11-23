@@ -1,6 +1,13 @@
 "use client";
 
-import { useState } from "react";
+/**
+ * The help panel (work order task H1): a quick start for the person's role in
+ * the exact words of the screens, their current deadline and next
+ * checkpoint, the DAP officer for their school, and the Academic Policy (H9).
+ */
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { BookOpenText, CalendarClock, HelpCircle, Mail, MessageCircle, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,15 +17,50 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import Link from "next/link";
-import { BookOpenText, HelpCircle } from "lucide-react";
 import { useUser } from "@/contexts/user-context";
+import { PolicyInline } from "@/components/policy/policy-text";
+import { parseInline } from "@/lib/policy/markdown";
+import { SIGN_IN_STEP, quickStartFor } from "@/lib/help/quick-start";
+
+type Officer = { name: string; email: string; whatsapp: string | null };
+type HelpDetails = { officer: Officer | null; generalHelp: string | null; cycle: string | null; submitOpens: string | null };
+type Desk = { label: string; headline: string; dueLine: string; nextLine: string | null } | null;
+
+function Step({ text }: { text: string }) {
+  return <PolicyInline content={parseInline(text)} />;
+}
 
 export function HelpButton() {
   const [open, setOpen] = useState(false);
   const { currentUser } = useUser();
-  const isAdmin =
-    currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
+  const [details, setDetails] = useState<HelpDetails | null>(null);
+  const [desk, setDesk] = useState<Desk>(null);
+  const role = currentUser?.role ?? "HOD";
+  const isAcademicPlanning = role === "ADMIN" || role === "SUPER_ADMIN";
+  const guide = quickStartFor(role, details?.submitOpens ?? null);
+
+  // Loaded the first time the panel opens.
+  useEffect(() => {
+    if (!open || details) return;
+    let cancelled = false;
+    Promise.all([
+      fetch("/api/help").then((res) => (res.ok ? res.json() : null)),
+      fetch("/api/calendar/desk").then((res) => (res.ok ? res.json() : null)),
+    ])
+      .then(([help, calendar]) => {
+        if (cancelled) return;
+        setDetails(help ?? { officer: null, generalHelp: null, cycle: null, submitOpens: null });
+        setDesk(calendar?.desk ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setDetails({ officer: null, generalHelp: null, cycle: null, submitOpens: null });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, details]);
+
+  const whatsappLink = (number: string) => `https://wa.me/${number.replace(/[^\d]/g, "")}`;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -27,20 +69,84 @@ export function HelpButton() {
           variant="outline"
           size="icon"
           className="fixed bottom-6 right-6 h-12 w-12 rounded-full shadow-lg z-50"
+          aria-label="Help and quick start"
         >
           <HelpCircle className="h-6 w-6" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px] max-h-[80vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Quick Start Guide</DialogTitle>
+          <DialogTitle>{guide.title}</DialogTitle>
           <DialogDescription>
-            Follow this workflow-focused guide to complete, review, and publish
-            bulletin content with fewer delays.
+            {details?.cycle ? `${details.cycle}. ` : ""}What to do, in the words you&apos;ll see on the screens.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4 text-sm">
+        <div className="space-y-5 py-2 text-sm">
+          {desk && (
+            <section aria-label="Your deadline" className="flex gap-3 rounded-lg border bg-muted/40 p-3">
+              <CalendarClock className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+              <div className="space-y-0.5">
+                <p className="font-medium text-foreground">
+                  Your deadline: {desk.label} ({desk.headline.toLowerCase()})
+                </p>
+                <p className="text-muted-foreground">{desk.dueLine}</p>
+                {desk.nextLine && <p className="text-muted-foreground">{desk.nextLine}</p>}
+              </div>
+            </section>
+          )}
+
+          <section className="space-y-2">
+            <h3 className="font-semibold text-base">Step by step</h3>
+            <ol className="list-decimal space-y-2 pl-5 text-muted-foreground">
+              {guide.steps.map((step) => (
+                <li key={step}>
+                  <Step text={step} />
+                </li>
+              ))}
+            </ol>
+          </section>
+
+          <section className="space-y-1">
+            <h3 className="font-semibold text-base">Signing in</h3>
+            <p className="text-muted-foreground">
+              <Step text={SIGN_IN_STEP} />
+            </p>
+          </section>
+
+          {!isAcademicPlanning && (
+            <section className="space-y-2">
+              <h3 className="font-semibold text-base">Your DAP officer</h3>
+              {details?.officer ? (
+                <div className="space-y-1.5 rounded-lg border p-3">
+                  <p className="flex items-center gap-2 font-medium text-foreground">
+                    <UserRound className="h-4 w-4 text-primary" aria-hidden="true" />
+                    {details.officer.name}
+                  </p>
+                  <a className="flex items-center gap-2 text-primary underline-offset-2 hover:underline" href={`mailto:${details.officer.email}`}>
+                    <Mail className="h-4 w-4" aria-hidden="true" />
+                    {details.officer.email}
+                  </a>
+                  {details.officer.whatsapp && (
+                    <a
+                      className="flex items-center gap-2 text-primary underline-offset-2 hover:underline"
+                      href={whatsappLink(details.officer.whatsapp)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <MessageCircle className="h-4 w-4" aria-hidden="true" />
+                      WhatsApp {details.officer.whatsapp}
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <p className="text-muted-foreground">
+                  {details?.generalHelp ?? "Contact the Directorate of Academic Planning."}
+                </p>
+              )}
+            </section>
+          )}
+
           {/* H9: the Academic Policy from every screen. */}
           <Link
             href="/policy"
@@ -50,141 +156,9 @@ export function HelpButton() {
             <BookOpenText className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
             <span>
               <span className="block font-medium text-foreground">Academic Policy</span>
-              <span className="block text-muted-foreground">
-                Contents and search, for example &quot;Academic Load&quot;.
-              </span>
+              <span className="block text-muted-foreground">Contents and search, for example &quot;Academic Load&quot;.</span>
             </span>
           </Link>
-
-          <section className="space-y-2">
-            <h3 className="font-semibold text-base">How Work Flows</h3>
-            <p className="text-muted-foreground">
-              Bulletin updates move through a review pipeline. Complete your
-              assigned steps, save often, and only submit when required sections
-              are ready.
-            </p>
-            <ol className="list-decimal pl-5 text-muted-foreground space-y-1">
-              <li>Open or create the correct submission for your programme.</li>
-              <li>Complete section data and upload required photos/documents.</li>
-              <li>Resolve validation or image verification feedback.</li>
-              <li>Save draft changes, then submit for the next review phase.</li>
-              <li>Address comments, update content, and resubmit if returned.</li>
-            </ol>
-            <p className="text-muted-foreground">
-              Department submissions go to School Board Harmonisation, where
-              the Dean reviews them. The Dean&apos;s approval sends them to
-              Academic Planning Vetting; DAP controls the later phases.
-            </p>
-          </section>
-
-          <section className="space-y-2">
-            <h3 className="font-semibold text-base">Where To Do Things</h3>
-            <p className="text-muted-foreground">
-              Use the sidebar to move quickly to the right task area:
-            </p>
-            <ul className="list-disc pl-5 text-muted-foreground space-y-1">
-              <li>
-                <strong>Dashboard</strong> — Overview of your activity and
-                pending review actions
-              </li>
-              <li>
-                <strong>Programmes</strong> — View and manage academic
-                programmes and structure
-              </li>
-              <li>
-                <strong>Submissions</strong> — Create, edit, review, and track
-                bulletin updates
-              </li>
-              <li>
-                <strong>Schools & Departments</strong> — Organizational
-                ownership and relationships
-              </li>
-            </ul>
-          </section>
-
-          <section className="space-y-2">
-            <h3 className="font-semibold text-base">For Submitters (HOD/Owners)</h3>
-            <ol className="list-decimal pl-5 text-muted-foreground space-y-1">
-              <li>Go to the Submissions page and open your programme draft.</li>
-              <li>Fill each section and keep entries consistent.</li>
-              <li>Use Save Draft after major edits to prevent data loss.</li>
-              <li>Upload clear passport-style photos for required profiles.</li>
-              <li>Fix any validation or compliance issues before submission.</li>
-              <li>
-                Use <strong>Submit to School</strong> only when all mandatory
-                fields are complete.
-              </li>
-            </ol>
-          </section>
-
-          <section className="space-y-2">
-            <h3 className="font-semibold text-base">For Reviewers</h3>
-            <p className="text-muted-foreground">
-              At each phase, reviewers should leave precise comments linked to
-              affected sections so submitters can resolve issues quickly.
-            </p>
-            <ul className="list-disc pl-5 text-muted-foreground space-y-1">
-              <li>
-                <strong>Request Changes</strong> when content quality or
-                completeness is not yet acceptable.
-              </li>
-              <li>
-                <strong>Approve</strong> only after confirming section-level
-                requirements are met.
-              </li>
-              <li>
-                <strong>Reject</strong> only for major blocking issues and add
-                clear rationale.
-              </li>
-              <li>Use comments for actionable, section-specific guidance.</li>
-            </ul>
-            <p className="text-muted-foreground">
-              Deans approve the School stage and send it to Academic Planning.
-              Academic Planning reviewers act from their review stage onward.
-            </p>
-          </section>
-
-          <section className="space-y-2">
-            <h3 className="font-semibold text-base">If You Are Blocked</h3>
-            <ul className="list-disc pl-5 text-muted-foreground space-y-1">
-              <li>Image upload failed: use a clear JPG/PNG/WebP under 4 MB.</li>
-              <li>Validation failed: open comments and fix highlighted fields.</li>
-              <li>Cannot submit: complete required sections and resolve checks.</li>
-              <li>
-                Wrong access level: confirm you are in the correct role/account.
-              </li>
-            </ul>
-          </section>
-
-          <section className="space-y-2">
-            <h3 className="font-semibold text-base">Review And Release Stages</h3>
-            <p className="text-muted-foreground">
-              The ten phases are Departmental Drafting, School Board
-              Harmonisation, Academic Planning Vetting, Departmental Revision,
-              Consolidation and Sign-off, Senate Approval, Copy-Editing,
-              Typesetting and Proofs, Digital Publication, and Errata and
-              Archiving. Status badges on submissions show the current phase.
-            </p>
-          </section>
-
-          {isAdmin && (
-            <section className="space-y-2">
-              <h3 className="font-semibold text-base">Admin Responsibilities</h3>
-              <p className="text-muted-foreground">
-                Create and manage user accounts, monitor stalled submissions, and
-                guide teams through unresolved workflow blockers. Super Admins can
-                activate/deactivate accounts and enforce quality checks.
-              </p>
-            </section>
-          )}
-
-          <section className="space-y-2">
-            <h3 className="font-semibold text-base">Need More Help?</h3>
-            <p className="text-muted-foreground">
-              Contact your bulletin coordinator or system administrator with the
-              submission ID, current phase, and a short description of the issue.
-            </p>
-          </section>
         </div>
       </DialogContent>
     </Dialog>

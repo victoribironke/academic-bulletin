@@ -23,12 +23,12 @@ function marked(text: string, highlight: string | undefined): ReactNode {
   return parts;
 }
 
-function InlineContent({ content, highlight }: { content: Inline[]; highlight?: string }) {
+export function PolicyInline({ content, highlight }: { content: Inline[]; highlight?: string }) {
   return (
     <>
       {content.map((part, index) => {
         if (part.type === "text") return <Fragment key={index}>{marked(part.text, highlight)}</Fragment>;
-        const children = <InlineContent content={part.children} highlight={highlight} />;
+        const children = <PolicyInline content={part.children} highlight={highlight} />;
         if (part.type === "strong") return <strong key={index} className="font-semibold text-foreground">{children}</strong>;
         if (part.type === "em") return <em key={index}>{children}</em>;
         if (part.href.startsWith("#")) {
@@ -58,7 +58,7 @@ export function PolicyBlocks({ blocks, highlight }: { blocks: Block[]; highlight
         if (block.type === "paragraph") {
           return (
             <p key={index} className="leading-relaxed">
-              <InlineContent content={block.content} highlight={highlight} />
+              <PolicyInline content={block.content} highlight={highlight} />
             </p>
           );
         }
@@ -77,7 +77,7 @@ export function PolicyBlocks({ blocks, highlight }: { blocks: Block[]; highlight
                   <tr>
                     {block.header.map((cell, cellIndex) => (
                       <th key={cellIndex} scope="col" className="px-3 py-2 font-medium text-foreground">
-                        <InlineContent content={cell} highlight={highlight} />
+                        <PolicyInline content={cell} highlight={highlight} />
                       </th>
                     ))}
                   </tr>
@@ -87,7 +87,7 @@ export function PolicyBlocks({ blocks, highlight }: { blocks: Block[]; highlight
                     <tr key={rowIndex} className="border-t align-top">
                       {row.map((cell, cellIndex) => (
                         <td key={cellIndex} className="px-3 py-2">
-                          <InlineContent content={cell} highlight={highlight} />
+                          <PolicyInline content={cell} highlight={highlight} />
                         </td>
                       ))}
                     </tr>
@@ -106,7 +106,7 @@ export function PolicyBlocks({ blocks, highlight }: { blocks: Block[]; highlight
           >
             {block.items.map((item, itemIndex) => (
               <li key={itemIndex} className="space-y-1.5 pl-1 leading-relaxed">
-                {item.content.length > 0 && <InlineContent content={item.content} highlight={highlight} />}
+                {item.content.length > 0 && <PolicyInline content={item.content} highlight={highlight} />}
                 {item.children.length > 0 && (
                   <div className="space-y-1.5 pt-1.5 [&_ol]:list-[lower-alpha] [&_ol_ol]:list-[lower-roman]">
                     <PolicyBlocks blocks={item.children} highlight={highlight} />
