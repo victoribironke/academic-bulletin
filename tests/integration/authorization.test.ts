@@ -2342,6 +2342,7 @@ describe("HOD browsing within their school", () => {
       clearedPreviousGate: false,
       requiredEvidence: null,
       graceGate: null,
+      submitClosed: null,
     });
     const submit = await transitionSubmission(
       new NextRequest(`http://localhost/api/submissions/${sibling.submission}/transition`, {
@@ -2784,6 +2785,52 @@ describe("submit validators", () => {
     expect((await save({ philosophy: readyPhilosophy })).status).toBe(200);
     expect((await submit()).status).toBe(200);
     expect(await stage()).toEqual({ currentPhase: 2, status: "IN_REVIEW" });
+  });
+
+  it("W6: refuses a minimum CGPA below 2.00 when saving and at Submit", async () => {
+    const refused = await save({ minimumCGPA: 1.5 });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({ code: "CGPA_OUT_OF_RANGE" });
+    expect((await save({ minimumCGPA: 2 })).status).toBe(200);
+
+    // A figure stored before the rule is still caught at Submit.
+    await prepareDraftForSubmit(submissionId);
+    await prisma.submissionContent.update({ where: { submissionId }, data: { minimumCGPA: 1.5 } });
+    expect(await refusalCodes()).toEqual(["CGPA_OUT_OF_RANGE"]);
+  });
+
+  it("F0: Submit to School waits for the cycle's opening date, on the server and the page", async () => {
+    await prepareDraftForSubmit(submissionId);
+    const opensAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await prisma.reviewCycle.update({ where: { id: cycleId }, data: { submissionsOpenAt: opensAt } });
+    try {
+      const early = await submit();
+      expect(early.status).toBe(409);
+      const body = await early.json();
+      expect(body.code).toBe("SUBMISSIONS_NOT_OPEN");
+      expect(body.error).toMatch(/^Submissions open on \w+day, \w+ \d{1,2}, \d{4}\. Keep working; your draft saves as you go\.$/);
+      expect(await stage()).toEqual({ currentPhase: 1, status: "DRAFT" });
+
+      // The page gets the same answer, so it can show the button switched off.
+      authState.userId = ids.hod;
+      const page = await getSubmission(
+        new NextRequest(`http://localhost/api/submissions/${submissionId}`),
+        { params: Promise.resolve({ id: submissionId }) },
+      );
+      const { workflow } = await page.json();
+      expect(workflow.actions).toContain("SUBMIT");
+      expect(workflow.submitClosed).toEqual({ opensAt: opensAt.toISOString(), message: body.error });
+
+      // DAP opens submissions earlier by moving the date.
+      await prisma.reviewCycle.update({
+        where: { id: cycleId },
+        data: { submissionsOpenAt: new Date(Date.now() - 1000) },
+      });
+      expect((await submit()).status).toBe(200);
+      expect(await stage()).toEqual({ currentPhase: 2, status: "IN_REVIEW" });
+    } finally {
+      await prisma.reviewCycle.update({ where: { id: cycleId }, data: { submissionsOpenAt: null } });
+    }
   });
 
   it("never lets a save mark the philosophy as passing GRACE", async () => {

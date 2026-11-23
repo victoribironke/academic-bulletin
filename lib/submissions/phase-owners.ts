@@ -18,6 +18,7 @@ import {
   getGraceGate,
   summarizeGraceGate,
 } from "@/lib/submissions/grace-gate";
+import { getSubmissionWindow } from "@/lib/submissions/submission-window";
 
 /** The phase-owner table, or today's owners while the table has no rows. */
 export async function loadPhaseOwners(): Promise<PhaseOwnerRule[]> {
@@ -62,6 +63,8 @@ export type SubmissionWorkflow = {
   requiredEvidence: string | null;
   /** The GRACE gate on Approve, when this person can approve now. */
   graceGate: GraceGateSummary | null;
+  /** Set while Submit waits for the cycle's submissions to open (F0). */
+  submitClosed: { opensAt: string; message: string } | null;
 };
 
 export async function getSubmissionWorkflow(
@@ -88,5 +91,11 @@ export async function getSubmissionWorkflow(
     graceGate: actions.includes("APPROVE")
       ? summarizeGraceGate(await getGraceGate(submission.id), user.role)
       : null,
+    submitClosed: actions.includes("SUBMIT") ? await closedSubmit(submission.id) : null,
   };
+}
+
+async function closedSubmit(submissionId: string) {
+  const window = await getSubmissionWindow(submissionId);
+  return window.open ? null : { opensAt: window.opensAt, message: window.message };
 }

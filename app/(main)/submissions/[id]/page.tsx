@@ -82,6 +82,7 @@ import {
   GRACE_OVERRIDE_REASON_LENGTH,
   GRACE_SUBMISSION_REQUIRED,
 } from "@/lib/grace-config";
+import { MINIMUM_CGPA_RANGE, UNIVERSITY_MINIMUM_CGPA } from "@/lib/submissions/cgpa-rule";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PhotoUploadGuidance } from "@/components/shared/photo-upload-guidance";
 
@@ -436,7 +437,7 @@ export default function SubmissionDetailPage({
   const [transferRequirements, setTransferRequirements] = useState("");
   const [minimumDuration, setMinimumDuration] = useState("");
   const [graduationRequirements, setGraduationRequirements] = useState("");
-  const [minimumCGPA, setMinimumCGPA] = useState<number>(2.5);
+  const [minimumCGPA, setMinimumCGPA] = useState<number>(UNIVERSITY_MINIMUM_CGPA);
   const [totalUnits, setTotalUnits] = useState<number>(154);
   const [regulations, setRegulations] = useState("");
   const [summaryOfChanges, setSummaryOfChanges] = useState("");
@@ -514,6 +515,8 @@ export default function SubmissionDetailPage({
     (hasPermission("comment:submission") || hasPermission("review:submission")) &&
     isAssignedSubmission;
   const canSubmit = workflowActions.includes("SUBMIT");
+  // F0: Submit stays off, with the reason shown, until submissions open.
+  const submitClosed = submission?.workflow?.submitClosed ?? null;
   const canApprove = workflowActions.includes("APPROVE");
   const canReturn = workflowActions.includes("RETURN");
   const canReject = workflowActions.includes("REJECT");
@@ -560,7 +563,7 @@ export default function SubmissionDetailPage({
     setTransferRequirements(src.transferRequirements ?? data.content?.transferRequirements ?? "");
     setMinimumDuration(src.minimumDuration ?? data.content?.minimumDuration ?? "");
     setGraduationRequirements(src.graduationRequirements ?? data.content?.graduationRequirements ?? "");
-    setMinimumCGPA(src.minimumCGPA ?? data.content?.minimumCGPA ?? 2.5);
+    setMinimumCGPA(src.minimumCGPA ?? data.content?.minimumCGPA ?? UNIVERSITY_MINIMUM_CGPA);
     setTotalUnits(src.totalUnits ?? data.content?.totalUnits ?? 154);
     setRegulations(src.sectionF?.content ?? data.content?.sectionF?.content ?? "");
     setSummaryOfChanges(src.sectionG?.content ?? data.content?.sectionG?.content ?? "");
@@ -1248,13 +1251,22 @@ export default function SubmissionDetailPage({
                 </div>
               )}
               {canSubmit && (
-                <Button
-                  variant="default"
-                  onClick={() => handleTransition("SUBMIT")}
-                >
-                  <Send className="mr-2 h-4 w-4" />
-                  {submitActionLabel}
-                </Button>
+                <div className="flex flex-col items-start gap-1">
+                  <Button
+                    variant="default"
+                    onClick={() => handleTransition("SUBMIT")}
+                    disabled={Boolean(submitClosed)}
+                    aria-describedby={submitClosed ? "submit-closed-note" : undefined}
+                  >
+                    <Send className="mr-2 h-4 w-4" />
+                    {submitActionLabel}
+                  </Button>
+                  {submitClosed && (
+                    <p id="submit-closed-note" className="max-w-xs text-xs text-muted-foreground">
+                      {submitClosed.message}
+                    </p>
+                  )}
+                </div>
               )}
               {/* Preview button - available to all viewers */}
               <BulletinPreview
@@ -2135,17 +2147,28 @@ export default function SubmissionDetailPage({
                       <div className="space-y-2">
                         <Label>Minimum CGPA *</Label>
                         {canEdit ? (
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="1"
-                            max="5"
-                            value={minimumCGPA}
-                            onChange={(e) => {
-                              setMinimumCGPA(parseFloat(e.target.value) || 2.5);
-                              setHasChanges(true);
-                            }}
-                          />
+                          <>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min={MINIMUM_CGPA_RANGE.min}
+                              max={MINIMUM_CGPA_RANGE.max}
+                              value={minimumCGPA}
+                              aria-describedby="minimum-cgpa-help"
+                              onChange={(e) => {
+                                setMinimumCGPA(parseFloat(e.target.value) || UNIVERSITY_MINIMUM_CGPA);
+                                setHasChanges(true);
+                              }}
+                            />
+                            {/* Rule W6: 2.00 to 5.00; a higher figure must be a programme rule. */}
+                            <p id="minimum-cgpa-help" className="text-xs text-muted-foreground">
+                              {minimumCGPA < MINIMUM_CGPA_RANGE.min || minimumCGPA > MINIMUM_CGPA_RANGE.max
+                                ? "Use a figure from 2.00 to 5.00. The Academic Policy minimum is 2.00."
+                                : minimumCGPA > UNIVERSITY_MINIMUM_CGPA
+                                  ? "Higher than the university minimum of 2.00. Keep it only if it is a rule of this programme (as in Nursing or Medicine)."
+                                  : "The Academic Policy minimum to graduate is 2.00."}
+                            </p>
+                          </>
                         ) : (
                           <p className="text-sm bg-muted p-3 rounded-md">
                             {minimumCGPA}

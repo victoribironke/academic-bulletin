@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { parseSubmissionsOpenAt } from "@/lib/submissions/submission-window";
 import { requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
 
@@ -37,13 +38,19 @@ export async function POST(request: Request) {
     const auth = await requireApiUser(["ADMIN", "SUPER_ADMIN"]);
     if (!auth.ok) return auth.response;
 
-    const { name, description } = await request.json();
+    const body = await request.json();
+    const { name, description } = body;
 
     if (!name) {
       return NextResponse.json(
         { error: "Name is required" },
         { status: 400 },
       );
+    }
+    // F0: when "Submit to School" opens for this cycle (optional).
+    const opensAt = parseSubmissionsOpenAt(body.submissionsOpenAt);
+    if (!opensAt.ok) {
+      return NextResponse.json({ error: opensAt.message }, { status: 400 });
     }
 
     // Set any currently active cycles to inactive
@@ -58,6 +65,7 @@ export async function POST(request: Request) {
         description,
         createdById: auth.user.id,
         isActive: true,
+        ...(opensAt.value !== undefined && { submissionsOpenAt: opensAt.value }),
       },
     });
     await recordActivity({

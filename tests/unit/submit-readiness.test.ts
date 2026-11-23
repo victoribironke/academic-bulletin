@@ -109,13 +109,14 @@ describe("submit readiness", () => {
     ).toEqual(["MISSING_MINIMUM_DURATION", "MISSING_MINIMUM_CGPA", "MISSING_TOTAL_UNITS"]);
   });
 
-  it.each([0, 0.99, 5.01, 7, Number.NaN])("refuses a minimum CGPA of %s", (cgpa) => {
+  // Rule W6: the Academic Policy minimum is 2.00 on the 5-point scale.
+  it.each([0, 0.99, 1, 1.5, 1.99, 5.01, 7, Number.NaN])("refuses a minimum CGPA of %s", (cgpa) => {
     expect(codes(completeProgramme(), { ...completeContent(), minimumCGPA: cgpa })).toEqual([
       "CGPA_OUT_OF_RANGE",
     ]);
   });
 
-  it.each([1, 2.5, 5])("accepts a minimum CGPA of %s", (cgpa) => {
+  it.each([2, 2.5, 5])("accepts a minimum CGPA of %s", (cgpa) => {
     expect(codes(completeProgramme(), { ...completeContent(), minimumCGPA: cgpa })).toEqual([]);
   });
 

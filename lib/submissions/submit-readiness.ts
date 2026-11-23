@@ -12,10 +12,15 @@ import {
   type BulletinProgramme,
 } from "@/lib/bulletin/generation";
 import { validateBulletinProgramme } from "@/lib/bulletin/validation";
+import { isValidMinimumCgpa, minimumCgpaRuleMessage } from "@/lib/submissions/cgpa-rule";
 
 export const PHILOSOPHY_WORD_RANGE = { min: 150, max: 250 } as const;
-/** Matches the Minimum CGPA field on the submission page (5-point scale). */
-export const MINIMUM_CGPA_RANGE = { min: 1, max: 5 } as const;
+export {
+  MINIMUM_CGPA_RANGE,
+  UNIVERSITY_MINIMUM_CGPA,
+  isValidMinimumCgpa,
+  minimumCgpaRuleMessage,
+} from "@/lib/submissions/cgpa-rule";
 
 export type SubmitReadinessIssue = { code: string; message: string };
 
@@ -165,15 +170,8 @@ export function submitReadinessIssues(
   const cgpa = content?.minimumCGPA;
   if (cgpa === null || cgpa === undefined) {
     issues.push({ code: "MISSING_MINIMUM_CGPA", message: "Enter the minimum CGPA." });
-  } else if (
-    !Number.isFinite(cgpa) ||
-    cgpa < MINIMUM_CGPA_RANGE.min ||
-    cgpa > MINIMUM_CGPA_RANGE.max
-  ) {
-    issues.push({
-      code: "CGPA_OUT_OF_RANGE",
-      message: `The minimum CGPA is ${cgpa}; it must be between ${MINIMUM_CGPA_RANGE.min.toFixed(2)} and ${MINIMUM_CGPA_RANGE.max.toFixed(2)}.`,
-    });
+  } else if (!isValidMinimumCgpa(cgpa)) {
+    issues.push({ code: "CGPA_OUT_OF_RANGE", message: minimumCgpaRuleMessage(cgpa) });
   }
 
   // A stated total that differs from the course structure is reported by the

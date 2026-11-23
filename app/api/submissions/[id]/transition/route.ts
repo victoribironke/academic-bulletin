@@ -14,6 +14,7 @@ import { loadPhaseOwners, previousGateActorId } from "@/lib/submissions/phase-ow
 import { bulletinContentHash, linkStateChangeToLedger } from "@/lib/submissions/ledger";
 import { PHASE_REQUIRED_EVIDENCE } from "@/lib/submissions/phases";
 import { getSubmitReadinessIssues } from "@/lib/submissions/submit-readiness";
+import { getSubmissionWindow } from "@/lib/submissions/submission-window";
 import { recordActivity } from "@/lib/activity-log";
 import {
   type CourseGraceBlockers,
@@ -211,6 +212,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return NextResponse.json(
           { error: gate.message },
           { status: gate.status },
+        );
+      }
+
+      // F0: the first Submit waits until the cycle's submissions open.
+      const window = await getSubmissionWindow(id);
+      if (!window.open) {
+        return NextResponse.json(
+          { error: window.message, code: "SUBMISSIONS_NOT_OPEN", opensAt: window.opensAt },
+          { status: 409 },
         );
       }
 

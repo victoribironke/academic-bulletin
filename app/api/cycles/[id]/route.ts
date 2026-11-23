@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
+import { formatOpeningDate, parseSubmissionsOpenAt } from "@/lib/submissions/submission-window";
 import {
   archiveRecord,
   deleteBlockers,
@@ -21,10 +22,17 @@ export async function PUT(
     const body = await request.json();
     const { name, description, isActive } = body;
 
+    // F0: when "Submit to School" opens for this cycle (null: no limit).
+    const opensAt = parseSubmissionsOpenAt(body.submissionsOpenAt);
+    if (!opensAt.ok) {
+      return NextResponse.json({ error: opensAt.message }, { status: 400 });
+    }
+
     // Build update data safely
     const dataToUpdate: Record<string, unknown> = {};
     if (name !== undefined) dataToUpdate.name = name;
     if (description !== undefined) dataToUpdate.description = description;
+    if (opensAt.value !== undefined) dataToUpdate.submissionsOpenAt = opensAt.value;
 
     // If they are closing the cycle
     if (isActive === false) {
@@ -61,7 +69,12 @@ export async function PUT(
             : "REVIEW_CYCLE_UPDATED",
       entityType: "REVIEW_CYCLE",
       entityId: id,
-      description: `Updated the ${cycle.name} review cycle.`,
+      description:
+        opensAt.value === undefined
+          ? `Updated the ${cycle.name} review cycle.`
+          : opensAt.value
+            ? `Updated the ${cycle.name} review cycle; submissions open on ${formatOpeningDate(opensAt.value)}.`
+            : `Updated the ${cycle.name} review cycle; submissions are open with no start date.`,
     });
 
     return NextResponse.json(cycle);

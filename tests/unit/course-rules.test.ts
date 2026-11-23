@@ -64,8 +64,8 @@ describe("course uploads with held-back rows from package file 03 (B13)", () => 
   it("loads an MBBS course with no semester as a sessional course, with a warning", () => {
     const [row] = validateCourseImportRows([courseRow({})]);
     expect(row.errors).toEqual([]);
-    expect(row.data.semester).toBeNull();
-    expect(row.warnings.join(" ")).toMatch(/sessional/i);
+    expect(row.data!.semester).toBeNull();
+    expect((row.warnings ?? []).join(" ")).toMatch(/sessional/i);
   });
 
   it("loads 0-unit and 12-unit courses", () => {
@@ -74,7 +74,7 @@ describe("course uploads with held-back rows from package file 03 (B13)", () => 
       courseRow({ "Course Code": "BU-PHS 416", "Course Title": "Internship", Units: 12, Semester: 2, Level: 400 }),
     ]);
     expect(rows.map((row) => row.errors)).toEqual([[], []]);
-    expect(rows.map((row) => row.data.units)).toEqual([0, 12]);
+    expect(rows.map((row) => row.data!.units)).toEqual([0, 12]);
   });
 
   it("refuses an empty Units cell instead of reading it as 0", () => {
@@ -95,9 +95,9 @@ describe("course uploads with held-back rows from package file 03 (B13)", () => 
       { "Course Code": "BU-PHS 417", "Course Title": "Long Internship", Units: 13, "Course Type": "CORE", Ownership: "SCHOOL", "Owner School Code": "SPH", Level: 400, Semester: 2 },
     ]);
     expect(sessional.errors).toEqual([]);
-    expect(sessional.data.semester).toBeNull();
+    expect(sessional.data!.semester).toBeNull();
     expect(zero.errors).toEqual([]);
-    expect(zero.data.units).toBe(0);
+    expect(zero.data!.units).toBe(0);
     expect(bad.errors.join(" ")).toMatch(/0 to 12/);
   });
 });

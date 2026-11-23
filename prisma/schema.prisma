@@ -317,6 +317,8 @@ model ReviewCycle {
   isActive    Boolean   @default(true)
   startedAt   DateTime  @default(now())
   closedAt    DateTime?
+  /// "Submit to School" stays off before this moment (task F0); empty means no limit.
+  submissionsOpenAt DateTime?
   createdById String
 
   createdBy   User         @relation(fields: [createdById], references: [id])

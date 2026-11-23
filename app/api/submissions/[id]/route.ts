@@ -14,6 +14,7 @@ import { workflowHistoryConflict } from "@/lib/submissions/workflow-history";
 import { unsafeMarkupReason } from "@/lib/html/safe-html";
 import { inUseResponse, requireTypedConfirmation } from "@/lib/archive";
 import { photoNotUploadedHere } from "@/lib/images/photo-urls";
+import { isValidMinimumCgpa, minimumCgpaRuleMessage } from "@/lib/submissions/cgpa-rule";
 
 /** Content columns that aren't anything a person wrote. */
 const BOOKKEEPING_FIELDS = new Set([
@@ -149,6 +150,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           clearedPreviousGate: false,
           requiredEvidence: null,
           graceGate: null,
+          submitClosed: null,
         },
       });
     }
@@ -234,6 +236,18 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           { status: 400 },
         );
       }
+    }
+
+    // Rule W6: the minimum CGPA is 2.00 to 5.00 (empty is allowed while drafting).
+    if (
+      content?.minimumCGPA !== undefined &&
+      content.minimumCGPA !== null &&
+      !isValidMinimumCgpa(content.minimumCGPA)
+    ) {
+      return NextResponse.json(
+        { error: minimumCgpaRuleMessage(content.minimumCGPA), code: "CGPA_OUT_OF_RANGE" },
+        { status: 400 },
+      );
     }
 
     // Update submission
