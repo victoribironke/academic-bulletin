@@ -290,24 +290,38 @@ export function isValidName(name: string): boolean {
 }
 
 /**
- * Validates that a course code follows the expected format
- * e.g., "COS 101", "COSC 101", "MTH 201"
+ * The one course code format (work order tasks B3 and B16): capital letters,
+ * one space, the three-digit number. National courses keep their national code
+ * ("GST 112"); Babcock-specific courses carry "BU-" ("BU-GST 112"). The two
+ * are different courses, so the prefix is never stripped.
  */
-export function isValidCourseCode(code: string): boolean {
-  if (!code) return false;
-  const codeRegex = /^[A-Z]{2,5}\s?\d{3}$/;
-  return codeRegex.test(code.trim().toUpperCase());
-}
+export const COURSE_CODE_PATTERN = /^(BU-)?[A-Z]{2,5} \d{3}$/;
 
 /**
- * Formats a course code to standard format: LETTERS DIGITS
+ * Tidies a typed course code into the standard format: "cos101" and "COS-101"
+ * become "COS 101"; "BU- NSC 401", "BU-SEN-417" and "BU-FRE310" become
+ * "BU-NSC 401", "BU-SEN 417" and "BU-FRE 310". "BU" is only the Babcock prefix
+ * when a hyphen or space follows it, so a national prefix that starts with BU
+ * keeps its own code. Anything else comes back upper-cased, for the caller to
+ * reject with isValidCourseCode.
  */
 export function formatCourseCode(code: string): string {
   if (!code) return "";
-  const upper = code.toUpperCase().trim();
-  const match = upper.match(/^([A-Z]{2,5})\s*(\d{3})$/);
-  if (match) {
-    return `${match[1]} ${match[2]}`;
-  }
+  const upper = code.toUpperCase().trim().replace(/\s+/g, " ");
+  const babcock =
+    upper.match(/^BU ?- ?([A-Z]{2,5}) ?-? ?(\d{3})$/) ??
+    upper.match(/^BU ([A-Z]{2,5}) ?-? ?(\d{3})$/);
+  if (babcock) return `BU-${babcock[1]} ${babcock[2]}`;
+  const national = upper.match(/^([A-Z]{2,5}) ?-? ?(\d{3})$/);
+  if (national) return `${national[1]} ${national[2]}`;
   return upper;
+}
+
+/**
+ * Whether a typed course code can be tidied into the standard format,
+ * e.g. "COS 101", "COSC 101", "BU-GST 112" or "bu-eco125".
+ */
+export function isValidCourseCode(code: string): boolean {
+  if (!code) return false;
+  return COURSE_CODE_PATTERN.test(formatCourseCode(code));
 }

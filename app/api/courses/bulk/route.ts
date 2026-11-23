@@ -55,11 +55,12 @@ export async function POST(request: Request) {
       { length: submission.programme.duration || 4 },
       (_, index) => (index + 1) * 100,
     );
+    // Repeats of an earlier row in the file are skipped, not imported (B17).
     const validated = validateCourseImportRows(rows, {
       allowedLevels,
       existingCodes: existing.map((course) => courseDuplicateKeys(course).code),
       existingTitles: existing.map((course) => courseDuplicateKeys(course).title),
-    });
+    }).filter((row) => !row.skipped);
     const invalid = validated.filter((row) => row.errors.length > 0 || !row.data);
     if (invalid.length > 0) {
       return NextResponse.json(

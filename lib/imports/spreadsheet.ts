@@ -5,6 +5,15 @@ export interface ValidatedImportRow<T> {
   raw: SpreadsheetRecord;
   data?: T;
   errors: string[];
+  /** Worth a look, but the row still imports (or is skipped, below). */
+  warnings?: string[];
+  /** A repeat of an earlier row in the same file: not an error, not imported. */
+  skipped?: boolean;
+}
+
+/** Rows to send or import: no errors, parsed, and not a skipped repeat. */
+export function importableRows<T>(rows: ValidatedImportRow<T>[]) {
+  return rows.filter((row) => !row.skipped && row.errors.length === 0 && row.data);
 }
 
 export interface TemplateColumn {

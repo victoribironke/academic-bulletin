@@ -32,11 +32,12 @@ export async function POST(request: Request) {
     const existing = await prisma.masterCourse.findMany({
       select: { id: true, code: true, title: true },
     });
+    // Repeats of an earlier row in the file are skipped, not imported (B17).
     const validated = validateMasterCourseImportRows(rows, {
       existingCodes: existing.map((course) => courseDuplicateKeys(course).code),
       existingTitles: existing.map((course) => courseDuplicateKeys(course).title),
       allowExisting: true,
-    });
+    }).filter((row) => !row.skipped);
     const invalid = validated.filter((row) => row.errors.length > 0 || !row.data);
     if (invalid.length > 0) {
       return NextResponse.json(

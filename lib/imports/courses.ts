@@ -148,20 +148,43 @@ export function courseDuplicateKeys(course: { code: string; title: string }) {
   };
 }
 
+/**
+ * Repeats within one upload (task B17). Departments share titles ("Research
+ * Project", "Seminar"), so a title alone never makes a duplicate: only the
+ * code does. The same code and title twice is a harmless repeat, skipped with
+ * a warning; the same code with a different title is a real conflict.
+ */
+function checkRepeatInFile(
+  firstTitleByCode: Map<string, string>,
+  key: { code: string; title: string },
+): { error?: string; warning?: string; skipped: boolean } {
+  const firstTitle = firstTitleByCode.get(key.code);
+  if (firstTitle === undefined) {
+    firstTitleByCode.set(key.code, key.title);
+    return { skipped: false };
+  }
+  if (firstTitle === key.title) {
+    return { warning: "Listed again in this file; this repeat is skipped.", skipped: true };
+  }
+  return { error: "Course Code is listed twice in this file with different titles.", skipped: false };
+}
+
 export function validateCourseImportRows(
   rows: SpreadsheetRecord[],
   options: {
     allowedLevels?: number[];
     existingCodes?: Iterable<string>;
+    /** No longer used: titles may repeat under different codes (B17). */
     existingTitles?: Iterable<string>;
   } = {},
 ): ValidatedImportRow<CourseImportData>[] {
   const allowedLevels = options.allowedLevels || [100, 200, 300, 400, 500, 600];
-  const seenCodes = new Set(Array.from(options.existingCodes || [], (value) => value.toUpperCase()));
-  const seenTitles = new Set(Array.from(options.existingTitles || [], (value) => value.toLowerCase()));
+  const existingCodes = new Set(Array.from(options.existingCodes || [], (value) => value.toUpperCase()));
+  const firstTitleByCode = new Map<string, string>();
 
   return rows.map((raw, index) => {
     const errors: string[] = [];
+    const warnings: string[] = [];
     const rawCode = importText(getImportValue(raw, ["Course Code", "Code"]));
     const rawTitle = importText(getImportValue(raw, ["Course Title", "Title"]));
     const code = formatCourseCode(rawCode);
@@ -172,7 +195,7 @@ export function validateCourseImportRows(
     const level = numberValue(getImportValue(raw, ["Level"]));
     const prerequisites = importText(getImportValue(raw, ["Prerequisites", "Prerequisite"]));
 
-    if (!isValidCourseCode(rawCode)) errors.push("Invalid course code; use a format such as COS 101.");
+    if (!isValidCourseCode(rawCode)) errors.push("Invalid course code; use a format such as COS 101 or BU-COS 101.");
     if (!title) errors.push("Course Title is required.");
     if (!Number.isInteger(units) || units < 1 || units > 6) errors.push("Units must be a whole number from 1 to 6.");
     if (!["CORE", "ELECTIVE"].includes(statusInput)) errors.push("Status must be CORE or ELECTIVE.");
@@ -180,10 +203,15 @@ export function validateCourseImportRows(
     if (!allowedLevels.includes(level)) errors.push(`Level must be one of: ${allowedLevels.join(", ")}.`);
 
     const duplicate = courseDuplicateKeys({ code, title });
-    if (seenCodes.has(duplicate.code)) errors.push("Course Code is duplicated or already exists.");
-    if (seenTitles.has(duplicate.title)) errors.push("Course Title is duplicated or already exists.");
-    seenCodes.add(duplicate.code);
-    seenTitles.add(duplicate.title);
+    let skipped = false;
+    if (existingCodes.has(duplicate.code)) {
+      errors.push("Course Code is duplicated or already exists.");
+    } else {
+      const repeat = checkRepeatInFile(firstTitleByCode, duplicate);
+      if (repeat.error) errors.push(repeat.error);
+      if (repeat.warning) warnings.push(repeat.warning);
+      skipped = repeat.skipped;
+    }
 
     const data: CourseImportData = {
       code,
@@ -200,7 +228,7 @@ export function validateCourseImportRows(
         getImportValue(raw, ["Entrepreneurial Aspect", "Entrepreneurship"]),
       ),
     };
-    return { rowNumber: index + 2, raw, data, errors };
+    return { rowNumber: index + 2, raw, data, errors, warnings, skipped };
   });
 }
 
@@ -208,19 +236,19 @@ export function validateMasterCourseImportRows(
   rows: SpreadsheetRecord[],
   options: {
     existingCodes?: Iterable<string>;
+    /** No longer used: titles may repeat under different codes (B17). */
     existingTitles?: Iterable<string>;
     allowExisting?: boolean;
   } = {},
 ): ValidatedImportRow<MasterCourseImportData>[] {
   const existingCodes = new Set(Array.from(options.existingCodes || [], (value) => value.toUpperCase()));
-  const existingTitles = new Set(Array.from(options.existingTitles || [], (value) => value.toLowerCase()));
-  const seenCodes = new Set<string>();
-  const seenTitles = new Set<string>();
+  const firstTitleByCode = new Map<string, string>();
   const types = ["GENERAL", "CORE", "ELECTIVE", "REQUIRED", "GST_NUC", "GST_BU"];
   const ownerships = ["DEPARTMENT", "SCHOOL", "INSTITUTIONAL"];
 
   return rows.map((raw, index) => {
     const errors: string[] = [];
+    const warnings: string[] = [];
     const rawCode = importText(getImportValue(raw, ["Course Code", "Code"]));
     const rawTitle = importText(getImportValue(raw, ["Course Title", "Title"]));
     const code = formatCourseCode(rawCode);
@@ -233,7 +261,7 @@ export function validateMasterCourseImportRows(
     const ownerDepartmentCode = importText(getImportValue(raw, ["Owner Department Code", "Department Code"])).toUpperCase();
     const ownerSchoolCode = importText(getImportValue(raw, ["Owner School Code", "School Code"])).toUpperCase();
 
-    if (!isValidCourseCode(rawCode)) errors.push("Invalid course code; use a format such as GST 101.");
+    if (!isValidCourseCode(rawCode)) errors.push("Invalid course code; use a format such as GST 101 or BU-GST 112.");
     if (!title) errors.push("Course Title is required.");
     if (!Number.isInteger(units) || units < 1 || units > 6) errors.push("Units must be a whole number from 1 to 6.");
     if (!types.includes(type)) errors.push("Invalid Course Type.");
@@ -247,16 +275,12 @@ export function validateMasterCourseImportRows(
     }
 
     const duplicate = courseDuplicateKeys({ code, title });
-    if (seenCodes.has(duplicate.code)) errors.push("Course Code is duplicated in this upload.");
-    if (seenTitles.has(duplicate.title)) errors.push("Course Title is duplicated in this upload.");
-    if (!options.allowExisting && existingCodes.has(duplicate.code)) {
+    const repeat = checkRepeatInFile(firstTitleByCode, duplicate);
+    if (repeat.error) errors.push(repeat.error);
+    if (repeat.warning) warnings.push(repeat.warning);
+    if (!repeat.skipped && !options.allowExisting && existingCodes.has(duplicate.code)) {
       errors.push("Course Code already exists.");
     }
-    if (!options.allowExisting && existingTitles.has(duplicate.title)) {
-      errors.push("Course Title already exists.");
-    }
-    seenCodes.add(duplicate.code);
-    seenTitles.add(duplicate.title);
 
     const data: MasterCourseImportData = {
       code,
@@ -303,6 +327,6 @@ export function validateMasterCourseImportRows(
         .filter(Boolean),
       discoverable: importBoolean(getImportValue(raw, ["Discoverable"]), true),
     };
-    return { rowNumber: index + 2, raw, data, errors };
+    return { rowNumber: index + 2, raw, data, errors, warnings, skipped: repeat.skipped };
   });
 }

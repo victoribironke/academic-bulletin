@@ -128,7 +128,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            "Invalid course code format. Expected format: AAA 123 (e.g., COS 101)",
+            "Invalid course code. Use a format such as COS 101, or BU-COS 101 for a Babcock-specific course.",
         },
         { status: 400 },
       );

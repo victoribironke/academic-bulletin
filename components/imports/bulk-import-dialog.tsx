@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/table";
 import {
   downloadSpreadsheetTemplate,
+  importableRows,
   parseSpreadsheetFile,
   type SpreadsheetRecord,
   type TemplateColumn,
@@ -114,7 +115,8 @@ export function BulkImportDialog<T>({
   };
 
   const errorCount = rows.reduce((total, row) => total + row.errors.length, 0);
-  const validRows = rows.filter((row) => row.errors.length === 0 && row.data);
+  const validRows = importableRows(rows);
+  const skippedRows = rows.filter((row) => row.skipped && row.errors.length === 0);
   const invalidRows = rows.filter((row) => row.errors.length > 0 || !row.data);
 
   const importRows = async () => {
@@ -187,6 +189,8 @@ export function BulkImportDialog<T>({
                 {errorCount > 0
                   ? `${validRows.length} valid row(s) are ready to import. ${invalidRows.length} row(s) with ${errorCount} validation issue(s) will be skipped.`
                   : `${validRows.length} row(s) are ready to import.`}
+                {skippedRows.length > 0 &&
+                  ` ${skippedRows.length} row(s) repeat an earlier row and will be skipped.`}
               </AlertDescription>
             </Alert>
 
@@ -210,8 +214,20 @@ export function BulkImportDialog<T>({
                           {row.data ? column.value(row.data) : "-"}
                         </TableCell>
                       ))}
-                      <TableCell className={row.errors.length ? "text-destructive" : "text-green-700"}>
-                        {row.errors.length ? row.errors.join(" ") : "Ready"}
+                      <TableCell
+                        className={
+                          row.errors.length
+                            ? "text-destructive"
+                            : row.skipped || row.warnings?.length
+                              ? "text-amber-700"
+                              : "text-green-700"
+                        }
+                      >
+                        {row.errors.length
+                          ? row.errors.join(" ")
+                          : row.warnings?.length
+                            ? row.warnings.join(" ")
+                            : "Ready"}
                       </TableCell>
                     </TableRow>
                   ))}

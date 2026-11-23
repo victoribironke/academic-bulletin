@@ -144,7 +144,7 @@ export async function PATCH(
     if (code !== undefined) {
       if (!isValidCourseCode(code)) {
         return NextResponse.json(
-          { error: "Invalid course code format" },
+          { error: "Invalid course code. Use a format such as COS 101, or BU-COS 101 for a Babcock-specific course." },
           { status: 400 },
         );
       }
