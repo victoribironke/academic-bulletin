@@ -314,6 +314,15 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // From the roster (tasks D1, D2): "Prof.", "Dr."; WhatsApp number; acting in the role.
+  title     String?
+  whatsapp  String?
+  isActing  Boolean  @default(false)
+  // Invitations and sign-in (task D3).
+  invitedAt     DateTime?
+  firstSignInAt DateTime?
+  lastActiveAt  DateTime?
+
   // A personal (non-babcock.edu.ng) Google account signs in only while a
   // Super Admin's exception lasts, and never in an admin role.
   signInExceptionUntil       DateTime?

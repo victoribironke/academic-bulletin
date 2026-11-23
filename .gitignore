@@ -99,3 +99,5 @@ updates-2-feb-2026.md
 !prisma/migrations/20261123190000_dismissed_registry_courses/migration.sql
 !prisma/migrations/20261123200000_cycle_calendar/
 !prisma/migrations/20261123200000_cycle_calendar/migration.sql
+!prisma/migrations/20261123210000_roster_people/
+!prisma/migrations/20261123210000_roster_people/migration.sql

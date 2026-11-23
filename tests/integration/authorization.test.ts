@@ -119,6 +119,8 @@ import { courseGraceContentHash } from "@/lib/courses/grace-compliance";
 import { preloadRegistryCoursesForSubmission } from "@/lib/courses/gst-pool";
 import { GET as getDeadlines } from "@/app/api/calendar/desk/route";
 import { type CalendarSettings, applyCalendarSettings } from "@/lib/calendar/settings";
+import { type RosterRow, applyRoster, planRoster } from "@/lib/people/roster";
+import { loadCodeLookups } from "@/lib/units/code-aliases";
 import { RECHECK_MS, allowGoogleSignIn, refreshSessionToken } from "@/lib/auth-callbacks";
 import { philosophyGraceHash } from "@/lib/submissions/submit-readiness";
 import { DEFAULT_PHASE_OWNERS } from "@/lib/submissions/workflow";
@@ -5355,5 +5357,92 @@ describe("cycle calendar (C1) and countdowns (C3)", () => {
     expect(admin.phases).toHaveLength(10);
     expect(admin.phases[0]).toMatchObject({ name: "Departmental Drafting", due: "Thursday, February 4, 2027" });
     expect(admin.programmes).toBeUndefined();
+  });
+});
+
+// D2: the roster import writes people with their units, updates someone
+// already there, keeps a coordinator's programmes to the roster's, and logs
+// each person.
+describe("roster import (D2)", () => {
+  const emails = ["roster.head@babcock.edu.ng", "roster.coordinator@babcock.edu.ng"];
+
+  afterAll(async () => {
+    await prisma.user.deleteMany({ where: { email: { in: emails } } });
+  });
+
+  const platformNow = async () => {
+    const [schools, departments, programmes, users, lookups] = await Promise.all([
+      prisma.school.findMany({ select: { id: true, code: true, name: true } }),
+      prisma.department.findMany({ select: { id: true, code: true, name: true, schoolId: true } }),
+      prisma.programme.findMany({ select: { id: true, code: true, name: true, departmentId: true } }),
+      prisma.user.findMany({
+        select: {
+          id: true, email: true, firstName: true, lastName: true, role: true, isActive: true,
+          title: true, whatsapp: true, isActing: true, schoolId: true, departmentId: true,
+          programmeAssignments: { select: { programmeId: true } },
+        },
+      }),
+      loadCodeLookups(prisma),
+    ]);
+    return {
+      schools,
+      departments,
+      programmes,
+      users: users.map(({ programmeAssignments, ...user }) => ({
+        ...user,
+        programmeIds: programmeAssignments.map((item) => item.programmeId),
+      })),
+      lookups,
+    };
+  };
+
+  it("imports, then updates, and changes nothing the second time", async () => {
+    const department = await prisma.department.findUniqueOrThrow({ where: { id: ids.departmentA } });
+    const programme = await prisma.programme.findUniqueOrThrow({ where: { id: ids.programmeA } });
+    const rows: RosterRow[] = [
+      { sheet: "Heads of Department", rowNumber: 2, unitCode: department.code, title: "Dr.", fullName: "Roster Head", email: emails[0], acting: "Yes", whatsapp: "0803 000 0000" },
+      { sheet: "Programme coordinators", rowNumber: 2, unitCode: programme.code, title: "Dr.", fullName: "Roster Coordinator", email: emails[1], acting: "", whatsapp: "" },
+    ];
+
+    const first = planRoster(rows, await platformNow());
+    expect(first.problems).toEqual([]);
+    expect(await prisma.$transaction((tx) => applyRoster(tx, first, ids.super))).toEqual({ created: 2, updated: 0 });
+    const head = await prisma.user.findUniqueOrThrow({ where: { email: emails[0] } });
+    expect(head).toMatchObject({
+      role: "HOD",
+      departmentId: ids.departmentA,
+      schoolId: department.schoolId,
+      isActing: true,
+      whatsapp: "+2348030000000",
+      title: "Dr.",
+    });
+    const coordinator = await prisma.user.findUniqueOrThrow({
+      where: { email: emails[1] },
+      include: { programmeAssignments: true },
+    });
+    expect(coordinator.programmeAssignments.map((item) => item.programmeId)).toEqual([ids.programmeA]);
+    expect(await prisma.activityLog.count({ where: { action: "USER_CREATED_FROM_ROSTER", entityId: head.id } })).toBe(1);
+
+    // The roster changes the head's acting status: an update, nothing else.
+    const second = planRoster([{ ...rows[0], acting: "No" }, rows[1]], await platformNow());
+    expect(second.people.map((person) => person.action)).toEqual(["update", "unchanged"]);
+    await prisma.$transaction((tx) => applyRoster(tx, second, ids.super));
+    expect((await prisma.user.findUniqueOrThrow({ where: { email: emails[0] } })).isActing).toBe(false);
+
+    const third = planRoster([{ ...rows[0], acting: "No" }, rows[1]], await platformNow());
+    expect(third.people.every((person) => person.action === "unchanged")).toBe(true);
+  });
+
+  it("refuses to change a Super Administrator from the roster", async () => {
+    const superAdmin = await prisma.user.findUniqueOrThrow({ where: { id: ids.super } });
+    const department = await prisma.department.findUniqueOrThrow({ where: { id: ids.departmentA } });
+    const plan = planRoster(
+      [{ sheet: "Heads of Department", rowNumber: 9, unitCode: department.code, title: "", fullName: "Some One", email: superAdmin.email, acting: "", whatsapp: "" }],
+      await platformNow(),
+    );
+    // A Super Admin's address may not be a babcock.edu.ng one in the tests;
+    // either way the row is refused and nothing changes.
+    expect(plan.people).toEqual([]);
+    expect(plan.problems.length).toBeGreaterThan(0);
   });
 });
