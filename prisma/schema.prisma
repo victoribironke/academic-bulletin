@@ -341,6 +341,7 @@ model User {
   mfaLastUsedStep  Int?
   mfaRecoveryCodes MfaRecoveryCode[]
   mfaVerifications MfaVerification[]
+  mfaTrustedDevices MfaTrustedDevice[]
 
   // Foreign Keys (optional - user may be linked to school/department)
   schoolId     String?
@@ -643,11 +644,29 @@ model MfaRecoveryCode {
 // A code accepted for one sign-in (the session's random id). An admin's
 // session works only while its check is under 12 hours old; deleting the
 // rows ends those sessions' admin access at once.
+/// A browser the person ticked "Remember this device for 30 days" on (task
+/// D11). The cookie holds the token; only its SHA-256 hash is kept here.
+/// Resetting someone's two-step verification forgets all their devices.
+model MfaTrustedDevice {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  lastUsedAt DateTime?
+  userAgent  String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("mfa_trusted_devices")
+}
+
 model MfaVerification {
   id         String   @id @default(cuid())
   userId     String
   sessionId  String   @unique
-  method     String // "AUTHENTICATOR" or "RECOVERY_CODE"
+  method     String // "AUTHENTICATOR", "RECOVERY_CODE" or "TRUSTED_DEVICE"
   verifiedAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

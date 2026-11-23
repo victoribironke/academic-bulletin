@@ -2,24 +2,30 @@
  * Who needs two-step verification, and how long a check lasts. No database
  * access here, so the sign-in callbacks and the proxy can use it.
  */
-import { isPrivilegedRole } from "@/lib/sign-in-access";
 
 /**
  * "none": the account doesn't use two-step verification.
- * "pending": an admin who hasn't entered a code for this sign-in yet.
- * "verified": an admin who entered one within the last MFA_SESSION_HOURS.
+ * "pending": someone who hasn't entered a code for this sign-in yet.
+ * "verified": someone who entered one within the last MFA_SESSION_HOURS
+ * (or signed in on a device they asked to remember, task D11).
  */
 export type MfaState = "none" | "pending" | "verified";
 
 /**
- * Academic Planning Admins and Super Admins enter a code at every sign-in,
- * and again after this many hours (the NIST AAL2 limit).
+ * Everyone enters a code at sign-in (decision DEC18, task D11), and again
+ * after this many hours (the NIST AAL2 limit), unless they ticked "Remember
+ * this device for 30 days" on this browser.
  */
 export const MFA_SESSION_HOURS = 12;
 export const MFA_SESSION_MS = MFA_SESSION_HOURS * 60 * 60 * 1000;
 
-export function mfaRequiredFor(role: string): boolean {
-  return isPrivilegedRole(role);
+/**
+ * DEC18: two-step verification for every role, not only admins. The role
+ * stays in the signature so callers don't change if the rule ever narrows.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function mfaRequiredFor(_role: string): boolean {
+  return true;
 }
 
 /** The session's state as its token records it. */

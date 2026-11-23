@@ -4,6 +4,7 @@ import { requireApiUser } from "@/lib/api-auth";
 import { confirmationMatches, readConfirmation } from "@/lib/archive";
 import { fail, fullName, MFA_USER_SELECT, noticeAfterResponse } from "@/lib/mfa/server";
 import { resetTwoStepVerification } from "@/lib/mfa/reset";
+import { isPrivilegedRole } from "@/lib/sign-in-access";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -11,13 +12,16 @@ interface RouteParams {
 
 /**
  * DELETE /api/users/[id]/mfa - Resets someone's two-step verification, for a
- * lost or replaced phone (Super Admins only, never their own). Ends their
- * admin sessions at once; they set up the app again at their next sign-in.
+ * lost or replaced phone, after confirming who they are by phone (task D11).
+ * A DAP officer (Academic Planning admin) can reset a Head, coordinator or
+ * Dean; only a Super Administrator can reset an admin; nobody their own.
+ * Ends their sessions at once and forgets their remembered devices; they set
+ * up the app again at their next sign-in.
  * Body: { confirm: "<their email address>" }.
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    const auth = await requireApiUser(["SUPER_ADMIN"]);
+    const auth = await requireApiUser(["ADMIN", "SUPER_ADMIN"]);
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
@@ -31,6 +35,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     const target = await prisma.user.findUnique({ where: { id }, select: MFA_USER_SELECT });
     if (!target) return fail(404, "User not found");
+    if (auth.user.role !== "SUPER_ADMIN" && isPrivilegedRole(target.role)) {
+      return fail(
+        403,
+        "Only a Super Administrator can reset an administrator's two-step verification.",
+        "SUPER_ADMIN_ONLY",
+      );
+    }
     if (!target.mfaEnabledAt && !target.mfaSecret) {
       return fail(409, `${fullName(target)} hasn't set up two-step verification.`, "MFA_NOT_SET_UP");
     }

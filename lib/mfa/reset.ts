@@ -5,6 +5,7 @@
  */
 import type { Prisma } from "@prisma/client";
 import { recordActivity } from "@/lib/activity-log";
+import { forgetDevices } from "@/lib/mfa/trusted-device";
 
 export type ResetTarget = {
   id: string;
@@ -30,6 +31,8 @@ export async function resetTwoStepVerification(
   });
   await tx.mfaRecoveryCode.deleteMany({ where: { userId: target.id } });
   const ended = await tx.mfaVerification.deleteMany({ where: { userId: target.id } });
+  // D11: every remembered device is forgotten too.
+  const forgotten = await forgetDevices(tx, target.id);
 
   const name = `${target.firstName} ${target.lastName}`;
   await recordActivity(
@@ -46,6 +49,7 @@ export async function resetTwoStepVerification(
         email: target.email,
         wasEnabledAt: target.mfaEnabledAt?.toISOString() ?? null,
         endedSessions: ended.count,
+        forgottenDevices: forgotten,
         via: opts.via,
       },
     },

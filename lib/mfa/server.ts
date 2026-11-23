@@ -10,6 +10,7 @@ import { recordActivity } from "@/lib/activity-log";
 import { sendTwoStepNoticeEmail, type TwoStepNotice } from "@/lib/email/notifications";
 import { MFA_RATE_LIMITS, takeRateLimit } from "@/lib/rate-limit";
 import { mfaRequiredFor, MFA_SESSION_MS } from "@/lib/mfa/policy";
+import { findTrustedDevice, rememberDevice, trustedDeviceCookie } from "@/lib/mfa/trusted-device";
 import { matchTotpStep } from "@/lib/mfa/totp";
 import {
   decryptMfaSecret,
@@ -221,7 +222,7 @@ export async function recordVerification(
   opts: {
     userId: string;
     sessionId: string;
-    method: "AUTHENTICATOR" | "RECOVERY_CODE";
+    method: "AUTHENTICATOR" | "RECOVERY_CODE" | "TRUSTED_DEVICE";
     now: Date;
   },
 ): Promise<void> {
@@ -248,4 +249,56 @@ export class MfaRefusal extends Error {
   constructor(public response: NextResponse) {
     super("Two-step verification refused");
   }
+}
+
+/**
+ * D11: when the person ticked "Remember this device for 30 days", remembers
+ * this browser and sets its cookie on the reply. A failure here never undoes
+ * the sign-in; they are just asked for a code next time.
+ */
+export async function withRememberedDevice(
+  response: NextResponse,
+  remember: boolean,
+  userId: string,
+  request: Request,
+): Promise<NextResponse> {
+  if (!remember) return response;
+  try {
+    const token = await rememberDevice(prisma, userId, request.headers.get("user-agent"));
+    response.cookies.set(trustedDeviceCookie(token));
+  } catch (error) {
+    console.error("Couldn't remember this device:", error);
+  }
+  return response;
+}
+
+/**
+ * D11: when this browser carries a remembered-device cookie that belongs to
+ * the person and hasn't expired, records this sign-in's check without a
+ * code (logged) and returns true.
+ */
+export async function passWithRememberedDevice(opts: {
+  userId: string;
+  sessionId: string;
+  cookieValue: string | undefined;
+  now?: Date;
+}): Promise<boolean> {
+  const now = opts.now ?? new Date();
+  return prisma.$transaction(async (tx) => {
+    const device = await findTrustedDevice(tx, opts.userId, opts.cookieValue, now);
+    if (!device) return false;
+    await recordVerification(tx, { userId: opts.userId, sessionId: opts.sessionId, method: "TRUSTED_DEVICE", now });
+    await recordActivity(
+      {
+        actorId: opts.userId,
+        action: "MFA_VERIFIED",
+        entityType: "USER",
+        entityId: opts.userId,
+        description: "Signed in on a device they asked to remember for 30 days.",
+        metadata: { method: "TRUSTED_DEVICE", deviceId: device.id },
+      },
+      tx,
+    );
+    return true;
+  });
 }

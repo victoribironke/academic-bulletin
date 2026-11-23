@@ -157,11 +157,9 @@ describe("stored secrets", () => {
 });
 
 describe("two-step policy", () => {
-  it("applies to Academic Planning Admins and Super Admins only", () => {
-    expect(mfaRequiredFor("ADMIN")).toBe(true);
-    expect(mfaRequiredFor("SUPER_ADMIN")).toBe(true);
-    for (const role of ["DEAN", "HOD", "PROGRAMME_COORDINATOR"]) {
-      expect(mfaRequiredFor(role)).toBe(false);
+  it("applies to everyone, Heads and Deans included (DEC18)", () => {
+    for (const role of ["SUPER_ADMIN", "ADMIN", "DEAN", "HOD", "PROGRAMME_COORDINATOR"]) {
+      expect(mfaRequiredFor(role)).toBe(true);
     }
   });
 

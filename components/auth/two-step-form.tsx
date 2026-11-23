@@ -83,6 +83,8 @@ export function TwoStepForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // D11: "Remember this device for 30 days".
+  const [remember, setRemember] = useState(false);
 
   const goOn = () => window.location.assign(next);
 
@@ -117,13 +119,13 @@ export function TwoStepForm({
 
   const confirmSetup = async (event: React.FormEvent) => {
     event.preventDefault();
-    const data = await run("/api/mfa/setup/confirm", { code });
+    const data = await run("/api/mfa/setup/confirm", { code, rememberDevice: remember });
     if (data) setStep({ name: "codes", codes: data.recoveryCodes });
   };
 
   const verify = async (event: React.FormEvent) => {
     event.preventDefault();
-    const data = await run("/api/mfa/verify", { code });
+    const data = await run("/api/mfa/verify", { code, rememberDevice: remember });
     if (!data) return;
     if (data.method === "RECOVERY_CODE") {
       setStep({ name: "recovered", codesLeft: data.recoveryCodesLeft });
@@ -131,6 +133,20 @@ export function TwoStepForm({
       goOn();
     }
   };
+
+  const rememberBox = (
+    <div className="flex items-start gap-2">
+      <Checkbox
+        id="remember-device"
+        checked={remember}
+        onCheckedChange={(checked) => setRemember(checked === true)}
+        className="mt-0.5"
+      />
+      <Label htmlFor="remember-device" className="text-sm font-normal leading-snug">
+        Remember this device for 30 days. Tick it only on your own computer or phone.
+      </Label>
+    </div>
+  );
 
   const codeInput = (useRecovery: boolean) => (
     <div className="space-y-2">
@@ -181,8 +197,9 @@ export function TwoStepForm({
       body = (
         <div className="space-y-6">
           <Heading title="Set up two-step verification">
-            Academic Planning Admin and Super Administrator accounts need a code
-            from an authenticator app each time they sign in.
+            Everyone signs in with a code from an authenticator app. On your own
+            device you can tick &ldquo;Remember this device&rdquo;, and it asks only
+            once every 30 days.
           </Heading>
           <ol className="list-decimal space-y-2 pl-5 text-sm text-foreground">
             <li>
@@ -236,6 +253,7 @@ export function TwoStepForm({
             </dl>
           </details>
           {codeInput(false)}
+          {rememberBox}
           <ErrorMessage message={error} />
           {submitButton("Turn on two-step verification")}
         </form>
@@ -278,6 +296,7 @@ export function TwoStepForm({
               : `Open your authenticator app and enter the code for Academic Bulletin (${email}).`}
           </Heading>
           {codeInput(step.useRecovery)}
+          {rememberBox}
           <ErrorMessage message={error} />
           {submitButton("Continue")}
           <p className="text-center text-sm">
@@ -306,8 +325,8 @@ export function TwoStepForm({
             {step.codesLeft === 0
               ? "That was your last recovery code."
               : `You have ${step.codesLeft} recovery code${step.codesLeft === 1 ? "" : "s"} left.`}{" "}
-            If you&apos;ve lost your phone, ask another Super Administrator to
-            reset your two-step verification so you can set up a new one. Otherwise,
+            If you&apos;ve lost your phone, ask your DAP officer to reset your
+            two-step verification so you can set up a new one. Otherwise,
             make new codes from your name in the sidebar.
           </Heading>
           <Button className="h-11 w-full" onClick={goOn}>

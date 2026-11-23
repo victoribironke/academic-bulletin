@@ -11,6 +11,7 @@ import {
   notConfiguredResponse,
   readJsonBody,
   recordVerification,
+  withRememberedDevice,
   replaceRecoveryCodes,
   requireCodeEntrySession,
   takeCodeAttempt,
@@ -36,7 +37,10 @@ export async function POST(request: NextRequest) {
       return fail(409, "Start the set-up again to get a QR code.", "MFA_SETUP_MISSING");
     }
 
-    const code = normalizeTotpCode((await readJsonBody(request)).code);
+    const body = await readJsonBody(request);
+    const code = normalizeTotpCode(body.code);
+    // D11: "Remember this device for 30 days".
+    const remember = body.rememberDevice === true;
     if (!code) return fail(400, "Enter the 6-digit code your authenticator app shows.", "WRONG_CODE");
 
     const limited = await takeCodeAttempt(user);
@@ -70,9 +74,14 @@ export async function POST(request: NextRequest) {
     });
 
     noticeAfterResponse(user, { kind: "enabled" }, now);
-    return NextResponse.json(
-      { recoveryCodes },
-      { headers: { "Cache-Control": "no-store" } },
+    return withRememberedDevice(
+      NextResponse.json(
+        { recoveryCodes, rememberedDevice: remember },
+        { headers: { "Cache-Control": "no-store" } },
+      ),
+      remember,
+      user.id,
+      request,
     );
   } catch (error) {
     if (error instanceof MfaRefusal) return error.response;

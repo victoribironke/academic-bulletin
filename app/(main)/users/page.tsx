@@ -139,9 +139,8 @@ function PersonalAccountNote({ user }: { user: User }) {
   return <p className={cn("truncate text-xs", tone)}>{text}</p>;
 }
 
-/** Whether an admin account has its authenticator app set up. */
+/** Whether the account has its authenticator app set up (everyone, DEC18). */
 function TwoStepNote({ user }: { user: User }) {
-  if (!isPrivilegedRole(user.role) || !isUniversityEmail(user.email)) return null;
   return user.mfaEnabledAt ? (
     <p className="truncate text-xs text-emerald-700 dark:text-emerald-400">
       Two-step verification on
@@ -557,7 +556,10 @@ export default function UsersPage() {
                         {canManage && user.isActive && INVITED_ROLES.includes(user.role) && (
                           <InviteButton userId={user.id} invited={Boolean(user.invitedAt)} onSent={reload} />
                         )}
-                        {isSuperAdmin && user.mfaEnabledAt && user.id !== currentUser?.id && (
+                        {/* D11: a DAP officer resets a Head, coordinator or Dean; a Super Administrator anyone. */}
+                        {(isSuperAdmin || (canManage && !isPrivilegedRole(user.role))) &&
+                          user.mfaEnabledAt &&
+                          user.id !== currentUser?.id && (
                           <ResetTwoStepDialog user={user} onSuccess={reload} />
                         )}
                         {isSuperAdmin && (

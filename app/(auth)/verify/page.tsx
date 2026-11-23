@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { passWithRememberedDevice } from "@/lib/mfa/server";
+import { TRUSTED_DEVICE_COOKIE } from "@/lib/mfa/trusted-device";
 import { getSessionAccess } from "@/auth";
 import prisma from "@/lib/prisma";
 import { currentVerification, mfaRequiredFor, safeNextPath } from "@/lib/mfa/policy";
@@ -12,9 +15,9 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Two-step verification · Academic Bulletin" };
 
 /**
- * Where an Academic Planning Admin or Super Admin enters this sign-in's
- * authenticator code, or sets the app up the first time. Decides from the
- * database, not the session cookie, whether a code is still needed.
+ * Where everyone enters this sign-in's authenticator code (DEC18), or sets
+ * the app up the first time. Decides from the database, not the session
+ * cookie, whether a code is still needed; a remembered device skips it.
  */
 export default async function VerifyPage({
   searchParams,
@@ -38,6 +41,16 @@ export default async function VerifyPage({
   if (!user?.isActive) redirect("/login");
   if (!mfaRequiredFor(user.role) || user.mfaVerifications.length > 0) redirect(next);
 
+  // D11: a browser the person asked to remember goes straight through.
+  if (user.mfaEnabledAt && access.sessionId) {
+    const remembered = await passWithRememberedDevice({
+      userId: access.userId,
+      sessionId: access.sessionId,
+      cookieValue: (await cookies()).get(TRUSTED_DEVICE_COOKIE)?.value,
+    });
+    if (remembered) redirect(next);
+  }
+
   return (
     <BrandedShell>
       {isMfaConfigured() ? (
@@ -48,7 +61,7 @@ export default async function VerifyPage({
             Two-step verification isn&apos;t available
           </h1>
           <p className="text-sm text-muted-foreground">
-            Admin accounts need an authenticator code to sign in, and the server
+            Signing in needs an authenticator code, and the server
             isn&apos;t set up for it yet. Ask the site administrator to add the
             MFA_ENCRYPTION_KEY setting.
           </p>

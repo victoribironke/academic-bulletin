@@ -15,6 +15,15 @@ let assigned: string | null = null;
 
 beforeEach(() => {
   assigned = null;
+  // jsdom has no ResizeObserver; Radix's checkbox uses one inside a form.
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
   Object.defineProperty(window, "location", {
     configurable: true,
     value: { ...window.location, assign: (url: string) => (assigned = url) },
@@ -55,13 +64,13 @@ describe("two-step verification page", () => {
     await screen.findByRole("heading", { name: "Save your recovery codes" });
     expect(fetchMock).toHaveBeenLastCalledWith(
       "/api/mfa/setup/confirm",
-      expect.objectContaining({ body: JSON.stringify({ code: "123456" }) }),
+      expect.objectContaining({ body: JSON.stringify({ code: "123456", rememberDevice: false }) }),
     );
     expect(screen.getAllByRole("listitem")).toHaveLength(10);
 
     const continueButton = screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement;
     expect(continueButton.disabled).toBe(true);
-    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByLabelText("I've saved my recovery codes"));
     expect(continueButton.disabled).toBe(false);
     fireEvent.click(continueButton);
     expect(assigned).toBe("/users");
@@ -83,6 +92,22 @@ describe("two-step verification page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Lost your phone? Use a recovery code" }));
     expect(screen.getByLabelText("Recovery code")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("remembers the device for 30 days only when the box is ticked (D11)", async () => {
+    const fetchMock = vi.fn(() => reply(200, { ok: true, method: "TOTP" }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<TwoStepForm enrolled email="staff@babcock.edu.ng" next="/dashboard" />);
+    const box = screen.getByLabelText(/Remember this device for 30 days/);
+    expect(box.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(box);
+    fireEvent.change(screen.getByLabelText("6-digit code"), { target: { value: "222222" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(assigned).toBe("/dashboard"));
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "/api/mfa/verify",
+      expect.objectContaining({ body: JSON.stringify({ code: "222222", rememberDevice: true }) }),
+    );
   });
 
   it("says how many recovery codes are left after using one", async () => {

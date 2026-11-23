@@ -14,6 +14,7 @@ import {
   requireCodeEntrySession,
   takeCodeAttempt,
   spendRecoveryCode,
+  withRememberedDevice,
   wrongCodeResponse,
 } from "@/lib/mfa/server";
 import { MfaNotConfiguredError, normalizeRecoveryCode } from "@/lib/mfa/secrets";
@@ -33,7 +34,10 @@ export async function POST(request: NextRequest) {
       return fail(409, "Set up your authenticator app first.", "MFA_NOT_SET_UP");
     }
 
-    const input = (await readJsonBody(request)).code;
+    const body = await readJsonBody(request);
+    const input = body.code;
+    // D11: "Remember this device for 30 days".
+    const remember = body.rememberDevice === true;
     const code = normalizeTotpCode(input);
     const recoveryCode = code ? null : normalizeRecoveryCode(input);
     if (!code && !recoveryCode) {
@@ -69,7 +73,12 @@ export async function POST(request: NextRequest) {
           tx,
         );
       });
-      return NextResponse.json({ ok: true, method: "AUTHENTICATOR" });
+      return withRememberedDevice(
+        NextResponse.json({ ok: true, method: "AUTHENTICATOR", rememberedDevice: remember }),
+        remember,
+        user.id,
+        request,
+      );
     }
 
     const codesLeft = await prisma.$transaction(async (tx) => {
@@ -95,7 +104,12 @@ export async function POST(request: NextRequest) {
     });
 
     noticeAfterResponse(user, { kind: "recovery_code_used", codesLeft }, now);
-    return NextResponse.json({ ok: true, method: "RECOVERY_CODE", recoveryCodesLeft: codesLeft });
+    return withRememberedDevice(
+      NextResponse.json({ ok: true, method: "RECOVERY_CODE", recoveryCodesLeft: codesLeft, rememberedDevice: remember }),
+      remember,
+      user.id,
+      request,
+    );
   } catch (error) {
     if (error instanceof MfaRefusal) return error.response;
     if (error instanceof MfaNotConfiguredError) return notConfiguredResponse(error);

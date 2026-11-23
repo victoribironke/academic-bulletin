@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { after, NextRequest } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 
 const authState = vi.hoisted(() => ({
   userId: null as string | null,
@@ -121,6 +121,9 @@ import { GET as getDeadlines } from "@/app/api/calendar/desk/route";
 import { type CalendarSettings, applyCalendarSettings } from "@/lib/calendar/settings";
 import { type RosterRow, applyRoster, planRoster } from "@/lib/people/roster";
 import { sendDueInvitations, sendInvitation } from "@/lib/people/invitations";
+import { passWithRememberedDevice, withRememberedDevice } from "@/lib/mfa/server";
+import { TRUSTED_DEVICE_COOKIE, rememberDevice } from "@/lib/mfa/trusted-device";
+import { resetTwoStepVerification } from "@/lib/mfa/reset";
 import { loadCodeLookups } from "@/lib/units/code-aliases";
 import { RECHECK_MS, allowGoogleSignIn, refreshSessionToken } from "@/lib/auth-callbacks";
 import { philosophyGraceHash } from "@/lib/submissions/submit-readiness";
@@ -288,12 +291,10 @@ beforeEach(async () => {
   authState.userId = null;
   authState.sessionId = undefined;
   authState.mfa = "verified";
-  // Admins act only from a sign-in that passed two-step verification. Each
-  // admin's default test session ("session-<id>") counts as having passed.
-  const admins = await prisma.user.findMany({
-    where: { role: { in: ["ADMIN", "SUPER_ADMIN"] } },
-    select: { id: true },
-  });
+  // Everyone acts only from a sign-in that passed two-step verification
+  // (DEC18). Each person's default test session ("session-<id>") counts as
+  // having passed.
+  const admins = await prisma.user.findMany({ select: { id: true } });
   await prisma.mfaVerification.createMany({
     data: admins.map((admin) => ({
       userId: admin.id,
@@ -3361,8 +3362,15 @@ describe("Google sign-in", () => {
   it("links the session to the existing user id and ends it once deactivated", async () => {
     const hod = await prisma.user.findUniqueOrThrow({ where: { id: ids.hod } });
     const start = 1_000_000;
-    const token = await refreshSessionToken({}, { email: hod.email }, start);
-    expect(token).toMatchObject({ userId: ids.hod, checkedAt: start });
+    const signedIn = await refreshSessionToken({}, { email: hod.email }, start);
+    // DEC18: everyone starts waiting for a code; once one is on record the
+    // session is verified.
+    expect(signedIn).toMatchObject({ userId: ids.hod, checkedAt: start, mfa: "pending" });
+    await prisma.mfaVerification.create({
+      data: { userId: ids.hod, sessionId: String(signedIn!.sid), method: "AUTHENTICATOR" },
+    });
+    const token = await refreshSessionToken(signedIn!, undefined, start);
+    expect(token).toMatchObject({ userId: ids.hod, checkedAt: start, mfa: "verified" });
 
     await prisma.user.update({ where: { id: ids.hod }, data: { isActive: false } });
     try {
@@ -4495,9 +4503,10 @@ describe("Two-step verification for admins", () => {
     expect(adminToken!.sid).toMatch(/^[0-9a-f-]{36}$/);
     const again = await refreshSessionToken({}, { email: adminEmail }, Date.now());
     expect(again!.sid).not.toBe(adminToken!.sid);
+    // DEC18: a Head's sign-in waits for a code too.
     expect(await refreshSessionToken({}, { email: hod.email }, Date.now())).toMatchObject({
       userId: ids.hod,
-      mfa: "none",
+      mfa: "pending",
     });
 
     // Pending, or "verified" in the cookie with nothing on record: refused.
@@ -4516,12 +4525,11 @@ describe("Two-step verification for admins", () => {
       expect((await listFullUsers()).status).toBe(401);
     }
 
-    // Other roles don't use it.
+    // DEC18: every role uses it; a Head with no code on record is refused too.
     authState.userId = ids.hod;
-    authState.sessionId = null;
-    authState.mfa = "none";
-    expect((await getApiUser())?.id).toBe(ids.hod);
-    expect((await setup()).status).toBe(400);
+    authState.sessionId = "mfa-unchecked-hod";
+    authState.mfa = "verified";
+    expect(await getApiUser()).toBeNull();
   });
 
   it("sets up the app with a QR code and the first code, and gives ten recovery codes once", async () => {
@@ -4611,9 +4619,10 @@ describe("Two-step verification for admins", () => {
     expect(
       await refreshSessionToken({ userId: adminId, checkedAt: Date.now() }, undefined, Date.now()),
     ).toBeNull();
+    // DEC18: so does anyone else's.
     expect(
       await refreshSessionToken({ userId: ids.hod, checkedAt: Date.now() }, undefined, Date.now()),
-    ).toMatchObject({ mfa: "none" });
+    ).toBeNull();
 
     signIn("mfa-sign-in-1", "verified");
     at(MFA_SESSION_MS / 1000 + 1);
@@ -5331,6 +5340,14 @@ describe("cycle calendar (C1) and countdowns (C3)", () => {
   it("shows each person their own deadline on launch day", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-26T08:00:00+01:00"));
+    // Two-step checks last 12 hours, so the sessions are verified "today".
+    for (const id of [ids.hod, ids.dean]) {
+      await prisma.mfaVerification.upsert({
+        where: { sessionId: `session-${id}` },
+        create: { userId: id, sessionId: `session-${id}`, method: "AUTHENTICATOR", verifiedAt: new Date() },
+        update: { verifiedAt: new Date() },
+      });
+    }
     try {
       const head = await deadlinesFor(ids.hod);
       expect(head.cycle.id).toBe(cycleId);
@@ -5536,5 +5553,90 @@ describe("invitations and sign-in tracking (D3)", () => {
     const again = await prisma.user.findUniqueOrThrow({ where: { id: people.head.id } });
     expect(again.firstSignInAt).toEqual(first);
     expect(again.lastActiveAt!.getTime()).toBeGreaterThanOrEqual(first!.getTime());
+  });
+});
+
+// D11 (DEC18): codes for everyone, "Remember this device for 30 days", and
+// resets by DAP officers for Heads, coordinators and Deans.
+describe("remembered devices and resets (D11)", () => {
+  const head = { id: "d11-head", email: "d11.head@babcock.edu.ng" };
+  const admin = { id: "d11-admin", email: "d11.admin@babcock.edu.ng" };
+
+  beforeAll(async () => {
+    const enabled = { mfaEnabledAt: new Date(), mfaSecret: "test-secret" };
+    await prisma.user.create({ data: { ...head, firstName: "Remember", lastName: "Me", role: "HOD", ...enabled } });
+    await prisma.user.create({ data: { ...admin, firstName: "Other", lastName: "Admin", role: "ADMIN", ...enabled } });
+  });
+
+  afterAll(async () => {
+    await prisma.user.deleteMany({ where: { id: { in: [head.id, admin.id] } } });
+  });
+
+  it("sets a 30-day cookie when asked, and keeps only a hash of it", async () => {
+    const response = await withRememberedDevice(
+      NextResponse.json({ ok: true }),
+      true,
+      head.id,
+      new Request("http://localhost/api/mfa/verify", { headers: { "user-agent": "Test browser" } }),
+    );
+    const cookie = response.cookies.get(TRUSTED_DEVICE_COOKIE);
+    expect(cookie?.value).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(cookie?.httpOnly).toBe(true);
+    const days = (new Date(cookie!.expires!).getTime() - Date.now()) / 86_400_000;
+    expect(Math.round(days)).toBe(30);
+    const stored = await prisma.mfaTrustedDevice.findMany({ where: { userId: head.id } });
+    expect(stored).toHaveLength(1);
+    expect(stored[0].tokenHash).not.toContain(cookie!.value);
+    expect(stored[0].userAgent).toBe("Test browser");
+
+    const notAsked = await withRememberedDevice(NextResponse.json({}), false, head.id, new Request("http://localhost/"));
+    expect(notAsked.cookies.get(TRUSTED_DEVICE_COOKIE)).toBeUndefined();
+  });
+
+  it("lets a remembered browser through a new sign-in, and nobody else", async () => {
+    const token = await rememberDevice(prisma, head.id, null);
+    expect(await passWithRememberedDevice({ userId: head.id, sessionId: "d11-session-1", cookieValue: token })).toBe(true);
+    expect(await prisma.mfaVerification.findUniqueOrThrow({ where: { sessionId: "d11-session-1" } })).toMatchObject({
+      userId: head.id,
+      method: "TRUSTED_DEVICE",
+    });
+    // Someone else's cookie, a wrong one, none, or one past 30 days: a code is asked for.
+    expect(await passWithRememberedDevice({ userId: admin.id, sessionId: "d11-session-2", cookieValue: token })).toBe(false);
+    expect(await passWithRememberedDevice({ userId: head.id, sessionId: "d11-session-3", cookieValue: "not-a-token" })).toBe(false);
+    expect(await passWithRememberedDevice({ userId: head.id, sessionId: "d11-session-4", cookieValue: undefined })).toBe(false);
+    expect(
+      await passWithRememberedDevice({
+        userId: head.id,
+        sessionId: "d11-session-5",
+        cookieValue: token,
+        now: new Date(Date.now() + 31 * 86_400_000),
+      }),
+    ).toBe(false);
+  });
+
+  it("forgets every remembered device when the authenticator is reset", async () => {
+    expect(await prisma.mfaTrustedDevice.count({ where: { userId: head.id } })).toBeGreaterThan(0);
+    const target = await prisma.user.findUniqueOrThrow({ where: { id: head.id } });
+    await prisma.$transaction((tx) => resetTwoStepVerification(tx, target, { actorId: ids.super, via: "users_page" }));
+    expect(await prisma.mfaTrustedDevice.count({ where: { userId: head.id } })).toBe(0);
+    await prisma.user.update({ where: { id: head.id }, data: { mfaEnabledAt: new Date(), mfaSecret: "test-secret" } });
+  });
+
+  it("lets a DAP officer reset a Head's authenticator, but not another admin's", async () => {
+    const reset = (id: string, email: string) =>
+      resetTwoStep(
+        new NextRequest(`http://localhost/api/users/${id}/mfa`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ confirm: email }),
+        }),
+        { params: Promise.resolve({ id }) },
+      );
+    authState.userId = ids.admin;
+    const refused = await reset(admin.id, admin.email);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ code: "SUPER_ADMIN_ONLY" });
+    expect((await reset(head.id, head.email)).status).toBe(200);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: head.id } })).mfaEnabledAt).toBeNull();
   });
 });
