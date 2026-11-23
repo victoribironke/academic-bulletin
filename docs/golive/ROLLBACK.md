@@ -13,15 +13,19 @@ Written Monday, November 23, 2026. Everything lives in the Railway project `acad
 
 ### The code (minutes, nothing lost)
 
-- Railway, service **academic-bulletin**, **Deployments**: on the last good deployment, the **⋮** menu, **Redeploy** (or **Rollback**). The site runs that build again within about two minutes.
+- Railway, service **academic-bulletin**, **Deployments**: on the last good deployment, the **⋮** menu, **Rollback**, then **Rollback** again to confirm. It reuses that build, so it is fast: on the test site the old build was serving 26 seconds after confirming, with no gap. (**Redeploy** builds it again and takes several minutes.)
+- **Rollback restores that deployment's variables too**, not just its code. If a setting was added or changed since (a secret, an email address), check it on **Variables** afterwards and set it again if needed.
 - Then put `main` back in step: `git revert <bad commit>` and push, so the next push doesn't bring the problem back.
 - Because R0's database changes are all additions, the older code runs on the newer database.
 
 ### The data (minutes, loses what was written after the backup)
 
-- Railway, service **Postgres**, **Backups**: on the backup taken before the release, **Restore**. Railway restores the volume and restarts Postgres; the site is unavailable for a few minutes.
+- Railway, service **Postgres**, **Backups**: on the backup taken before the release, **Restore**, then **Restore** in the box. This only *stages* the change: a new volume is made from the backup.
+- A bar appears at the top of the canvas: "Apply 3 changes", **Details**, **Deploy**. Check that only Postgres shows changes, then **Deploy**. Postgres restarts on the restored volume. On the test site it was back 30 seconds after Deploy, about 1.5 minutes from the first click.
+- The old volume is kept, detached, beside Postgres on the canvas (named "postgres-volume"; the restored one is named after the backup). Leave it until the restore is confirmed good; deleting it later frees its storage and needs the owner's yes.
 - Everything written after that backup is lost, which is why step 1 comes immediately before a data change.
 - After a restore, check: the site's sign-in page loads; `SELECT count(*) FROM submissions` and `SELECT count(*) FROM users` match the numbers in the release notes.
+- The site keeps running during the restart. Its idle database connections are closed by the restart; since November 23, 2026 the app drops them and opens new ones (before that, Node could stop the site on the closed connection and Railway would restart it).
 
 ### Data scripts in particular
 
@@ -33,7 +37,7 @@ Written Monday, November 23, 2026. Everything lives in the Railway project `acad
 | Step | Status |
 |---|---|
 | Live backup taken and daily schedule set | Done November 23, 2026 (13:31 WAT, 902 MB; daily, kept 6 days) |
-| Code rollback to the previous deployment, on the test site | To do |
-| Backup, change, restore and check, on the test site | To do |
+| Code rollback to the previous deployment, on the test site | Done November 23, 2026, 21:14 WAT: **Rollback** to the H1 build served it 26 seconds after confirming, then **Rollback** to the T1 build 45 seconds after; the sign-in page answered throughout |
+| Backup, change, restore and check, on the test site | Done November 23, 2026, 21:08 to 21:12 WAT: backup (921 MB); a marker log entry written after it; **Restore** and **Deploy**; Postgres back about 30 seconds after Deploy. Afterwards every count matched the backup (114 drafts, 6,858 course rows, 12 users, 55 log entries, 2 cycles, same last entry) and the marker was gone |
 
 Point-in-time recovery (continuous backups, restore to any minute) is off. Switching it on restarts Postgres once; worth doing at a quiet hour.

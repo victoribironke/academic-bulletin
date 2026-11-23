@@ -34,6 +34,13 @@ function createPrismaClient() {
       keepAlive: true,
       connectionTimeoutMillis: 10000, // Timeout after 10 seconds if can't connect
     });
+    // When Postgres restarts (a backup restore, task O3, or maintenance) it
+    // closes idle connections. The pool drops them and opens new ones on the
+    // next query; without a listener Node would treat the error as fatal and
+    // stop the site.
+    globalForPrisma.pool.on("error", (error) => {
+      console.error("[Prisma] An idle database connection closed:", error.message);
+    });
   }
 
   const adapter = new PrismaPg(globalForPrisma.pool);
