@@ -93,6 +93,7 @@ import { DELETE as deleteCycle, PUT as updateCycle } from "@/app/api/cycles/[id]
 import { GET as listCycles } from "@/app/api/cycles/route";
 import { GET as readCycleArchive, POST as archiveCycleRoute } from "@/app/api/cycles/[id]/archive/route";
 import { POST as restoreCycleRoute } from "@/app/api/cycles/[id]/restore/route";
+import { openCycle, planOpenCycle } from "@/lib/cycles/open";
 import { GET as listArchive } from "@/app/api/archive/route";
 import { POST as restoreArchived } from "@/app/api/archive/[id]/restore/route";
 import { confirmationMatches } from "@/lib/archive";
@@ -5892,5 +5893,48 @@ describe("archiving the test cycle (A2)", () => {
     const again = await restoreCycleRoute(post(`/api/cycles/${cycleId}/restore`), params(cycleId));
     expect(again.status).toBe(409);
     expect(await again.json()).toMatchObject({ code: "NOT_ARCHIVED" });
+  });
+});
+
+describe("opening the real cycle (A3)", () => {
+  it("creates it active, closes the other cycle, and makes one draft per visible programme, once", async () => {
+    const name = "2027-2031 Bulletin Development Cycle (A3 test)";
+    const wasActive = await prisma.reviewCycle.findMany({ where: { isActive: true }, select: { id: true, closedAt: true } });
+    await prisma.programme.create({
+      data: { id: "a3-hidden", name: "Hidden programme", code: "TSA-HID-HID", departmentId: ids.departmentA, isHidden: true },
+    });
+    try {
+      const visible = await prisma.programme.count({ where: { isHidden: false } });
+      const plan = await planOpenCycle(prisma, name);
+      expect(plan.cycle).toBeNull();
+      expect(plan.hidden.map((programme) => programme.code)).toContain("TSA-HID-HID");
+      expect(plan.drafts.map((draft) => draft.programmeId)).not.toContain("a3-hidden");
+      expect(plan.drafts).toHaveLength(visible);
+
+      const result = await openCycle(prisma, { name, actorId: ids.super });
+      expect(result).toMatchObject({ createdCycle: true, draftsCreated: visible, closed: wasActive.length });
+      expect(await prisma.reviewCycle.findMany({ where: { isActive: true }, select: { id: true } })).toEqual([
+        { id: result.cycleId },
+      ]);
+      expect(await prisma.submission.count({ where: { cycleId: result.cycleId, status: "DRAFT", currentPhase: 1 } })).toBe(visible);
+
+      // Running it again creates nothing twice.
+      expect(await openCycle(prisma, { name, actorId: ids.super })).toMatchObject({
+        createdCycle: false,
+        draftsCreated: 0,
+        closed: 0,
+      });
+    } finally {
+      const cycle = await prisma.reviewCycle.findFirst({ where: { name } });
+      if (cycle) {
+        await prisma.submission.deleteMany({ where: { cycleId: cycle.id } });
+        await prisma.activityLog.deleteMany({ where: { entityId: cycle.id } });
+        await prisma.reviewCycle.delete({ where: { id: cycle.id } });
+      }
+      await prisma.programme.delete({ where: { id: "a3-hidden" } });
+      for (const cycle of wasActive) {
+        await prisma.reviewCycle.update({ where: { id: cycle.id }, data: { isActive: true, closedAt: cycle.closedAt } });
+      }
+    }
   });
 });

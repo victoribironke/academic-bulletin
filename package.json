@@ -21,6 +21,7 @@
     "units:code-standard": "tsx scripts/apply-code-standard.ts",
     "calendar:load": "tsx scripts/load-calendar.ts",
     "cycles:archive": "tsx scripts/archive-cycle.ts",
+    "cycles:open": "tsx scripts/open-cycle.ts",
     "courses:prefill": "tsx scripts/prefill-course-structures.ts",
     "people:import-roster": "tsx scripts/import-roster.ts",
     "db:seed": "bun run prisma/seed.ts",
