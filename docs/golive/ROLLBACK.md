@@ -37,6 +37,7 @@ Written Monday, November 23, 2026. Everything lives in the Railway project `acad
 | Step | Status |
 |---|---|
 | Live backup taken and daily schedule set | Done November 23, 2026 (13:31 WAT, 902 MB; daily, kept 6 days) |
+| Backup before the first live data changes of November 24 (B10 tables, B4 titles) | Done November 24, 2026, 13:34 WAT, 908 MB. Restore that backup to undo B4's 352 title changes; the B10 tables are only additions |
 | Code rollback to the previous deployment, on the test site | Done November 23, 2026, 21:14 WAT: **Rollback** to the H1 build served it 26 seconds after confirming, then **Rollback** to the T1 build 45 seconds after; the sign-in page answered throughout |
 | Backup, change, restore and check, on the test site | Done November 23, 2026, 21:08 to 21:12 WAT: backup (921 MB); a marker log entry written after it; **Restore** and **Deploy**; Postgres back about 30 seconds after Deploy. Afterwards every count matched the backup (114 drafts, 6,858 course rows, 12 users, 55 log entries, 2 cycles, same last entry) and the marker was gone |
 
