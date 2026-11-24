@@ -63,3 +63,31 @@ describe("course titles (B4)", () => {
     expect(formatCourseTitle("Nigerian Peoples and Culture (GST 113)")).toBe("Nigerian Peoples and Culture (GST 113)");
   });
 });
+
+describe("stored titles from the test site's dry run (B4)", () => {
+  it("keeps letters from other scripts inside one word", () => {
+    expect(formatCourseTitle("Legislative Verses of the Qur’ān (‘Ᾱyāt al-Aḥkām)")).toBe(
+      "Legislative Verses of the Qur’ān (‘Ᾱyāt al-Aḥkām)",
+    );
+    expect(formatCourseTitle("Tort and Minor Crimes (Qisās wa al-Taczīr)")).toBe("Tort and Minor Crimes (Qisās wa al-Taczīr)");
+    expect(formatCourseTitle("Introduction to Yorùbá Drama, Cinema and films")).toBe(
+      "Introduction to Yorùbá Drama, Cinema and Films",
+    );
+  });
+
+  it("puts right a split 'the' instead of capitalising it", () => {
+    expect(cleanCourseTitle("General Introduction to t he Study of Religion")).toBe(
+      "General Introduction to the Study of Religion",
+    );
+  });
+
+  it("takes out only the course's own code", () => {
+    expect(cleanCourseTitle("philosophy, logic and human existence (gst 212)", "GST 212")).toBe(
+      "Philosophy, Logic and Human Existence",
+    );
+    expect(cleanCourseTitle("GST 212: Philosophy, Logic And Human Existence", "LEVEL 200")).toBe(
+      "GST 212: Philosophy, Logic and Human Existence",
+    );
+    expect(cleanCourseTitle("Health Principles [bu gst112]", "BU-GST 112")).toBe("Health Principles");
+  });
+});

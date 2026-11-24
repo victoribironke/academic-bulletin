@@ -56,6 +56,8 @@ export type CodeCleanupPlan = {
   forDap: CodeGroupForDap[];
   /** Codes that can't be put in the format at all (left for DAP). */
   untidyable: RegistryCourseSummary[];
+  /** Records whose "code" is a heading such as LEVEL 200 (left for DAP). */
+  headings: RegistryCourseSummary[];
   draftRenames: DraftRowRename[];
   /** A draft that already has the tidied code on another row. */
   draftClashes: DraftRowClash[];
@@ -92,6 +94,8 @@ function summarize(course: LoadedCourse): RegistryCourseSummary {
 }
 
 const inFormat = (code: string) => COURSE_CODE_PATTERN.test(code);
+/** "LEVEL 200" and the like: spreadsheet headings imported as courses. */
+const HEADING_PREFIX = /^(LEVEL|YEAR|PART|SEM|TOTAL)\b/i;
 
 /** Titles compared for a merge: letter case, punctuation and "&" for "and" don't count. */
 export function comparableTitle(title: string): string {
@@ -125,7 +129,12 @@ export async function planCodeCleanup(db: Db = prisma): Promise<CodeCleanupPlan>
 
   const groups = new Map<string, LoadedCourse[]>();
   const untidyable: RegistryCourseSummary[] = [];
+  const headings: RegistryCourseSummary[] = [];
   for (const course of courses) {
+    if (HEADING_PREFIX.test(course.code.trim())) {
+      headings.push(summarize(course));
+      continue;
+    }
     if (!inFormat(formatCourseCode(course.code))) {
       untidyable.push(summarize(course));
       continue;
@@ -201,6 +210,7 @@ export async function planCodeCleanup(db: Db = prisma): Promise<CodeCleanupPlan>
     merges,
     forDap,
     untidyable,
+    headings,
     draftRenames,
     draftClashes: [...clashes.values()],
   };
@@ -371,7 +381,7 @@ export function codeCleanupReport(plan: CodeCleanupPlan, heading: string): strin
     `- Codes to tidy (no duplicate): ${plan.renames.length}`,
     `- Duplicate groups to merge (same title and units): ${plan.merges.length}, removing ${plan.merges.reduce((sum, merge) => sum + merge.merge.length, 0)} records`,
     `- Groups for DAP to decide (titles or units differ): ${plan.forDap.length}`,
-    `- Codes that can't be put in the format: ${plan.untidyable.length}`,
+    `- Codes that can't be put in the format: ${plan.untidyable.length}; headings imported as courses: ${plan.headings.length}`,
     `- Draft course rows to tidy: ${plan.draftRenames.length}; drafts with the same code twice: ${plan.draftClashes.length}`,
     "",
     "## 1. Groups for DAP to decide",
@@ -403,6 +413,17 @@ export function codeCleanupReport(plan: CodeCleanupPlan, heading: string): strin
   }
   if (plan.renames.length === 0) out.push("| (none) | | | | |");
   out.push("");
+  if (plan.headings.length) {
+    out.push(
+      "## Headings imported as courses",
+      "",
+      "These look like spreadsheet headings, not courses: the real code is in the title. DAP decides whether to delete them; nothing changes here.",
+      "",
+      header,
+      ...plan.headings.map(line),
+      "",
+    );
+  }
   if (plan.untidyable.length) {
     out.push("## 4. Codes that can't be put in the format", "", header, ...plan.untidyable.map(line), "");
   }

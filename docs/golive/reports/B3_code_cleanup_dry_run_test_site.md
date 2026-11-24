@@ -1,10 +1,10 @@
-# Course code clean-up (B3): dry run on roundhouse.proxy.rlwy.net, 2026-11-24T11:52:47.747Z
+# Course code clean-up (B3): dry run on roundhouse.proxy.rlwy.net, 2026-11-24T11:56:17.869Z
 
 - Registry courses: 6,567
 - Codes to tidy (no duplicate): 159
 - Duplicate groups to merge (same title and units): 9, removing 9 records
 - Groups for DAP to decide (titles or units differ): 8
-- Codes that can't be put in the format: 0
+- Codes that can't be put in the format: 0; headings imported as courses: 3
 - Draft course rows to tidy: 0; drafts with the same code twice: 0
 
 ## 1. Groups for DAP to decide
@@ -331,4 +331,14 @@ Kept: SEN 401 (1 programmes, 3 draft rows). Also differ: owner; the kept course'
 | PSY406 | PSY 406 | Research Project | 0 | 0 |
 | SST104 | SST 104 | Social Standards in Emergency Management and Humanitarian Services | 0 | 0 |
 | TEL402 | TEL 402 | Software/Computer Applications in Electrical Engineering | 0 | 0 |
+
+## Headings imported as courses
+
+These look like spreadsheet headings, not courses: the real code is in the title. DAP decides whether to delete them; nothing changes here.
+
+| Code now | Title | Units | Semester | Owner | Programmes | Draft rows |
+|---|---|---|---|---|---|---|
+| LEVEL 200 | GST 212: Philosophy, Logic And Human Existence | 2 | 2 | INSTITUTIONAL | 0 | 0 |
+| LEVEL 300 | GST 312: Peace and Conflict Resolution | 2 | 2 | INSTITUTIONAL | 0 | 0 |
+| LEVEL 400 | EDU 400: Project | 3 | 2 | INSTITUTIONAL | 0 | 0 |
 

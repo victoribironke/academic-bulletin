@@ -182,7 +182,7 @@ footer { font-size: 0.86rem; color: var(--muted); display: grid; gap: 0.4rem; bo
             <li><span class="what">Back up the live database</span><span class="why">O3. Taken before each live step, so any of them can be undone in minutes.</span></li>
             <li><span class="what">Apply the code and name standard <span class="you">Needs you</span></span><span class="why">A5, with B15 programme lengths and the B18 records for the 18 new programmes. Waits for DAP to confirm 3 department names.</span></li>
             <li><span class="what">Upload the rest of the course registry <span class="you">Needs you</span></span><span class="why">Files 01A parts 1 and 2 (813 Babcock courses, B16), file 07 v2 (77 rows, B17) and the 135 held-back courses in file 03 (B13). The files use the new codes, so this comes after A5. Rehearsed on the test site on November 24: 39 seconds, and a second run changes nothing.</span></li>
-            <li><span class="what">Tidy stored course titles <span class="you">Needs you</span></span><span class="why">B4. Optional before launch. Dry run on the test site first.</span></li>
+            <li><span class="what">Tidy stored course titles <span class="you">Needs you</span></span><span class="why">B4. Optional before launch. Dry run on the test site: 351 titles, casing only.</span></li>
             <li><span class="what">DAP signs off the registry</span><span class="why">B9, by 12:00 noon on Wednesday. The drafts are created after it.</span></li>
           </ol>
           <ol class="steps" start="6" style="counter-reset: step 5">
@@ -226,7 +226,6 @@ footer { font-size: 0.86rem; color: var(--muted); display: grid; gap: 0.4rem; bo
       <div class="panel">
         <h3>What I can do next without waiting</h3>
         <ul class="plain">
-          <li><span class="t">Dry-run the stored-title tidy on the test site</span><span class="when me">Before Wed</span><span class="d">B4, ahead of step 4.</span></li>
           <li><span class="t">Babcock courses first in the course picker</span><span class="when me">R0 can follow</span><span class="d">B5.</span></li>
         </ul>
       </div>
@@ -311,7 +310,7 @@ const GROUPS = [
   { key: "r0f", code: "R0+", short: "By Wed, Dec 2", name: "Launch: can follow", date: "By Wednesday, December 2, 2026 if not ready on November 25", sub: "Allowed to slip to R1. Anything not ready is switched off with its new date noted.", items: [
     ["A4", "Activity log per cycle, in plain names", "CODE", "live", "Every entry belongs to a cycle; the log opens on the current cycle with a cycle picker and shows names, not record IDs.", ""],
     ["B3", "Clean up course codes", "CODE+DAP", "ready", "Script built (npm run courses:clean-codes): puts every code in the format, merges only true duplicates (same title and units) keeping every programme link and draft row, and sends the rest to DAP. Uploads and new courses now match a code however it is spaced. Dry run on the test site (November 24): 159 codes tidied, 9 duplicates merged, 8 groups for DAP (docs/golive/reports/B3_code_cleanup_dry_run_test_site.md).", "DAP approves the merge report and decides the 8 groups; then the run on live (your yes) and the database rule", true],
-    ["B4", "Title casing", "CODE", "partly", "Live: acronyms and Roman numerals kept, typed codes removed from new titles and uploads.", "Stored titles: script ready; dry run on the test site, then your yes", true],
+    ["B4", "Title casing", "CODE", "ready", "Titles keep acronyms and Roman numerals (ICT, II, IV), letters from other scripts stay inside their word (Yorùbá, Ᾱyāt), and only a course's own code is taken out of its title. Dry run on the test site (November 24): 351 stored titles change, all casing except one typing slip (docs/golive/reports/B4_title_tidy_dry_run_test_site.md).", "Your yes to run it on the test site, then on live", true],
     ["B5", "Show Babcock courses first", "CODE", "todo", "", ""],
     ["B8", "Registry completeness report", "CODE", "live", "Records > Registry Report with a spreadsheet download; builds in 0.2 seconds on live.", ""],
     ["D5", "Recall, kept apart from Return", "CODE", "live", "\"Recall from the Dean\" until the Dean opens the programme; refused after, with the date.", ""],

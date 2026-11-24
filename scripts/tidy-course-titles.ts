@@ -37,7 +37,7 @@ async function main() {
   try {
     const masters = await prisma.masterCourse.findMany({ select: { id: true, code: true, title: true }, orderBy: { code: "asc" } });
     const changes = masters
-      .map((master) => ({ ...master, tidy: cleanCourseTitle(master.title) }))
+      .map((master) => ({ ...master, tidy: cleanCourseTitle(master.title, master.code) }))
       .filter((master) => master.tidy && master.tidy !== master.title);
     const codeRemoved = changes.filter((change) => change.tidy.length < change.title.replace(/\s+/g, " ").trim().length - 3);
 

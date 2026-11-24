@@ -194,7 +194,7 @@ export function planCourseStructure(input: {
         message: `${code} isn't in the Registry yet; added from file 02 and linked once the Registry has it.`,
       });
     }
-    const title = uniqueTitle(master?.title ?? cleanCourseTitle(row.title.trim()), code, takenTitles);
+    const title = uniqueTitle(master?.title ?? cleanCourseTitle(row.title.trim(), code), code, takenTitles);
     takenTitles.add(titleKey(title));
     taken.add(code);
     courses.push({

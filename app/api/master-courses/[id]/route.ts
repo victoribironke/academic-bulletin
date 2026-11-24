@@ -161,7 +161,7 @@ export async function PATCH(
         return NextResponse.json({ error: sameCodeMessage(sameCode) }, { status: 409 });
       }
     }
-    if (title !== undefined) updateData.title = cleanCourseTitle(title);
+    if (title !== undefined) updateData.title = cleanCourseTitle(title, code ?? existing.code);
     if (units !== undefined) {
       if (!isValidCourseUnits(units)) {
         return NextResponse.json({ error: UNITS_RULE_MESSAGE }, { status: 400 });
@@ -262,7 +262,7 @@ export async function PATCH(
     // Propagate changes to linked submission courses
     const propagationResult = await propagateMasterCourseChanges({
       id,
-      title: title !== undefined ? cleanCourseTitle(title) : undefined,
+      title: title !== undefined ? cleanCourseTitle(title, code ?? existing.code) : undefined,
       units,
       level,
       semester,

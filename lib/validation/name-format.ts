@@ -64,6 +64,8 @@ const TITLE_LOWERCASE_WORDS = new Set([
     "a",
     "an",
     "the",
+    // Arabic "and" in transliterated titles ("Qisās wa al-Taczīr")
+    "wa",
     // Coordinating conjunctions
     "and",
     "but",
@@ -204,12 +206,13 @@ const ROMAN_NUMERAL = /^(i{1,3}|iv|vi{0,3}|ix|x)$/i;
  */
 export function formatCourseTitle(title: string): string {
   if (!title) return "";
-  const shouting = !/[a-z]/.test(title);
+  const shouting = !/\p{Ll}/u.test(title);
   const words = title.trim().split(/\s+/);
 
   return words
     .map((word, index) => {
-      const [, lead, core, trail] = word.match(/^([^A-Za-z0-9]*)(.*?)([^A-Za-z0-9]*)$/) ?? ["", "", word, ""];
+      // Letters in any script ("Yorùbá", "Ᾱyāt"), so accents never start a new word.
+      const [, lead, core, trail] = word.match(/^([^\p{L}\p{N}]*)(.*?)([^\p{L}\p{N}]*)$/u) ?? ["", "", word, ""];
       if (!core) return word;
       const lower = core.toLowerCase();
       let result: string;
@@ -217,7 +220,7 @@ export function formatCourseTitle(title: string): string {
         result = core.toUpperCase();
       } else if (TITLE_ACRONYMS.has(core.toUpperCase())) {
         result = core.toUpperCase();
-      } else if (!shouting && /[A-Z]/.test(core.slice(1))) {
+      } else if (!shouting && /\p{Lu}/u.test(core.slice(1))) {
         // Written with capitals inside ("ICT", "PowerPoint", "e-Learning"): keep it.
         result = core;
       } else if (index > 0 && TITLE_LOWERCASE_WORDS.has(lower)) {
@@ -232,25 +235,35 @@ export function formatCourseTitle(title: string): string {
 
 const TYPED_CODE = String.raw`(?:BU\s*-?\s*)?[A-Za-z]{2,5}\s*-?\s*\d{3}`;
 
+const compactCode = (code: string) => code.toUpperCase().replace(/[\s-]+/g, "");
+
 /**
  * A title without a course code typed into it (task B4): "(gst 212)" or
  * "[BU-GST 112]" anywhere, or "GST 111 - " / "GST 111: " at the start.
+ * Given the course's own code, only that code is taken out: a different code
+ * in the title is information, not a typing slip.
  */
-export function withoutTypedCode(title: string): string {
+export function withoutTypedCode(title: string, ownCode?: string): string {
+  const own = ownCode ? compactCode(ownCode) : null;
+  const drop = (match: string, code: string) => (own === null || compactCode(code) === own ? "" : match);
   return title
-    .replace(new RegExp(String.raw`\s*[(\[]\s*${TYPED_CODE}\s*[)\]]`, "g"), "")
-    .replace(new RegExp(String.raw`^\s*${TYPED_CODE}\s*[:\-–]\s+`), "")
+    .replace(new RegExp(String.raw`\s*[(\[]\s*(${TYPED_CODE})\s*[)\]]`, "gi"), drop)
+    .replace(new RegExp(String.raw`^\s*(${TYPED_CODE})\s*[:\-–]\s+`, "i"), drop)
     .replace(/\s{2,}/g, " ")
     .trim();
 }
+
+/** Typing slips seen in the Registry, put right before formatting. */
+const TITLE_SLIPS: [RegExp, string][] = [[/\bt he\b/gi, "the"]];
 
 /**
  * Registry titles and uploads: the code taken out, then formatted. Draft rows
  * keep a code suffix on purpose (titles are unique within a draft), so their
  * own saves use formatCourseTitle alone.
  */
-export function cleanCourseTitle(title: string): string {
-  return formatCourseTitle(withoutTypedCode(title));
+export function cleanCourseTitle(title: string, ownCode?: string): string {
+  const fixed = TITLE_SLIPS.reduce((text, [slip, right]) => text.replace(slip, right), title);
+  return formatCourseTitle(withoutTypedCode(fixed, ownCode));
 }
 
 /**

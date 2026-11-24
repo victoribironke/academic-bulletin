@@ -362,7 +362,7 @@ export async function POST(request: Request) {
     const course = await prisma.masterCourse.create({
       data: {
         code: formatCourseCode(code),
-        title: cleanCourseTitle(title),
+        title: cleanCourseTitle(title, code),
         units,
         type: type || "CORE",
         ownership: resolvedOwnership,
