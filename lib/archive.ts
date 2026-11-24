@@ -14,6 +14,7 @@ import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { recordActivity } from "@/lib/activity-log";
+import { DELETE_REASON_LENGTH, deleteReasonProblem } from "@/lib/delete-reason";
 
 export const ARCHIVABLE_TYPES = [
   "REVIEW_CYCLE",
@@ -22,6 +23,8 @@ export const ARCHIVABLE_TYPES = [
   "PROGRAMME",
   "MASTER_COURSE",
   "STAFF",
+  // A course row in a programme's draft, with its course description (Q7).
+  "COURSE_ROW",
 ] as const;
 export type ArchivableType = (typeof ARCHIVABLE_TYPES)[number];
 
@@ -32,6 +35,7 @@ export const ARCHIVE_NOUNS: Record<ArchivableType, string> = {
   PROGRAMME: "programme",
   MASTER_COURSE: "Registry course",
   STAFF: "staff record",
+  COURSE_ROW: "course row",
 };
 
 // ---------------------------------------------------------------------------
@@ -60,16 +64,39 @@ export function confirmationMatches(typed: unknown, expected: string): boolean {
   return normalize(typed) !== "" && normalize(typed) === normalize(expected);
 }
 
+/**
+ * A DELETE request's JSON body, or {} when it has none. Reading uses up the
+ * body, so pass `request.clone()` when requireDeleteConfirmation reads it too.
+ */
+export async function readDeleteBody(request: Request): Promise<Record<string, unknown>> {
+  const text = await request.text().catch(() => "");
+  if (!text) return {};
+  try {
+    const body = JSON.parse(text) as unknown;
+    return body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
 /** The `confirm` text from a DELETE request's JSON body, if it has one. */
 export async function readConfirmation(request: Request): Promise<string | null> {
-  const text = await request.text().catch(() => "");
-  if (!text) return null;
-  try {
-    const body = JSON.parse(text) as { confirm?: unknown };
-    return typeof body?.confirm === "string" ? body.confirm : null;
-  } catch {
-    return null;
-  }
+  const body = await readDeleteBody(request);
+  return typeof body.confirm === "string" ? body.confirm : null;
+}
+
+/**
+ * Null when no reason is needed or the one given will do, otherwise the 400
+ * reply asking for it (deleting another unit's row, Appendix D).
+ */
+export function requireDeleteReason(needed: boolean, reason: unknown): NextResponse | null {
+  if (!needed) return null;
+  const problem = deleteReasonProblem(reason);
+  if (!problem) return null;
+  return NextResponse.json(
+    { error: problem, code: "REASON_REQUIRED", minLength: DELETE_REASON_LENGTH.min },
+    { status: 400 },
+  );
 }
 
 /**
@@ -202,7 +229,9 @@ export async function deleteBlockers(
       break;
     }
     case "STAFF":
-      // Staff records hang off a department; nothing hangs off them.
+    case "COURSE_ROW":
+      // Nothing hangs off a staff record or a course row (its description
+      // goes into the Archive with it).
       break;
   }
   return reasons;
@@ -297,8 +326,67 @@ async function missingParent(
         (await parentGone("DEPARTMENT", data.ownerDeptId)) ??
         (await parentGone("SCHOOL", data.ownerSchoolId))
       );
+    case "COURSE_ROW": {
+      const submission =
+        typeof data.submissionId === "string"
+          ? await prisma.submission.findUnique({
+              where: { id: data.submissionId },
+              select: { cycle: { select: { archivedAt: true } } },
+            })
+          : null;
+      if (!submission) return "Its programme's draft no longer exists, so it can't be restored.";
+      if (submission.cycle?.archivedAt) {
+        return "Its draft belongs to an archived cycle. Restore the cycle first.";
+      }
+      return null;
+    }
     default:
       return null;
+  }
+}
+
+/** A course row and its description, recreated in its draft with the same ids. */
+async function recreateCourseRow(tx: Prisma.TransactionClient, data: Record<string, unknown>) {
+  const { description, ...course } = data as Record<string, unknown> & { description?: unknown };
+  const values = columns(course);
+  // The Registry course it came from may have been deleted since.
+  if (
+    typeof values.masterCourseId === "string" &&
+    !(await tx.masterCourse.count({ where: { id: values.masterCourseId } }))
+  ) {
+    delete values.masterCourseId;
+  }
+  await tx.course.create({ data: values as Prisma.CourseUncheckedCreateInput });
+
+  if (description && typeof description === "object") {
+    const details = columns(description as Record<string, unknown>);
+    if (
+      typeof details.graceContentHash === "string" &&
+      !(await tx.graceAssessment.count({ where: { contentHash: details.graceContentHash } }))
+    ) {
+      delete details.graceContentHash;
+    }
+    await tx.courseDescription.create({
+      data: { ...details, courseId: values.id, submissionId: values.submissionId } as Prisma.CourseDescriptionUncheckedCreateInput,
+    });
+  }
+
+  // G6: a Registry course that comes back is no longer marked removed.
+  if (typeof values.masterCourseId === "string") {
+    const draft = await tx.submission.findUniqueOrThrow({
+      where: { id: values.submissionId as string },
+      select: { dismissedRegistryCourseIds: true },
+    });
+    if (draft.dismissedRegistryCourseIds.includes(values.masterCourseId)) {
+      await tx.submission.update({
+        where: { id: values.submissionId as string },
+        data: {
+          dismissedRegistryCourseIds: draft.dismissedRegistryCourseIds.filter(
+            (courseId) => courseId !== values.masterCourseId,
+          ),
+        },
+      });
+    }
   }
 }
 
@@ -347,6 +435,9 @@ async function recreate(
       return;
     case "STAFF":
       await tx.staff.create({ data: values as Prisma.StaffUncheckedCreateInput });
+      return;
+    case "COURSE_ROW":
+      await recreateCourseRow(tx, data);
       return;
     case "MASTER_COURSE": {
       const wanted = Array.isArray(data.prerequisiteIds)
@@ -406,11 +497,44 @@ export async function restoreArchivedRecord(
       return {
         ok: false,
         status: 409,
-        error: `Another ${noun} now has the same name or code. Rename it, then restore this one.`,
+        error:
+          type === "COURSE_ROW"
+            ? "That draft now has a course with the same code or title. Remove or rename it, then restore this one."
+            : `Another ${noun} now has the same name or code. Rename it, then restore this one.`,
       };
     }
     throw error;
   }
 
   return { ok: true, entityType: type, entityId: record.entityId, label: record.label };
+}
+
+/**
+ * Removes a record from the Archive for good (Appendix D). Only Super
+ * Administrators may, after typing DELETE again; the route checks both.
+ */
+export async function removeArchivedRecord(
+  archiveId: string,
+  actorId: string,
+): Promise<{ ok: true; label: string } | { ok: false; status: number; error: string }> {
+  const record = await prisma.archivedRecord.findUnique({ where: { id: archiveId } });
+  if (!record) {
+    return { ok: false, status: 404, error: "That record is no longer in the Archive." };
+  }
+  const noun = isArchivableType(record.entityType) ? ARCHIVE_NOUNS[record.entityType] : "record";
+  await prisma.$transaction(async (tx) => {
+    await tx.archivedRecord.delete({ where: { id: archiveId } });
+    await recordActivity(
+      {
+        actorId,
+        action: "ARCHIVE_RECORD_REMOVED",
+        entityType: record.entityType,
+        entityId: record.entityId,
+        description: `Removed the ${noun} ${record.label} from the Archive for good. It can no longer be restored.`,
+        metadata: { archivedAt: record.archivedAt.toISOString(), archivedById: record.archivedById },
+      },
+      tx,
+    );
+  });
+  return { ok: true, label: record.label };
 }

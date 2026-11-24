@@ -24,7 +24,9 @@ import {
 } from "@/lib/courses/general-education";
 import { AUTOSAVE_COALESCE_MINUTES, recordActivity } from "@/lib/activity-log";
 import { synchronizeCourseGraceAssessment } from "@/lib/courses/grace-compliance";
-import { requireDeleteConfirmation } from "@/lib/archive";
+import { readDeleteBody, requireDeleteConfirmation, requireDeleteReason } from "@/lib/archive";
+import { applyCourseRowDelete, planCourseRowDelete } from "@/lib/courses/delete-course-rows";
+import { cleanDeleteReason } from "@/lib/delete-reason";
 
 // GET /api/courses/[id] - Get single course with description
 export async function GET(
@@ -223,77 +225,29 @@ export async function PATCH(
   }
 }
 
-// DELETE /api/courses/[id] - Delete course
+// DELETE /api/courses/[id] - Delete one course row. It goes to the Archive
+// with its description and can be restored (Q7). Several rows at once go
+// through DELETE /api/courses/bulk.
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
-
-    // Check if course exists
-    const existing = await prisma.course.findUnique({
-      where: { id },
-      include: { masterCourse: { select: { type: true, ownership: true } } },
-    });
-    if (!existing) {
-      return NextResponse.json({ error: "Course not found" }, { status: 404 });
-    }
+    const body = await readDeleteBody(request.clone());
 
     const user = await getApiUser();
-    const gate = await requireSubmissionWriteAccess(
-      user,
-      existing.submissionId,
-    );
-    if (!gate.ok) {
-      return NextResponse.json(
-        { error: gate.message },
-        { status: gate.status },
-      );
-    }
-
-    // W1: a department can't remove the General Education block.
-    const generalEducation = isGeneralEducationCourse(existing);
-    if (generalEducation && !isAdministrator(user!)) {
-      return NextResponse.json(
-        { error: GENERAL_EDUCATION_LOCKED_MESSAGE, code: "GENERAL_EDUCATION_LOCKED" },
-        { status: 403 },
-      );
-    }
+    const planned = await planCourseRowDelete(user, [id]);
+    if (!planned.ok) return planned.response;
 
     // Q7: the person typed DELETE (the course table asks when a saved row is removed).
     const unconfirmed = await requireDeleteConfirmation(request, "course row");
     if (unconfirmed) return unconfirmed;
+    // Appendix D: deleting another unit's row also needs a reason.
+    const unexplained = requireDeleteReason(planned.plan.needsReason, body.reason);
+    if (unexplained) return unexplained;
 
-    // Delete course (cascades to description)
-    await prisma.$transaction(async (tx) => {
-      await recordActivity(
-        {
-          actorId: user!.id,
-          action: "COURSE_DELETED",
-          entityType: "SUBMISSION",
-          entityId: existing.submissionId,
-          description: `Deleted ${existing.code} - ${existing.title}.`,
-          metadata: { courseId: id },
-        },
-        tx,
-      );
-      await tx.course.delete({ where: { id } });
-      // G6: a Registry course the department removed stays removed when the
-      // Registry is uploaded again. (General Education always comes back.)
-      if (existing.masterCourseId && !generalEducation) {
-        const submission = await tx.submission.findUniqueOrThrow({
-          where: { id: existing.submissionId },
-          select: { dismissedRegistryCourseIds: true },
-        });
-        if (!submission.dismissedRegistryCourseIds.includes(existing.masterCourseId)) {
-          await tx.submission.update({
-            where: { id: existing.submissionId },
-            data: { dismissedRegistryCourseIds: { push: existing.masterCourseId } },
-          });
-        }
-      }
-    });
+    await applyCourseRowDelete(planned.plan, user!.id, cleanDeleteReason(body.reason));
 
     return NextResponse.json({ success: true });
   } catch (error) {

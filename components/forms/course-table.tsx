@@ -45,6 +45,8 @@ const SESSIONAL_VALUE = "S";
 import { toast } from "sonner";
 import { BulkImportDialog } from "@/components/imports/bulk-import-dialog";
 import { DELETE_WORD, useConfirmDelete } from "@/components/shared/typed-delete-dialog";
+import { useUser } from "@/contexts/user-context";
+import { deleteNeedsReason } from "@/lib/delete-reason";
 import { TableToolbar } from "@/components/shared/table-toolbar";
 import { TablePagination } from "@/components/shared/table-pagination";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -194,17 +196,43 @@ export function CourseTable({
 
   // Autosave state
   const [isDirty, setIsDirty] = useState(false);
-  // Q7: removing a saved course row asks for DELETE first.
+  // Q7: removing a saved course row asks for DELETE first, and for a reason
+  // when the draft belongs to another unit (Appendix D).
   const { confirmDelete, dialog: deleteDialog } = useConfirmDelete();
+  const { currentUser } = useUser();
+  const askReason = currentUser ? deleteNeedsReason(currentUser, departmentId) : false;
+  // Reasons given since the last save, sent with the deletes.
+  const deleteReasons = useRef<string[]>([]);
+  const noteReason = (reason: string) => {
+    deleteReasons.current.push(reason);
+  };
+  const isSaved = (course: Course) => Boolean(course.id) && !course.isNew;
   const confirmRemoveCourse = (course: Course) =>
-    !course.id || course.isNew
+    !isSaved(course)
       ? Promise.resolve(true)
       : confirmDelete({
           title: `Delete ${course.code || "this course"} from this programme's course structure?`,
           description:
-            "Its course description and learning outcomes are removed too. It goes when the course structure next saves, and it can't be restored from the Archive; add it again from the Registry if needed.",
+            "Its course description and learning outcomes go with it. It goes when the course structure next saves, and an administrator can restore it from the Archive.",
           actionLabel: "Delete row",
+          askReason,
+          onReason: noteReason,
         });
+  // Several ticked rows: one confirmation that lists them (Q7).
+  const confirmRemoveCourses = (courses: Course[]) =>
+    courses.length === 1
+      ? confirmRemoveCourse(courses[0])
+      : !courses.some(isSaved)
+        ? Promise.resolve(true)
+        : confirmDelete({
+            title: `Delete ${courses.length} course rows?`,
+            description:
+              "Their course descriptions and learning outcomes go with them. They go when the course structure next saves, and an administrator can restore them from the Archive.",
+            items: courses.map((course) => [course.code, course.title].filter(Boolean).join(" ") || "A row with no code yet"),
+            actionLabel: `Delete ${courses.length} rows`,
+            askReason,
+            onReason: noteReason,
+          });
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isSavingRef = useRef(false);
 
@@ -673,17 +701,25 @@ export function CourseTable({
         }
       }
 
-      for (const originalId of originalCourseIds) {
-        if (!currentCourseIds.has(originalId)) {
-          // The person typed DELETE when they removed the row (Q7).
-          const res = await fetch(`/api/courses/${originalId}`, {
-            method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ confirm: DELETE_WORD }),
-          });
-          if (!res.ok) {
-            errors.push(`Failed to delete a removed course`);
-          }
+      const removedIds = [...originalCourseIds].filter((originalId) => !currentCourseIds.has(originalId));
+      if (removedIds.length > 0) {
+        // The person typed DELETE when they removed the rows (Q7): one request,
+        // one log entry, and each row goes to the Archive.
+        const res = await fetch("/api/courses/bulk", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            submissionId,
+            ids: removedIds,
+            confirm: DELETE_WORD,
+            ...(deleteReasons.current.length > 0 && { reason: deleteReasons.current.join("; ") }),
+          }),
+        });
+        if (res.ok) {
+          deleteReasons.current = [];
+        } else {
+          const data = await res.json().catch(() => ({}));
+          errors.push(data.error ?? `Failed to delete ${removedIds.length === 1 ? "a removed course" : `${removedIds.length} removed courses`}`);
         }
       }
 
@@ -885,6 +921,7 @@ export function CourseTable({
                     isRowEditable={(row) => !row.masterCourseId && !row.isMandatory}
                     onRowUpdate={handleRowUpdate}
                     confirmRemove={confirmRemoveCourse}
+                    confirmRemoveMany={confirmRemoveCourses}
                   />
                 </div>
 

@@ -27,6 +27,8 @@ import {
 import { validateStaffEntryRows } from "@/lib/validation/staff-entry";
 import { staffConfirmationName } from "@/lib/validation/name-format";
 import { DELETE_WORD, useConfirmDelete } from "@/components/shared/typed-delete-dialog";
+import { useUser } from "@/contexts/user-context";
+import { deleteNeedsReason } from "@/lib/delete-reason";
 import { PhotoUploadGuidance } from "@/components/shared/photo-upload-guidance";
 
 // Updated StaffMember interface with new structured fields
@@ -232,15 +234,41 @@ export function StaffTable({
   const savedStaffNames = useRef(new Map<string, string>());
   // Q7: removing a saved staff row or a photo asks for DELETE first.
   const { confirmDelete, dialog: deleteDialog } = useConfirmDelete();
+  // Appendix D: deleting another department's staff also asks why.
+  const { currentUser } = useUser();
+  const askReason = currentUser ? deleteNeedsReason(currentUser, departmentId) : false;
+  const deleteReasons = useRef<string[]>([]);
+  const noteReason = (reason: string) => {
+    deleteReasons.current.push(reason);
+  };
+  const staffName = (staff: StaffMember) =>
+    (staff.id && savedStaffNames.current.get(staff.id)) || staffConfirmationName(staff) || "this staff member";
   const confirmRemoveStaff = (staff: StaffMember) =>
     !staff.id
       ? Promise.resolve(true)
       : confirmDelete({
-          title: `Delete ${savedStaffNames.current.get(staff.id) || staffConfirmationName(staff) || "this staff member"} from the staff list?`,
+          title: `Delete ${staffName(staff)} from the staff list?`,
           description:
             "Their photo goes with them. The record moves to the Archive when the staff list next saves, and an administrator can restore it.",
           actionLabel: "Delete staff member",
+          askReason,
+          onReason: noteReason,
         });
+  // Several ticked rows: one confirmation that lists them (Q7).
+  const confirmRemoveStaffMany = (rows: StaffMember[]) =>
+    rows.length === 1
+      ? confirmRemoveStaff(rows[0])
+      : !rows.some((staff) => staff.id)
+        ? Promise.resolve(true)
+        : confirmDelete({
+            title: `Delete ${rows.length} staff members?`,
+            description:
+              "Their photos go with them. The records move to the Archive when the staff list next saves, and an administrator can restore them.",
+            items: rows.map(staffName),
+            actionLabel: `Delete ${rows.length} staff members`,
+            askReason,
+            onReason: noteReason,
+          });
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -431,7 +459,10 @@ export function StaffTable({
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             // The person typed DELETE when they removed the row (Q7).
-            body: JSON.stringify({ confirm: DELETE_WORD }),
+            body: JSON.stringify({
+              confirm: DELETE_WORD,
+              ...(deleteReasons.current.length > 0 && { reason: deleteReasons.current.join("; ") }),
+            }),
           });
           if (!res.ok) {
             errors.push(
@@ -470,6 +501,7 @@ export function StaffTable({
       } else {
         toast.success("All staff saved successfully");
         markDirty(false);
+        deleteReasons.current = [];
       }
     } catch (error) {
       console.error("Failed to save staff:", error);
@@ -685,6 +717,7 @@ export function StaffTable({
               createEmptyRow={() => createEmptyStaff("ACADEMIC")}
               disabled={disabled}
               confirmRemove={confirmRemoveStaff}
+              confirmRemoveMany={confirmRemoveStaffMany}
             />
           </TabsContent>
 
@@ -699,6 +732,7 @@ export function StaffTable({
               createEmptyRow={() => createEmptyStaff("ADJUNCT")}
               disabled={disabled}
               confirmRemove={confirmRemoveStaff}
+              confirmRemoveMany={confirmRemoveStaffMany}
             />
           </TabsContent>
 
@@ -713,6 +747,7 @@ export function StaffTable({
               createEmptyRow={() => createEmptyStaff("NON_ACADEMIC")}
               disabled={disabled}
               confirmRemove={confirmRemoveStaff}
+              confirmRemoveMany={confirmRemoveStaffMany}
             />
           </TabsContent>
         </Tabs>

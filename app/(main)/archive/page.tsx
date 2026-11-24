@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Archive, Loader2, RotateCcw } from "lucide-react";
+import { Archive, Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { useUser } from "@/contexts/user-context";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableCard } from "@/components/shared/table-toolbar";
@@ -19,6 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/dates/format";
+import { DELETE_WORD, useConfirmDelete } from "@/components/shared/typed-delete-dialog";
 
 /** A whole cycle archived in place, with its drafts (task A2). */
 type ArchivedCycle = {
@@ -45,6 +46,7 @@ const TYPE_LABELS: Record<string, string> = {
   PROGRAMME: "Programme",
   MASTER_COURSE: "Registry course",
   STAFF: "Staff",
+  COURSE_ROW: "Course row",
 };
 
 
@@ -58,6 +60,10 @@ export default function ArchivePage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [cycles, setCycles] = useState<ArchivedCycle[] | null>(null);
+  // Removing a record for good: Super Administrators only, with DELETE typed
+  // again (Q7, Appendix D).
+  const canRemoveForGood = currentUser?.role === "SUPER_ADMIN";
+  const { confirmDelete, dialog: deleteDialog } = useConfirmDelete();
 
   useEffect(() => {
     if (!userLoading && !canRestore) router.push("/dashboard");
@@ -104,6 +110,37 @@ export default function ArchivePage() {
     }
   };
 
+  const removeForGood = async (record: ArchivedRecord) => {
+    const confirmed = await confirmDelete({
+      title: `Remove ${record.label} from the Archive for good?`,
+      description:
+        "It can never be restored after this. The removal is recorded in the activity log.",
+      actionLabel: "Remove for good",
+    });
+    if (!confirmed) return;
+    setRestoringId(record.id);
+    try {
+      const res = await fetch(`/api/archive/${record.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: DELETE_WORD }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast.success(`${record.label} was removed from the Archive for good.`);
+        setReloadKey((key) => key + 1);
+      } else {
+        toast.error(`Couldn't remove ${record.label}`, {
+          description: data.error ?? "Please try again.",
+        });
+      }
+    } catch {
+      toast.error(`Couldn't remove ${record.label}. Please try again.`);
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
   const restoreCycle = async (cycle: ArchivedCycle) => {
     const drafts = cycle._count?.submissions ?? 0;
     if (
@@ -138,7 +175,7 @@ export default function ArchivePage() {
     <div className="space-y-4">
       <PageHeader
         title="Archive"
-        description="Archived review cycles with their drafts, and deleted schools, departments, programmes, Registry courses and staff. Restoring puts a record back exactly as it was."
+        description={`Archived review cycles with their drafts, and deleted schools, departments, programmes, Registry courses, staff and course rows. Restoring puts a record back exactly as it was.${canRemoveForGood ? " Removing one for good can't be undone." : ""}`}
       />
 
       {cycles && cycles.length > 0 && (
@@ -258,19 +295,33 @@ export default function ArchivePage() {
                     {formatDate(record.archivedAt)}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => restore(record)}
-                      disabled={restoringId !== null}
-                    >
-                      {restoringId === record.id ? (
-                        <Loader2 className="animate-spin" />
-                      ) : (
-                        <RotateCcw />
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => restore(record)}
+                        disabled={restoringId !== null}
+                      >
+                        {restoringId === record.id ? (
+                          <Loader2 className="animate-spin" />
+                        ) : (
+                          <RotateCcw />
+                        )}
+                        Restore
+                      </Button>
+                      {canRemoveForGood && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => void removeForGood(record)}
+                          disabled={restoringId !== null}
+                        >
+                          <Trash2 />
+                          Remove for good
+                        </Button>
                       )}
-                      Restore
-                    </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -278,6 +329,7 @@ export default function ArchivePage() {
           </Table>
         </TableCard>
       )}
+      {deleteDialog}
     </div>
   );
 }

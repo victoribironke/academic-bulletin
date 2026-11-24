@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Trash2, GripVertical, Lock } from "lucide-react";
 
 export interface Column<T> {
@@ -53,6 +54,11 @@ interface DynamicTableProps<T extends Record<string, unknown>> {
    * cancelled the DELETE box). Rows that were never saved need no asking.
    */
   confirmRemove?: (row: T, index: number) => Promise<boolean>;
+  /**
+   * Q7: lets the person tick several rows and delete them with one DELETE
+   * confirmation, which lists them. Resolve false to keep them.
+   */
+  confirmRemoveMany?: (rows: T[]) => Promise<boolean>;
 }
 
 export function DynamicTable<T extends Record<string, unknown>>({
@@ -69,8 +75,32 @@ export function DynamicTable<T extends Record<string, unknown>>({
   isRowEditable,
   onRowUpdate,
   confirmRemove,
+  confirmRemoveMany,
 }: DynamicTableProps<T>) {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  // Ticked rows (Q7), kept by row so reordering doesn't move the ticks.
+  const [selected, setSelected] = useState<Set<T>>(() => new Set());
+  const selectable = Boolean(confirmRemoveMany) && allowDelete && !disabled;
+  const deletableRows = data.filter((row) => !isRowLocked?.(row));
+  const selectedRows = selectable ? data.filter((row) => selected.has(row)) : [];
+  const allSelected = deletableRows.length > 0 && selectedRows.length === deletableRows.length;
+
+  const toggleRow = (row: T, on: boolean) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (on) next.add(row);
+      else next.delete(row);
+      return next;
+    });
+  const toggleAll = (on: boolean) => setSelected(on ? new Set(deletableRows) : new Set());
+
+  const removeSelected = async () => {
+    const rows = selectedRows;
+    if (rows.length === 0 || !confirmRemoveMany) return;
+    if (!(await confirmRemoveMany(rows))) return;
+    onChange(data.filter((item) => !rows.includes(item)));
+    setSelected(new Set());
+  };
 
   const addRow = () => {
     if (maxRows && data.length >= maxRows) return;
@@ -82,6 +112,7 @@ export function DynamicTable<T extends Record<string, unknown>>({
     if (confirmRemove && !(await confirmRemove(row, index))) return;
     // Remove that row from the data as it is now, in case it changed meanwhile.
     onChange(data.filter((item) => item !== row));
+    toggleRow(row, false);
   };
 
   const updateCell = (index: number, key: keyof T, value: unknown) => {
@@ -94,6 +125,16 @@ export function DynamicTable<T extends Record<string, unknown>>({
 
     newData[index] = updatedRow;
     onChange(newData);
+    // An edited row keeps its tick.
+    const before = data[index];
+    if (selected.has(before)) {
+      setSelected((current) => {
+        const next = new Set(current);
+        next.delete(before);
+        next.add(updatedRow);
+        return next;
+      });
+    }
   };
 
   const handleDragStart = (index: number) => {
@@ -220,11 +261,39 @@ export function DynamicTable<T extends Record<string, unknown>>({
 
   return (
     <div className="space-y-2">
+      {selectable && selectedRows.length > 0 && (
+        <div
+          className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm"
+          role="region"
+          aria-label="Selected rows"
+        >
+          <span aria-live="polite">
+            {selectedRows.length} {selectedRows.length === 1 ? "row" : "rows"} selected
+          </span>
+          <Button type="button" variant="destructive" size="sm" onClick={() => void removeSelected()}>
+            <Trash2 className="mr-1 h-4 w-4" aria-hidden="true" />
+            Delete {selectedRows.length} {selectedRows.length === 1 ? "row" : "rows"}
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => toggleAll(false)}>
+            Clear selection
+          </Button>
+        </div>
+      )}
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
               <TableHead className="w-8"></TableHead>
+              {selectable && (
+                <TableHead className="w-8">
+                  <Checkbox
+                    checked={allSelected ? true : selectedRows.length > 0 ? "indeterminate" : false}
+                    onCheckedChange={(state) => toggleAll(state === true)}
+                    disabled={deletableRows.length === 0}
+                    aria-label="Select all rows that can be deleted"
+                  />
+                </TableHead>
+              )}
               {showRowNumbers && <TableHead className="w-12">#</TableHead>}
               {columns.map((column) => (
                 <TableHead
@@ -250,6 +319,7 @@ export function DynamicTable<T extends Record<string, unknown>>({
                   colSpan={
                     columns.length +
                     (showRowNumbers ? 2 : 1) +
+                    (selectable ? 1 : 0) +
                     (allowDelete ? 1 : 0)
                   }
                   className="h-20 text-center text-muted-foreground"
@@ -278,6 +348,17 @@ export function DynamicTable<T extends Record<string, unknown>>({
                       <GripVertical className="h-4 w-4 text-muted-foreground" />
                     )}
                   </TableCell>
+                  {selectable && (
+                    <TableCell className="p-1">
+                      {!isRowLocked?.(row) && (
+                        <Checkbox
+                          checked={selected.has(row)}
+                          onCheckedChange={(state) => toggleRow(row, state === true)}
+                          aria-label={`Select row ${rowIndex + 1}`}
+                        />
+                      )}
+                    </TableCell>
+                  )}
                   {showRowNumbers && (
                     <TableCell className="text-xs text-muted-foreground font-medium">
                       {rowIndex + 1}
@@ -296,6 +377,7 @@ export function DynamicTable<T extends Record<string, unknown>>({
                           size="sm"
                           onClick={() => void removeRow(rowIndex)}
                           className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                          aria-label={`Delete row ${rowIndex + 1}`}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

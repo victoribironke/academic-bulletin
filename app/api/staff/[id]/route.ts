@@ -7,7 +7,8 @@ import {
 } from "@/lib/validation/name-format";
 import { canAccessDepartment, requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
-import { archiveRecord, requireDeleteConfirmation } from "@/lib/archive";
+import { archiveRecord, requireDeleteConfirmation, readDeleteBody, requireDeleteReason } from "@/lib/archive";
+import { cleanDeleteReason, deleteNeedsReason } from "@/lib/delete-reason";
 
 const VALID_TITLES = ["MR", "MRS", "MS", "DR", "PROF", "ENGR", "BARR", "REV", "PASTOR"];
 const VALID_GENDERS = ["MALE", "FEMALE"];
@@ -272,8 +273,16 @@ export async function DELETE(
     }
 
     const name = staffConfirmationName(existing);
+    const body = await readDeleteBody(request.clone());
     const unconfirmed = await requireDeleteConfirmation(request, "staff member");
     if (unconfirmed) return unconfirmed;
+    // Appendix D: deleting another unit's record also needs a reason.
+    const unexplained = requireDeleteReason(
+      deleteNeedsReason(auth.user, existing.departmentId),
+      body.reason,
+    );
+    if (unexplained) return unexplained;
+    const reason = cleanDeleteReason(body.reason);
 
     await prisma.$transaction(async (tx) => {
       await recordActivity(
@@ -282,8 +291,8 @@ export async function DELETE(
           action: "STAFF_DELETED",
           entityType: "STAFF",
           entityId: id,
-          description: `Deleted ${name}'s staff record. It can be restored from the Archive.`,
-          metadata: { departmentId: existing.departmentId },
+          description: `Deleted ${name}'s staff record. It can be restored from the Archive.${reason ? ` Reason: ${reason}` : ""}`,
+          metadata: { departmentId: existing.departmentId, ...(reason && { reason }) },
         },
         tx,
       );

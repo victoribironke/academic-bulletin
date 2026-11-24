@@ -101,6 +101,8 @@ import { GET as readWaitingWork } from "@/app/api/desk/waiting/route";
 import { GET as readRegistryReport } from "@/app/api/reports/registry/route";
 import { GET as listArchive } from "@/app/api/archive/route";
 import { POST as restoreArchived } from "@/app/api/archive/[id]/restore/route";
+import { DELETE as removeArchived } from "@/app/api/archive/[id]/route";
+import { DELETE as deleteCourseRows } from "@/app/api/courses/bulk/route";
 import { confirmationMatches } from "@/lib/archive";
 import { GET as readStoredFile } from "@/app/api/files/[...key]/route";
 import { POST as uploadStaffPhoto } from "@/app/api/staff/[id]/image/route";
@@ -6302,5 +6304,172 @@ describe("the Registry completeness report (B8)", () => {
     expect(sheet.headers.get("Content-Type")).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     expect(sheet.headers.get("Content-Disposition")).toMatch(/^attachment; filename="registry-completeness-\d{4}-\d{2}-\d{2}\.xlsx"$/);
     expect((await sheet.arrayBuffer()).byteLength).toBeGreaterThan(1000);
+  });
+});
+
+describe("deleting several rows, reasons and the Archive (Q7)", () => {
+  const cycleId = "q7-cycle";
+  const submissionId = "q7-submission";
+  const codes = ["QSV 101", "QSV 102", "QSV 103", "QSV 104"];
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.create({ data: { id: cycleId, name: "Q7", createdById: ids.super } });
+    await prisma.submission.create({
+      data: { id: submissionId, title: "Q7 Bulletin", programmeId: ids.programmeA, createdById: ids.hod, cycleId },
+    });
+    for (const [index, code] of codes.entries()) {
+      await prisma.course.create({
+        data: {
+          id: `q7-row-${index}`,
+          submissionId,
+          code,
+          title: `Several rows ${index + 1}`,
+          units: 2,
+          semester: 1,
+          level: 100,
+          ...(index === 0 && {
+            description: {
+              create: { submissionId, courseContent: "Kept in the Archive", learningOutcomes: ["Restore it"] },
+            },
+          }),
+        },
+      });
+    }
+  });
+
+  afterAll(async () => {
+    await prisma.archivedRecord.deleteMany({ where: { entityType: "COURSE_ROW" } });
+    await prisma.archivedRecord.deleteMany({ where: { entityId: { startsWith: "q7-" } } });
+    await prisma.submission.deleteMany({ where: { id: submissionId } });
+    await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+    await prisma.staff.deleteMany({ where: { id: { startsWith: "q7-" } } });
+  });
+
+  const removeRows = (body: object) =>
+    deleteCourseRows(
+      new Request("http://localhost/api/courses/bulk", { method: "DELETE", body: JSON.stringify({ submissionId, ...body }) }),
+    );
+  const left = () => prisma.course.count({ where: { submissionId, code: { in: codes } } });
+
+  it("deletes several rows with one DELETE, archives each one and logs them once", async () => {
+    authState.userId = ids.hod;
+    const ids3 = ["q7-row-0", "q7-row-1", "q7-row-2"];
+    const unconfirmed = await removeRows({ ids: ids3 });
+    expect(unconfirmed.status).toBe(400);
+    expect(await unconfirmed.json()).toMatchObject({ code: "CONFIRMATION_REQUIRED" });
+    expect((await removeRows({ ids: ids3, confirm: "DELETED" })).status).toBe(400);
+    expect(await left()).toBe(4);
+
+    const done = await removeRows({ ids: ids3, confirm: "delete" });
+    expect(done.status).toBe(200);
+    expect(await done.json()).toMatchObject({ deleted: 3 });
+    expect(await left()).toBe(1);
+    expect(
+      await prisma.archivedRecord.count({ where: { entityType: "COURSE_ROW", entityId: { in: ids3 } } }),
+    ).toBe(3);
+    const logged = await prisma.activityLog.findMany({
+      where: { action: "COURSE_DELETED", entityId: submissionId },
+    });
+    expect(logged).toHaveLength(1);
+    expect(logged[0].description).toContain("Deleted 3 course rows from");
+    expect(logged[0].metadata).toMatchObject({ count: 3, codes: ["QSV 101", "QSV 102", "QSV 103"] });
+  });
+
+  it("brings a row back from the Archive with its description", async () => {
+    authState.userId = ids.admin;
+    const record = await prisma.archivedRecord.findFirstOrThrow({ where: { entityId: "q7-row-0" } });
+    expect(record.label).toMatch(/^QSV 101 Several rows 1 \(/);
+    const restored = await restoreArchived(
+      new NextRequest(`http://localhost/api/archive/${record.id}/restore`, { method: "POST" }),
+      { params: Promise.resolve({ id: record.id }) },
+    );
+    expect(restored.status).toBe(200);
+    expect(
+      await prisma.course.findUniqueOrThrow({
+        where: { id: "q7-row-0" },
+        select: { code: true, submissionId: true, description: { select: { courseContent: true, learningOutcomes: true } } },
+      }),
+    ).toEqual({
+      code: "QSV 101",
+      submissionId,
+      description: { courseContent: "Kept in the Archive", learningOutcomes: ["Restore it"] },
+    });
+
+    // A row whose code is back in the draft can't come back twice.
+    await prisma.course.create({ data: { submissionId, code: "QSV 102", title: "Taken again", units: 2, semester: 1, level: 100 } });
+    const clash = await prisma.archivedRecord.findFirstOrThrow({ where: { entityId: "q7-row-1" } });
+    const refused = await restoreArchived(
+      new NextRequest(`http://localhost/api/archive/${clash.id}/restore`, { method: "POST" }),
+      { params: Promise.resolve({ id: clash.id }) },
+    );
+    expect(refused.status).toBe(409);
+    expect((await refused.json()).error).toContain("same code or title");
+  });
+
+  it("asks for a reason when someone outside the department deletes its rows", async () => {
+    authState.userId = ids.super;
+    const noReason = await removeRows({ ids: ["q7-row-3"], confirm: "DELETE" });
+    expect(noReason.status).toBe(400);
+    expect(await noReason.json()).toMatchObject({ code: "REASON_REQUIRED" });
+    expect((await removeRows({ ids: ["q7-row-3"], confirm: "DELETE", reason: "too short" })).status).toBe(400);
+    expect(await prisma.course.count({ where: { id: "q7-row-3" } })).toBe(1);
+
+    const done = await removeRows({ ids: ["q7-row-3"], confirm: "DELETE", reason: "Duplicate of QSV 101, agreed with the Head." });
+    expect(done.status).toBe(200);
+    const entry = await prisma.activityLog.findFirstOrThrow({
+      where: { action: "COURSE_DELETED", entityId: submissionId, actorId: ids.super },
+    });
+    expect(entry.description).toContain("Reason: Duplicate of QSV 101, agreed with the Head.");
+    expect(entry.metadata).toMatchObject({ reason: "Duplicate of QSV 101, agreed with the Head." });
+
+    // The same rule for staff: an administrator deleting a department's staff.
+    await prisma.staff.create({
+      data: {
+        id: "q7-staff",
+        departmentId: ids.departmentA,
+        title: "DR",
+        gender: "FEMALE",
+        surname: "okafor",
+        firstName: "ada",
+        highestQualification: "PHD",
+        academicRank: "LECTURER_I",
+        type: "ACADEMIC",
+      },
+    });
+    const removeStaff = (body: object) =>
+      deleteStaff(
+        new NextRequest("http://localhost/api/staff/q7-staff", { method: "DELETE", body: JSON.stringify(body) }),
+        { params: Promise.resolve({ id: "q7-staff" }) },
+      );
+    authState.userId = ids.admin;
+    expect((await removeStaff({ confirm: "DELETE" })).status).toBe(400);
+    expect((await removeStaff({ confirm: "DELETE", reason: "Left the university in October." })).status).toBe(200);
+  });
+
+  it("lets only a Super Administrator remove a record from the Archive for good, with DELETE", async () => {
+    const record = await prisma.archivedRecord.findFirstOrThrow({ where: { entityId: "q7-row-2" } });
+    const remove = (confirm?: string) =>
+      removeArchived(
+        new Request(`http://localhost/api/archive/${record.id}`, {
+          method: "DELETE",
+          ...(confirm !== undefined && { body: JSON.stringify({ confirm }) }),
+        }),
+        { params: Promise.resolve({ id: record.id }) },
+      );
+
+    authState.userId = ids.admin;
+    expect((await remove("DELETE")).status).toBe(403);
+    authState.userId = ids.hod;
+    expect((await remove("DELETE")).status).toBe(403);
+    authState.userId = ids.super;
+    expect((await remove()).status).toBe(400);
+    expect((await remove("delet")).status).toBe(400);
+    expect(await prisma.archivedRecord.count({ where: { id: record.id } })).toBe(1);
+
+    expect((await remove(" Delete ")).status).toBe(200);
+    expect(await prisma.archivedRecord.count({ where: { id: record.id } })).toBe(0);
+    const entry = await prisma.activityLog.findFirstOrThrow({ where: { action: "ARCHIVE_RECORD_REMOVED", entityId: "q7-row-2" } });
+    expect(entry.description).toContain("from the Archive for good");
+    expect((await remove("DELETE")).status).toBe(404);
   });
 });

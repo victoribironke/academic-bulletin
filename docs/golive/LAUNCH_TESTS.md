@@ -101,9 +101,10 @@ site: its Head sees "Extended to Thursday, February 11, 2027".
 | Every delete control runs only after DELETE is typed | Automatic tests (`typed-delete.test.ts` finds every bin icon and delete route) | Passes |
 | "delet" or "DELETED" keeps the button switched off | Automatic tests | Passes |
 | A direct server call without the confirmation is refused | Automatic tests | Passes |
-| Deleting 12 course rows needs one confirmation listing all 12 | Q7 | **Not built**: rows are confirmed one at a time |
-| Deleted rows appear in the Archive and can be restored | The Archive page and its restore route | Built; to be tried by a person |
-| Permanent removal from the Archive needs DELETE again and a Super Administrator | Q7 | **Not built**: the Archive can only list and restore, so nothing can be removed for good |
+| Deleting 12 course rows needs one confirmation listing all 12 | Automatic tests (`delete-many.test.tsx`, and "deleting several rows" in the integration tests) | Passes: tick the rows (or all of a level), then "Delete 12 rows"; the box lists the first 10 and "and 2 more" |
+| Deleted rows appear in the Archive and can be restored | Automatic tests | Passes: course rows (with their descriptions) and staff go to the Archive; Restore puts them back |
+| Permanent removal from the Archive needs DELETE again and a Super Administrator | Automatic tests | Passes: "Remove for good" shows only to Super Administrators, needs DELETE, and is logged |
+| Deleting another unit's row asks for a reason | Automatic tests (`delete-reason.test.ts`, integration tests) | Passes: anyone but the department's Head and coordinators gives a reason of at least 10 characters, kept in the activity log |
 
 ### 17. New codes
 

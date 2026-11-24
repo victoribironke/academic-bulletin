@@ -10,6 +10,8 @@
  * - Cancel has focus when the box opens; Escape cancels; Enter works only
  *   once the word matches. The red button says what it does.
  * - Several items at once: one confirmation, listing the first 10.
+ * - Deleting another unit's row also asks for a short reason, kept in the
+ *   activity log.
  */
 import { type ReactNode, useCallback, useId, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
@@ -24,6 +26,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { DELETE_REASON_LENGTH, deleteReasonProblem } from "@/lib/delete-reason";
 
 export const DELETE_WORD = "DELETE";
 
@@ -41,6 +45,10 @@ export type TypedDeleteContent = {
   actionLabel: string;
   /** For several items at once: their names (the first 10 are listed). */
   items?: string[];
+  /** Ask why: the person is deleting something another unit owns. */
+  askReason?: boolean;
+  /** Receives the reason once DELETE is confirmed. */
+  onReason?: (reason: string) => void;
 };
 
 export function TypedDeleteDialog({
@@ -55,14 +63,17 @@ export function TypedDeleteDialog({
   content: TypedDeleteContent | null;
   busy?: boolean;
   error?: string | null;
-  onConfirm: () => void;
+  onConfirm: (reason: string | null) => void;
   onCancel: () => void;
 }) {
   const [typed, setTyped] = useState("");
+  const [reason, setReason] = useState("");
+  const reasonId = useId();
   const cancelRef = useRef<HTMLButtonElement>(null);
   const inputId = useId();
   const consequenceId = useId();
-  const ready = typedDeleteMatches(typed);
+  const reasonOk = !content?.askReason || deleteReasonProblem(reason) === null;
+  const ready = typedDeleteMatches(typed) && reasonOk;
 
   const items = content?.items ?? [];
   return (
@@ -78,6 +89,7 @@ export function TypedDeleteDialog({
           // Each opening starts empty, with Cancel (not the box or the red
           // button) focused.
           setTyped("");
+          setReason("");
           event.preventDefault();
           cancelRef.current?.focus();
         }}
@@ -87,7 +99,7 @@ export function TypedDeleteDialog({
             className="space-y-4"
             onSubmit={(event) => {
               event.preventDefault();
-              if (ready && !busy) onConfirm();
+              if (ready && !busy) onConfirm(content.askReason ? reason.trim() : null);
             }}
           >
             <DialogHeader>
@@ -101,6 +113,24 @@ export function TypedDeleteDialog({
                 ))}
                 {items.length > 10 && <li className="list-none text-muted-foreground">and {items.length - 10} more</li>}
               </ul>
+            )}
+            {content.askReason && (
+              <div className="space-y-2">
+                <Label htmlFor={reasonId}>Why are you deleting this?</Label>
+                <Textarea
+                  id={reasonId}
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  maxLength={DELETE_REASON_LENGTH.max}
+                  rows={2}
+                  disabled={busy}
+                  aria-describedby={`${reasonId}-hint`}
+                />
+                <p id={`${reasonId}-hint`} className="text-xs text-muted-foreground">
+                  It belongs to another unit, so the reason goes in the activity log
+                  (at least {DELETE_REASON_LENGTH.min} characters).
+                </p>
+              </div>
             )}
             <div className="space-y-2">
               <Label htmlFor={inputId}>Type {DELETE_WORD} to confirm</Label>
@@ -140,11 +170,15 @@ export function useConfirmDelete() {
   const [content, setContent] = useState<TypedDeleteContent | null>(null);
   const resolver = useRef<((confirmed: boolean) => void) | null>(null);
 
-  const finish = useCallback((confirmed: boolean) => {
-    resolver.current?.(confirmed);
-    resolver.current = null;
-    setContent(null);
-  }, []);
+  const finish = useCallback(
+    (confirmed: boolean, reason: string | null = null) => {
+      if (confirmed && reason) content?.onReason?.(reason);
+      resolver.current?.(confirmed);
+      resolver.current = null;
+      setContent(null);
+    },
+    [content],
+  );
 
   const confirmDelete = useCallback(
     (next: TypedDeleteContent) =>
@@ -160,7 +194,7 @@ export function useConfirmDelete() {
     <TypedDeleteDialog
       open={content !== null}
       content={content}
-      onConfirm={() => finish(true)}
+      onConfirm={(reason) => finish(true, reason)}
       onCancel={() => finish(false)}
     />
   );

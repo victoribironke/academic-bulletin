@@ -8,6 +8,13 @@ import {
 } from "@/lib/imports/courses";
 import { recordActivity } from "@/lib/activity-log";
 import { prepareCourseGraceState } from "@/lib/courses/grace-compliance";
+import { readDeleteBody, requireDeleteConfirmation, requireDeleteReason } from "@/lib/archive";
+import {
+  applyCourseRowDelete,
+  courseRowIds,
+  planCourseRowDelete,
+} from "@/lib/courses/delete-course-rows";
+import { cleanDeleteReason } from "@/lib/delete-reason";
 
 const MAX_IMPORT_ROWS = 500;
 
@@ -140,5 +147,40 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Failed to bulk import courses:", error);
     return NextResponse.json({ error: "Failed to import courses" }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/courses/bulk - Delete several course rows of one draft with one
+ * typed confirmation (Q7, Appendix D): { submissionId, ids, confirm: "DELETE",
+ * reason }. The reason is needed when the person doesn't own the department's
+ * draft. Every row goes to the Archive; one log entry records how many.
+ */
+export async function DELETE(request: Request) {
+  try {
+    const body = await readDeleteBody(request.clone());
+    const submissionId = typeof body.submissionId === "string" ? body.submissionId : "";
+    if (!submissionId) {
+      return NextResponse.json({ error: "submissionId is required" }, { status: 400 });
+    }
+
+    const user = await getApiUser();
+    const planned = await planCourseRowDelete(user, courseRowIds(body.ids), submissionId);
+    if (!planned.ok) return planned.response;
+
+    const count = planned.plan.rows.length;
+    const unconfirmed = await requireDeleteConfirmation(
+      request,
+      count === 1 ? "course row" : `${count} course rows`,
+    );
+    if (unconfirmed) return unconfirmed;
+    const unexplained = requireDeleteReason(planned.plan.needsReason, body.reason);
+    if (unexplained) return unexplained;
+
+    const result = await applyCourseRowDelete(planned.plan, user!.id, cleanDeleteReason(body.reason));
+    return NextResponse.json({ success: true, ...result });
+  } catch (error) {
+    console.error("Failed to delete course rows:", error);
+    return NextResponse.json({ error: "Failed to delete these course rows" }, { status: 500 });
   }
 }
