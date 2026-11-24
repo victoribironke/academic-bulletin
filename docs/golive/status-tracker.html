@@ -147,8 +147,8 @@ footer { font-size: 0.86rem; color: var(--muted); display: grid; gap: 0.4rem; bo
     <p class="lede">Every task in the work order, release by release: what is live on academicplanning.app, what is built and waiting to run, and what each remaining task is waiting on.</p>
     <div class="meta">
       <span class="deadline">R0 launch due Wednesday, November 25, 6:00 pm WAT <strong id="countdown"></strong></span>
-      <span>Updated Monday, November 23, 2026, 11:45 pm WAT</span>
-      <span>Live code: <span class="mono">0cbdfcf</span></span>
+      <span>Updated Tuesday, November 24, 2026, 10:50 am WAT</span>
+      <span>Live code: <span class="mono">f609d4f</span></span>
     </div>
     <div class="legend" aria-label="What the statuses mean">
       <span><b class="pill s-live">Live</b> built and working on the live site</span>
@@ -257,7 +257,7 @@ footer { font-size: 0.86rem; color: var(--muted); display: grid; gap: 0.4rem; bo
   </section>
 
   <footer>
-    <p>Sources: the work order (package file 06, version 2.1), <span class="mono">docs/golive/IMPLEMENTATION_PLAN.md</span>, and the commits on main up to <span class="mono">0cbdfcf</span>.</p>
+    <p>Sources: the work order (package file 06, version 2.1), <span class="mono">docs/golive/IMPLEMENTATION_PLAN.md</span>, and the commits on main up to <span class="mono">f609d4f</span>.</p>
     <p>This page is the single list of what is done. It is updated after each change, so chat reports can point here instead of repeating it.</p>
   </footer>
 </div>
@@ -277,7 +277,7 @@ const GROUPS = [
     ["A1", "Test site", "CODE", "partly", "Live at academic-bulletin-staging.up.railway.app with its own database and storage, a TEST SITE banner and an email guard. The live records and photos are copied in.", "Google sign-in address for the test site (you); a DAP test inbox; Gmail test accounts removed from live (you)", true],
     ["A2", "Archive the test cycle", "CODE", "live", "The 2026/2027 test cycle was archived on November 23 and tagged TEST. The live dashboard shows 0 drafts. Restore was tried on the test site.", ""],
     ["A5", "Apply the code and name standard", "CODE+DAP", "ready", "Applied on the test site: 177 records changed, old codes kept as aliases, report in docs/golive/reports.", "DAP's 3 department names, then your yes", true],
-    ["A3", "Open the real cycle", "CODE", "ready", "Rehearsed on the test site: 66 drafts, the calendar loaded, 4,702 course rows pre-filled. Steps in docs/golive/A3_RUNBOOK.md.", "A5, the registry uploads and B9 on live, then your yes", true],
+    ["A3", "Open the real cycle", "CODE", "ready", "Rehearsed twice on the test site, the second time in launch order after the registry uploads (November 24): 66 drafts, the calendar loaded, 4,702 course rows pre-filled. Steps in docs/golive/A3_RUNBOOK.md.", "A5, the registry uploads and B9 on live, then your yes", true],
     ["B2", "The 2023-2027 course lists", "CODE+DAP", "ready", "1,066 courses were uploaded on November 20. The other 956 were uploaded on the test site on November 24 with one script (npm run registry:upload), in 39 seconds; a second run changes nothing.", "A5 on live, then your yes", true],
     ["B9", "DAP signs off the course registry", "DAP", "dap", "", "DAP, by 12:00 noon on Wednesday, November 25"],
     ["B13", "Courses the upload template cannot hold", "CODE", "ready", "Live: 0 to 12 units, and sessional courses with no semester. 119 of the 135 held-back courses in file 03 loaded on the test site on November 24; MBBS shows 106 sessional courses.", "A5 on live; DAP: units for 14 rows, titles for PATH 304 and PHAR 305"],
@@ -293,7 +293,7 @@ const GROUPS = [
     ["D3", "Invitations and sign-in tracking", "CODE", "live", "Invitation email, resend, and a \"Not signed in yet\" filter. The live daily job runs at 8:00 am WAT, so Thursday's invitations send by themselves.", "Reply-to, launch session and help contact settings (you)", true],
     ["D4", "Lock each phase to its owner, on the server", "CODE", "live", "Acting on a phase you do not own is an override with a 20-character reason, flagged in the log and on the programme.", ""],
     ["D11", "Make the authenticator step painless", "CODE+DAP", "live", "Codes for every role, \"Remember this device for 30 days\", and DAP resets.", "The set-up screenshots belong in DAP's launch pack (H2)"],
-    ["E1", "Course structures in all 66 drafts", "CODE+DAP", "ready", "Pre-fill from file 02 built and rehearsed: 48 full structures, 18 new programmes with the General Education block.", "Runs with A3; DAP answers on the 14 rows, ENT 322, BU-GST 420 and AGX 503"],
+    ["E1", "Course structures in all 66 drafts", "CODE+DAP", "ready", "Pre-fill from file 02 built and rehearsed: 48 full structures, 18 new programmes with the General Education block. After the registry uploads, 3,674 of the 4,702 rows start from Registry details (1,632 before), and only 2 courses are missing from the Registry (846 before).", "Runs with A3; DAP answers on the 14 rows, ENT 322, BU-GST 420 and AGX 503"],
     ["F0", "Submit to School off until December 14", "CODE", "live", "The button waits for the cycle's date; A3 sets it to Monday, December 14, 2026.", ""],
     ["G6", "Deleted rows coming back", "CODE", "live", "Fixed: removed courses stay removed.", ""],
     ["H1", "Quick start for each role", "CODE", "live", "Help panel for Heads, coordinators, Deans and DAP in the screens' own words, with the deadline and the school's DAP officer.", "Officer names come from the roster (D1)"],
