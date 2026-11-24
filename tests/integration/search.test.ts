@@ -74,7 +74,10 @@ describe("search (K1 to K4, K6)", () => {
     expect(await first("ZOLD")).toMatchObject({ type: "school", title: "School of Search Tests" });
     expect(await first("findability", "programme")).toMatchObject({ code: "ZNEW-DEP-FIN" });
     expect(await first("okonkwo", "person")).toMatchObject({ title: expect.stringMatching(/okonkwo-search/i), url: "/staff?q=Okonkwo-Search" });
-    expect(await first("academic load", "policySection")).toMatchObject({ url: "/policy#academic-load" });
+    // The policy section titled "Academic Load" beats text that only mentions both words.
+    const load = await searchEverything("HOD", "academic load");
+    expect(load.groups[0]).toMatchObject({ type: "policySection" });
+    expect(load.groups[0].results[0]).toMatchObject({ url: "/policy#academic-load" });
   });
 
   it("keeps up with saves and deletions", async () => {

@@ -58,42 +58,52 @@ export async function searchEverything(role: string, rawQuery: string): Promise<
     ...(useTypos ? [Prisma.sql`${folded} <% search_text`] : []),
   ];
 
-  const rows = await prisma.$queryRaw<(SearchResult & { rank: number })[]>(Prisma.sql`
-    SELECT type, id, title, code, secondary, url, rank FROM (
-      SELECT entity_type AS type, entity_id AS id, title, code, secondary, url,
-        ROW_NUMBER() OVER (
-          PARTITION BY entity_type
-          ORDER BY
-            (code_key = ANY(${exactKeys}::text[])) DESC,
-            ${prefix ? Prisma.sql`(code_key LIKE ${`${prefix}%`})` : Prisma.sql`false`} DESC,
-            ${tsQuery ? Prisma.sql`(to_tsvector('simple', unaccent(title)) @@ to_tsquery('simple', ${tsQuery}))` : Prisma.sql`false`} DESC,
-            ${tsQuery ? Prisma.sql`ts_rank('{0.05, 0.2, 0.5, 1.0}', tsv, to_tsquery('simple', ${tsQuery}))` : Prisma.sql`0`} DESC,
-            ${useTypos ? Prisma.sql`word_similarity(${folded}, search_text)` : Prisma.sql`0`} DESC,
-            title ASC
-        ) AS rank
-      FROM search_documents
-      WHERE visibility = ANY(${visibilityFor(role)}::text[])
-        AND (${Prisma.join(matches, " OR ")})
+  // One score, so results and groups are ordered the same way: an exact code,
+  // then a code that starts with what was typed, then a match in the code or
+  // title, then how well the text matches (section 9.1).
+  const score = Prisma.sql`(
+    (CASE WHEN code_key = ANY(${exactKeys}::text[]) THEN 1000 ELSE 0 END)
+    + ${prefix ? Prisma.sql`(CASE WHEN code_key LIKE ${`${prefix}%`} THEN 500 ELSE 0 END)` : Prisma.sql`0`}
+    + ${tsQuery ? Prisma.sql`(CASE WHEN to_tsvector('simple', unaccent(coalesce(code, '') || ' ' || title)) @@ to_tsquery('simple', ${tsQuery}) THEN 100 ELSE 0 END)` : Prisma.sql`0`}
+    + ${tsQuery ? Prisma.sql`ts_rank('{0.05, 0.2, 0.5, 1.0}', tsv, to_tsquery('simple', ${tsQuery})) * 10` : Prisma.sql`0`}
+    + ${useTypos ? Prisma.sql`word_similarity(${folded}, search_text) * 10` : Prisma.sql`0`}
+  )`;
+
+  const rows = await prisma.$queryRaw<(SearchResult & { score: number; rank: number })[]>(Prisma.sql`
+    SELECT type, id, title, code, secondary, url, score, rank FROM (
+      SELECT entity_type AS type, entity_id AS id, title, code, secondary, url, score,
+        ROW_NUMBER() OVER (PARTITION BY entity_type ORDER BY score DESC, title ASC) AS rank
+      FROM (
+        SELECT *, ${score}::float AS score
+        FROM search_documents
+        WHERE visibility = ANY(${visibilityFor(role)}::text[])
+          AND (${Prisma.join(matches, " OR ")})
+      ) scored
     ) ranked
     WHERE rank <= ${perGroup}
     ORDER BY rank`);
 
   const order = Object.keys(SEARCH_SETTINGS.entities);
   const groups = order
-    .map((type) => ({
-      type,
-      label: entityLabel(type),
-      results: rows
-        .filter((row) => row.type === type)
-        .sort((a, b) => Number(a.rank) - Number(b.rank))
-        .map(({ rank: _rank, ...result }) => {
+    .map((type) => {
+      const results = rows.filter((row) => row.type === type).sort((a, b) => Number(a.rank) - Number(b.rank));
+      return {
+        type,
+        label: entityLabel(type),
+        best: results.length ? Number(results[0].score) : 0,
+        results: results.map(({ score: _score, rank: _rank, ...result }) => {
+          void _score;
           void _rank;
           return result;
         }),
-    }))
-    .filter((group) => group.results.length > 0);
-  // A group holding an exact code match comes first.
-  const exact = groups.findIndex((group) => group.results[0]?.code && exactKeys.includes(compactCode(group.results[0].code)));
-  if (exact > 0) groups.unshift(...groups.splice(exact, 1));
+      };
+    })
+    .filter((group) => group.results.length > 0)
+    // The group with the best match first; the settings file's order breaks ties.
+    .sort((a, b) => b.best - a.best || order.indexOf(a.type) - order.indexOf(b.type))
+    .map(({ best: _best, ...group }) => {
+      void _best;
+      return group;
+    });
   return { groups, tookMs: Math.round(performance.now() - started) };
 }
