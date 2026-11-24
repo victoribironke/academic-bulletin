@@ -40,6 +40,7 @@ Written Monday, November 23, 2026. Everything lives in the Railway project `acad
 | Backup before the first live data changes of November 24 (B10 tables, B4 titles) | Done November 24, 2026, 13:34 WAT, 908 MB. Restore that backup to undo B4's 352 title changes; the B10 tables are only additions |
 | Backup before switching on Ask DAP (H6 table) | Done November 24, 2026, 14:26 WAT, 910 MB. The H6 table is only an addition |
 | Backup before switching on search (K1: pg_trgm, unaccent, search table) | Done November 24, 2026, 16:18 WAT, 910 MB. The extensions and the table are only additions |
+| Backup before adding the reminder agent's tables (T3) | Done November 24, 2026, 16:59 WAT, 971 MB. The two tables are only additions; sending stays off |
 | Code rollback to the previous deployment, on the test site | Done November 23, 2026, 21:14 WAT: **Rollback** to the H1 build served it 26 seconds after confirming, then **Rollback** to the T1 build 45 seconds after; the sign-in page answered throughout |
 | Backup, change, restore and check, on the test site | Done November 23, 2026, 21:08 to 21:12 WAT: backup (921 MB); a marker log entry written after it; **Restore** and **Deploy**; Postgres back about 30 seconds after Deploy. Afterwards every count matched the backup (114 drafts, 6,858 course rows, 12 users, 55 log entries, 2 cycles, same last entry) and the marker was gone |
 
