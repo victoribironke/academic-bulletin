@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { findSameCodeCourse, sameCodeMessage } from "@/lib/courses/code-key";
 import {
   SEMESTER_RULE_MESSAGE,
   UNITS_RULE_MESSAGE,
@@ -154,6 +155,11 @@ export async function PATCH(
         );
       }
       updateData.code = formatCourseCode(code);
+      // One code, one course, however it is spaced (B3).
+      const sameCode = await findSameCodeCourse(code, id);
+      if (sameCode) {
+        return NextResponse.json({ error: sameCodeMessage(sameCode) }, { status: 409 });
+      }
     }
     if (title !== undefined) updateData.title = cleanCourseTitle(title);
     if (units !== undefined) {

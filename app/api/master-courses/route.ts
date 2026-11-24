@@ -13,6 +13,7 @@ import {
 } from "@/lib/validation/name-format";
 import { requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
+import { findSameCodeCourse, sameCodeMessage } from "@/lib/courses/code-key";
 import { pageResult, parsePagination } from "@/lib/pagination";
 import type { Prisma } from "@prisma/client";
 
@@ -266,15 +267,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check for duplicate course code
-    const existing = await prisma.masterCourse.findUnique({
-      where: { code: formatCourseCode(code) },
-    });
+    // One code, one course, however it is spaced (B3): "BIO102" is "BIO 102".
+    const existing = await findSameCodeCourse(code);
     if (existing) {
-      return NextResponse.json(
-        { error: `Course with code ${formatCourseCode(code)} already exists` },
-        { status: 409 },
-      );
+      return NextResponse.json({ error: sameCodeMessage(existing) }, { status: 409 });
     }
 
     // Enum validation

@@ -88,7 +88,7 @@ site: its Head sees "Extended to Thursday, February 11, 2027".
 
 | Part | How it is checked | State |
 |---|---|---|
-| No duplicate codes | Database check | **Fails**: 17 codes exist in two forms (such as BIO102 and BIO 102) and 176 codes are not in the standard format. B3 fixes this. |
+| No duplicate codes | Database check | **Fails** until B3 runs: 17 codes exist in two forms (such as BIO102 and BIO 102) and 176 codes are not in the standard format. The B3 script is built; its dry run on the test site tidies 159 codes, merges 9 true duplicates and leaves 8 groups for DAP ([reports/B3_code_cleanup_dry_run_test_site.md](reports/B3_code_cleanup_dry_run_test_site.md)). |
 | "GST 112" and "BU-GST 112" both exist | Database check | Passes |
 | 0-unit and sessional courses load | Database check | Passes (10 with 0 units, 106 sessional) |
 | Every programme's course list covers every level of its length | Database check | Passes in all 66 drafts |

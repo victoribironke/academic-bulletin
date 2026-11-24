@@ -111,3 +111,5 @@ updates-2-feb-2026.md
 !prisma/migrations/20261124100000_dean_opened_at/migration.sql
 !prisma/migrations/20261124110000_activity_log_cycles/
 !prisma/migrations/20261124110000_activity_log_cycles/migration.sql
+!prisma/migrations/20261124130000_course_code_unique/
+!prisma/migrations/20261124130000_course_code_unique/migration.sql

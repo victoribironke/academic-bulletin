@@ -17,6 +17,8 @@ import type { SpreadsheetRecord } from "@/lib/imports/spreadsheet";
 import { recordActivity } from "@/lib/activity-log";
 import { matchProgrammeNames } from "@/lib/courses/programme-matching";
 import { loadCodeLookups, type CodeLookup } from "@/lib/units/code-aliases";
+import { courseCodeKey } from "@/lib/courses/code-key";
+import { COURSE_CODE_PATTERN } from "@/lib/validation/name-format";
 import { NOT_IN_ARCHIVED_CYCLE } from "@/lib/cycles/archive";
 import { preloadRegistryCoursesForSubmission } from "@/lib/courses/gst-pool";
 
@@ -214,7 +216,14 @@ export async function planRegistryUpload(
     return found?.id;
   };
 
-  const byCode = new Map(existing.map((course) => [course.code.toUpperCase(), course]));
+  // B3: "BIO102" and "BIO 102" are the same code, so an upload updates the
+  // course however its code was spaced (the one in the format first).
+  const byCode = new Map<string, (typeof existing)[number]>();
+  for (const course of existing) {
+    const key = courseCodeKey(course.code);
+    const held = byCode.get(key);
+    if (!held || (!COURSE_CODE_PATTERN.test(held.code) && COURSE_CODE_PATTERN.test(course.code))) byCode.set(key, course);
+  }
   const ownerIssues: RowIssue[] = [];
   const courses: PlannedCourse[] = [];
   const unmatched = new Set<string>();
@@ -251,7 +260,7 @@ export async function planRegistryUpload(
         departmentId ?? null,
         data.ownership === "SCHOOL" ? (schoolId ?? null) : null,
       );
-      const current = byCode.get(data.code.toUpperCase());
+      const current = byCode.get(courseCodeKey(data.code));
       const changes: string[] = [];
       const kept: string[] = [];
       if (current) {

@@ -202,6 +202,7 @@ footer { font-size: 0.86rem; color: var(--muted); display: grid; gap: 0.4rem; bo
           <li><span class="t">Three department names marked "to confirm"</span><span class="when">Before A5</span><span class="d">Medicine (SBMS-MED), Agriculture and Industrial Technology (SSAT-AIT), Basic and Applied Sciences (SSAT-BAS). In the note drafted for you to send.</span></li>
           <li><span class="t">Units for 14 course rows, titles for 2</span><span class="when">Before step 3</span><span class="d">13 MBBS postings and BU-PUL 120 have no units; PATH 304 and PHAR 305 have no title. Until then those 16 stay out and the rest load. Also: exemptions for ENT 322 and BU-GST 420, and which AGX 503 row to keep.</span></li>
           <li><span class="t">Registry sign-off</span><span class="when">Wed Nov 25, noon</span><span class="d">B9.</span></li>
+          <li><span class="t">Approve the course code merge report</span><span class="when">With B9</span><span class="d">B3: 159 codes only gain a space and 9 true duplicates merge; DAP decides 8 pairs whose titles or units differ (CHM 107, IDF 305, AGE 401 and five PHY codes). Launch test 10 passes once it runs.</span></li>
           <li><span class="t">Launch pack</span><span class="when">Wed Nov 25</span><span class="d">H2: two-page guide (with the authenticator set-up in three screenshots), 10-minute video, launch session on Thursday, WhatsApp help group.</span></li>
           <li><span class="t">Launch-week help desk</span><span class="when">Nov 26 to Dec 4</span><span class="d">O2: a named officer on call 8:00 am to 5:00 pm.</span></li>
           <li><span class="t">A test inbox for the test site</span><span class="when">Any time</span><span class="d">A1. Until then the test site sends no email at all.</span></li>
@@ -227,7 +228,6 @@ footer { font-size: 0.86rem; color: var(--muted); display: grid; gap: 0.4rem; bo
         <ul class="plain">
           <li><span class="t">Dry-run the stored-title tidy on the test site</span><span class="when me">Before Wed</span><span class="d">B4, ahead of step 4.</span></li>
           <li><span class="t">Babcock courses first in the course picker</span><span class="when me">R0 can follow</span><span class="d">B5.</span></li>
-          <li><span class="t">Course code clean-up and a merge report for DAP</span><span class="when me">R0 can follow</span><span class="d">B3: 176 codes without a space, and 17 codes that exist in two forms (such as BIO102 and BIO 102). Launch test 10 fails until this is done.</span></li>
         </ul>
       </div>
     </div>
@@ -310,7 +310,7 @@ const GROUPS = [
   ]},
   { key: "r0f", code: "R0+", short: "By Wed, Dec 2", name: "Launch: can follow", date: "By Wednesday, December 2, 2026 if not ready on November 25", sub: "Allowed to slip to R1. Anything not ready is switched off with its new date noted.", items: [
     ["A4", "Activity log per cycle, in plain names", "CODE", "live", "Every entry belongs to a cycle; the log opens on the current cycle with a cycle picker and shows names, not record IDs.", ""],
-    ["B3", "Clean up course codes", "CODE", "todo", "", "176 codes without a space and 17 codes in two forms to merge (launch test 10 fails until then); DAP approves the merge report"],
+    ["B3", "Clean up course codes", "CODE+DAP", "ready", "Script built (npm run courses:clean-codes): puts every code in the format, merges only true duplicates (same title and units) keeping every programme link and draft row, and sends the rest to DAP. Uploads and new courses now match a code however it is spaced. Dry run on the test site (November 24): 159 codes tidied, 9 duplicates merged, 8 groups for DAP (docs/golive/reports/B3_code_cleanup_dry_run_test_site.md).", "DAP approves the merge report and decides the 8 groups; then the run on live (your yes) and the database rule", true],
     ["B4", "Title casing", "CODE", "partly", "Live: acronyms and Roman numerals kept, typed codes removed from new titles and uploads.", "Stored titles: script ready; dry run on the test site, then your yes", true],
     ["B5", "Show Babcock courses first", "CODE", "todo", "", ""],
     ["B8", "Registry completeness report", "CODE", "live", "Records > Registry Report with a spreadsheet download; builds in 0.2 seconds on live.", ""],
