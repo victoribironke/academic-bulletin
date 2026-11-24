@@ -1,7 +1,7 @@
 # Launch checks (database side)
 
 - Database: roundhouse.proxy.rlwy.net
-- When: 2026-11-24T10:04:57.196Z
+- When: 2026-11-24T12:17:49.136Z
 - 16 passed, 1 failed, 2 not yet due (a later release)
 
 | Result | Test | Check | Detail |
@@ -12,7 +12,7 @@
 | PASS | 7 | During the Christmas break the countdown runs and the break is loaded (no working days) | 38 days left; 24 working days left; break loaded |
 | NOT YET | 7 | Nothing is sent during the break | The reminder agent (T3) comes in R1; today the daily job sends only invitations. |
 | PASS | 7 | A department extension to February 11, 2027 takes precedence | 6 days left; Extended to Thursday, February 11, 2027 |
-| FAIL | 10 | No duplicate codes | 17 codes exist in two forms (BIO102 / BIO 102; CHM107 / CHM 107; GST112 / GST 112; ENT211 / ENT 211; FIN209 / FIN 209; ...); 176 codes not in the standard format. Fixed by B3. |
+| FAIL | 10 | No duplicate codes | 8 codes exist in two forms (CHM107 / CHM 107; IDF 305 / IDF305; PHY 316 / PHY316; PHY 325 / PHY325; AGE 401 / AGE401; ...); 8 codes not in the standard format. These are the groups in the B3 merge report, waiting for DAP's decision. |
 | PASS | 10 | "GST 112" and "BU-GST 112" both exist | GST 112 Nigerian Peoples and Culture; BU-GST 112 Health Principles |
 | PASS | 10 | 0-unit and sessional courses are in the Registry | 10 with 0 units; 106 sessional |
 | PASS | 10 | Every programme's course list covers every level of its length (66 drafts in 2027-2031 Bulletin Development Cycle (rehearsal 2)) | All levels covered. |

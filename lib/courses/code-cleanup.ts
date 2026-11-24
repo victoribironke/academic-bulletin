@@ -244,13 +244,12 @@ const isEmpty = (value: unknown) =>
 
 /** Moves everything from `fromId` onto `keepId`, archives `fromId` and deletes it. */
 async function mergeInto(tx: Prisma.TransactionClient, keepId: string, fromId: string, code: string, actorId: string) {
-  const [keep, from] = await Promise.all([
-    tx.masterCourse.findUniqueOrThrow({ where: { id: keepId }, include: { programmeLinks: true } }),
-    tx.masterCourse.findUniqueOrThrow({
-      where: { id: fromId },
-      include: { programmeLinks: true, prerequisites: { select: { id: true } }, prerequisiteOf: { select: { id: true } } },
-    }),
-  ]);
+  // One query at a time: a transaction has a single connection.
+  const keep = await tx.masterCourse.findUniqueOrThrow({ where: { id: keepId }, include: { programmeLinks: true } });
+  const from = await tx.masterCourse.findUniqueOrThrow({
+    where: { id: fromId },
+    include: { programmeLinks: true, prerequisites: { select: { id: true } }, prerequisiteOf: { select: { id: true } } },
+  });
 
   // Programme links: move them, or fold their overrides into the kept link.
   const keptLinks = new Map(keep.programmeLinks.map((link) => [link.programmeId, link]));

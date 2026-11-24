@@ -32,7 +32,7 @@ DATABASE_URL_FILE=<file holding the database URL> npm run launch:check -- --repo
 Run it on the test site now, and on the live site after A3. The latest result
 on the test site (November 24, 2026) is in
 [reports/LAUNCH_checks_test_site.md](reports/LAUNCH_checks_test_site.md):
-16 pass, 1 fails (test 10, duplicate codes, fixed by B3), 2 not yet.
+16 pass, 1 fails (test 10: the 8 code pairs waiting for DAP), 2 not yet.
 
 ## Test by test
 
@@ -88,7 +88,7 @@ site: its Head sees "Extended to Thursday, February 11, 2027".
 
 | Part | How it is checked | State |
 |---|---|---|
-| No duplicate codes | Database check | **Fails** until B3 runs: 17 codes exist in two forms (such as BIO102 and BIO 102) and 176 codes are not in the standard format. The B3 script is built; its dry run on the test site tidies 159 codes, merges 9 true duplicates and leaves 8 groups for DAP ([reports/B3_code_cleanup_dry_run_test_site.md](reports/B3_code_cleanup_dry_run_test_site.md)). |
+| No duplicate codes | Database check | **Fails** only on the 8 pairs waiting for DAP: B3 ran on the test site on November 24 (159 codes tidied, 9 duplicates merged; [reports/B3_code_cleanup_applied_test_site.md](reports/B3_code_cleanup_applied_test_site.md)). Passes once DAP decides the 8 pairs and B3 runs again. |
 | "GST 112" and "BU-GST 112" both exist | Database check | Passes |
 | 0-unit and sessional courses load | Database check | Passes (10 with 0 units, 106 sessional) |
 | Every programme's course list covers every level of its length | Database check | Passes in all 66 drafts |

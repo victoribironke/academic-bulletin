@@ -102,7 +102,7 @@ async function main() {
     const duplicates = [...byKey.values()].filter((codes) => codes.length > 1);
     const offFormat = masters.filter((course) => !COURSE_CODE_PATTERN.test(course.code));
     record("10", "No duplicate codes", duplicates.length === 0,
-      `${duplicates.length} codes exist in two forms (${duplicates.slice(0, 5).map((codes) => codes.join(" / ")).join("; ")}${duplicates.length > 5 ? "; ..." : ""}); ${offFormat.length} codes not in the standard format. Fixed by B3.`);
+      `${duplicates.length} codes exist in two forms (${duplicates.slice(0, 5).map((codes) => codes.join(" / ")).join("; ")}${duplicates.length > 5 ? "; ..." : ""}); ${offFormat.length} codes not in the standard format. ${duplicates.length > 0 && duplicates.length === offFormat.length ? "These are the groups in the B3 merge report, waiting for DAP's decision." : "Run B3 (npm run courses:clean-codes)."}`);
     const codes = new Set(masters.map((course) => course.code));
     record("10", '"GST 112" and "BU-GST 112" both exist', codes.has("GST 112") && codes.has("BU-GST 112"),
       masters.filter((course) => ["GST 112", "BU-GST 112"].includes(course.code)).map((course) => `${course.code} ${course.title}`).join("; ") || "missing");
