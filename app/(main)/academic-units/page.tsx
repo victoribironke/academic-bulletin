@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { UrlSearchTerm } from "@/components/shared/url-search-term";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableToolbar } from "@/components/shared/table-toolbar";
 import { EmptyState, TableSkeleton } from "@/components/shared/states";
@@ -537,6 +538,9 @@ export default function AcademicUnitsPage() {
 
   return (
     <div className="space-y-4">
+      <Suspense fallback={null}>
+        <UrlSearchTerm onTerm={setSearch} />
+      </Suspense>
       <PageHeader
         title="Academic Units"
         description="Schools, their departments, and each department's programmes."

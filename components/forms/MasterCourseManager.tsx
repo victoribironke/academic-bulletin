@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { UrlSearchTerm } from "@/components/shared/url-search-term";
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useUser } from "@/contexts/user-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -718,6 +719,9 @@ export function MasterCourseManager({
 
   return (
     <div className="space-y-4">
+      <Suspense fallback={null}>
+        <UrlSearchTerm onTerm={setSearch} />
+      </Suspense>
       <TableToolbar
         search={search}
         onSearchChange={(value) => {

@@ -1,5 +1,6 @@
 "use client";
 
+import { SearchCommand } from "@/components/layout/search-command";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment } from "react";
@@ -94,7 +95,9 @@ export function SiteHeader() {
             })}
           </BreadcrumbList>
         </Breadcrumb>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          {/* K4: search everything, or press Ctrl or Cmd + K. */}
+          <SearchCommand />
           <HelpButton />
         </div>
       </div>

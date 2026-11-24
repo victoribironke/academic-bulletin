@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { UrlSearchTerm } from "@/components/shared/url-search-term";
+import { useState, useEffect, Suspense } from "react";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableCard, TableToolbar } from "@/components/shared/table-toolbar";
 import { EmptyState, TableSkeleton } from "@/components/shared/states";
@@ -403,6 +404,9 @@ export default function StaffPage() {
 
   return (
     <div className="space-y-4">
+      <Suspense fallback={null}>
+        <UrlSearchTerm onTerm={setSearchTerm} />
+      </Suspense>
       <PageHeader
         title="Staff Directory"
         description={

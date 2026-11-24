@@ -1,0 +1,27 @@
+{
+  "entities": {
+    "course": {
+      "label": "Courses",
+      "fields": { "code": { "weight": "A", "normalise": "courseCode" }, "title": { "weight": "A" }, "summary": { "weight": "B" }, "courseContent": { "weight": "C" }, "learningOutcomes": { "weight": "D" } },
+      "filters": ["level", "semester", "type", "ownership", "ownerDepartment", "programme", "curriculumSource", "hasDescription"],
+      "visibleTo": "ALL_SIGNED_IN"
+    },
+    "programme": { "label": "Programmes", "fields": { "name": { "weight": "A" }, "code": { "weight": "A" }, "department": { "weight": "B" } }, "filters": ["school", "department", "degreeType"], "visibleTo": "ALL_SIGNED_IN" },
+    "department": { "label": "Departments", "fields": { "name": { "weight": "A" }, "code": { "weight": "A" }, "school": { "weight": "B" } }, "filters": ["school"], "visibleTo": "ALL_SIGNED_IN" },
+    "school": { "label": "Schools", "fields": { "name": { "weight": "A" }, "code": { "weight": "A" } }, "filters": [], "visibleTo": "ALL_SIGNED_IN" },
+    "person": { "label": "People", "fields": { "name": { "weight": "A" }, "specialisation": { "weight": "B" }, "department": { "weight": "C" } }, "filters": ["department", "rank"], "visibleTo": "ALL_SIGNED_IN" },
+    "policySection": { "label": "Policy sections", "fields": { "heading": { "weight": "A" }, "text": { "weight": "C" } }, "filters": [], "visibleTo": "ALL_SIGNED_IN" }
+  },
+  "codeNormalisation": { "pattern": "^(BU)?[\\s-]*([A-Z]{2,5})[\\s-]*(\\d{3}[A-Z]?)$", "format": "{bu?BU-}{prefix} {number}" },
+  "unitCodeAliases": { "SEH": "JSEH", "SES": "SESC", "SMS": "SMSC", "SNS": "SNSC", "SOC": "SOCO", "SOE": "SOEN", "SST": "SSAT", "VASS": "VSSS", "SAHS-HND": "SAHS-NUT", "SBMS-PHY": "SBMS-PIO" },
+  "synonyms": [
+    ["GST", "GNS", "general studies", "general education", "GEDS"],
+    ["intro", "introduction"],
+    ["maths", "mathematics"],
+    ["stats", "statistics"],
+    ["comp sci", "computer science"],
+    ["SIWES", "industrial training", "internship"]
+  ],
+  "ranking": ["exactCode", "codePrefix", "title", "body"],
+  "limits": { "perGroup": 20, "debounceMs": 150, "minTypoLength": 4, "refreshSeconds": 30 }
+}

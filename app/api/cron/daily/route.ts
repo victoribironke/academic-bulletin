@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { sendDailyDigests } from "@/lib/email/notifications";
+import { isMissingSearchTable, refreshSearchIndex } from "@/lib/search/sync";
 import { processPendingGraceAssessments } from "@/lib/courses/grace-compliance";
 import { pruneRateLimits } from "@/lib/rate-limit";
 import { sendDueInvitations } from "@/lib/people/invitations";
@@ -72,6 +73,16 @@ export async function GET(request: NextRequest) {
     console.error("Daily digest failed:", error);
   }
 
+  // K1: rebuild the search table in full once a day (searches refresh what
+  // changed in between). Not counted against "ok": search can wait a day.
+  let search: Record<string, unknown> = { ok: false };
+  try {
+    search = { ok: true, ...(await refreshSearchIndex({ full: true })) };
+  } catch (error) {
+    search = { ok: false, switchedOn: !isMissingSearchTable(error) };
+    if (!isMissingSearchTable(error)) console.error("Search refresh failed:", error);
+  }
+
   // Work through the GRACE backlog in batches: bulletins that can still be
   // submitted first, then everything else, stopping well before the time limit.
   let grace: Record<string, unknown> = { ok: false };
@@ -95,7 +106,7 @@ export async function GET(request: NextRequest) {
 
   const ok = keepAlive.ok && digest.ok === true && grace.ok === true && invitations.ok === true;
   return NextResponse.json(
-    { ok, keepAlive, invitations, digest, grace, at: new Date().toISOString() },
+    { ok, keepAlive, invitations, digest, grace, search, at: new Date().toISOString() },
     { status: ok ? 200 : 500 },
   );
 }
