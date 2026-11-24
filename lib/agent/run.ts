@@ -32,6 +32,8 @@ const watMinutes = (now: Date) => {
   return wat.getUTCHours() * 60 + wat.getUTCMinutes();
 };
 const dateOnly = (key: DateKey) => new Date(`${key}T00:00:00.000Z`);
+/** Messages written at the same time when preparing the day. */
+const PREPARE_AT_ONCE = 8;
 
 export type AgentControls = { sending: boolean; pausedAll: boolean; pausedDesks: Set<string> };
 
@@ -185,8 +187,7 @@ export async function prepareDay(date: DateKey, options: { useAi?: boolean } = {
     (await prisma.agentMessage.findMany({ where: { forDate: dateOnly(date) }, select: { deskKey: true } })).map((row) => row.deskKey),
   );
   let prepared = 0;
-  for (const item of planned) {
-    if (existing.has(item.facts.deskKey)) continue;
+  const writeOne = async (item: PlannedDesk) => {
     const written = await writeMessage(item.facts, item.decision, { useAi: options.useAi });
     await prisma.agentMessage.create({
       data: {
@@ -201,9 +202,23 @@ export async function prepareDay(date: DateKey, options: { useAi?: boolean } = {
         facts: JSON.parse(JSON.stringify({ ...item.facts, cc: item.cc })),
         writtenBy: written.writtenBy,
       },
-    });
-    prepared += 1;
-  }
+    }).then(
+      () => {
+        prepared += 1;
+      },
+      (error: unknown) => {
+        // Another run prepared this desk's message first: one a day is kept.
+        if ((error as { code?: string })?.code !== "P2002") throw error;
+      },
+    );
+  };
+  // Several desks at a time, so 60 Heads take seconds, not minutes, even
+  // when the AI takes its full 10 seconds for some.
+  const queue = planned.filter((item) => !existing.has(item.facts.deskKey));
+  const workers = Array.from({ length: Math.min(PREPARE_AT_ONCE, queue.length) }, async () => {
+    for (let item = queue.shift(); item; item = queue.shift()) await writeOne(item);
+  });
+  await Promise.all(workers);
   if (prepared > 0) {
     await recordActivity({
       action: "AGENT_PREPARED",
