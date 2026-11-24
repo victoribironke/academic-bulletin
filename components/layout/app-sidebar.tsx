@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Archive,
+  Inbox,
   BookOpen,
   CalendarClock,
   ChevronsUpDown,
@@ -143,6 +144,12 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/activity-log",
         icon: ScrollText,
         permission: "view:audit",
+      },
+      {
+        title: "Course Requests",
+        href: "/course-requests",
+        icon: Inbox,
+        roles: ["ADMIN", "SUPER_ADMIN"],
       },
       {
         title: "Archive",

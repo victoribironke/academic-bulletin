@@ -42,7 +42,7 @@ on the test site (November 24, 2026) is in
 |---|---|---|
 | On Thursday, November 26, 2026 the home page shows "70 days left" and "CP1 in 15 days" | Database check, and by a person with the pretend clock | Passes on the test site |
 | Sign in from the invitation, with the authenticator, in under 5 minutes | A person on the test site | Waiting for the test site's Google sign-in address |
-| Confirm the course list | B10 | R1 |
+| Confirm the course list | B10, automatic tests | Built; switched on once its database update runs on the site |
 | Assign courses to two lecturers | G2 | R2 |
 | Turn the readiness panel green | F2 | R2 |
 | Submit on Monday, December 14, 2026 | Automatic tests (F0); by a person with the pretend clock | Submit is refused before December 14 |

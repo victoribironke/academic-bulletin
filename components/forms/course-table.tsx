@@ -47,6 +47,7 @@ import { toast } from "sonner";
 import { BulkImportDialog } from "@/components/imports/bulk-import-dialog";
 import { DELETE_WORD, useConfirmDelete } from "@/components/shared/typed-delete-dialog";
 import { useUser } from "@/contexts/user-context";
+import { CourseListConfirmation } from "@/components/forms/course-list-confirmation";
 import { deleteNeedsReason } from "@/lib/delete-reason";
 import { TableToolbar } from "@/components/shared/table-toolbar";
 import { TablePagination } from "@/components/shared/table-pagination";
@@ -869,6 +870,16 @@ export function CourseTable({
         )}
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* B10: the Head confirms the list, or asks DAP for a change. */}
+        <CourseListConfirmation
+          submissionId={submissionId}
+          canConfirm={
+            !disabled &&
+            (currentUser?.role === "SUPER_ADMIN" ||
+              (currentUser?.role === "HOD" && currentUser.departmentId === departmentId))
+          }
+          canAsk={!disabled}
+        />
         <Tabs value={activeLevel} onValueChange={setActiveLevel}>
           <div className="overflow-x-auto">
             <TabsList className="mb-4 w-max">

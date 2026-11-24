@@ -103,6 +103,10 @@ import { GET as listArchive } from "@/app/api/archive/route";
 import { POST as restoreArchived } from "@/app/api/archive/[id]/restore/route";
 import { DELETE as removeArchived } from "@/app/api/archive/[id]/route";
 import { DELETE as deleteCourseRows } from "@/app/api/courses/bulk/route";
+import { GET as readCourseList, POST as confirmCourseListRoute } from "@/app/api/submissions/[id]/course-list/route";
+import { POST as askCourseChange } from "@/app/api/submissions/[id]/course-list/requests/route";
+import { GET as listCourseRequests } from "@/app/api/course-change-requests/route";
+import { PATCH as answerCourseRequest } from "@/app/api/course-change-requests/[id]/route";
 import { confirmationMatches } from "@/lib/archive";
 import { GET as readStoredFile } from "@/app/api/files/[...key]/route";
 import { POST as uploadStaffPhoto } from "@/app/api/staff/[id]/image/route";
@@ -6506,3 +6510,84 @@ describe("Babcock courses first in the picker (B5)", () => {
     expect(all.map((course) => course.offered)).toEqual([true, true, false]);
   });
 });
+
+describe("Heads of Department confirm their course list (B10)", () => {
+  const cycleId = "b10-cycle";
+  const submissionId = "b10-submission";
+  const context = { params: Promise.resolve({ id: submissionId }) };
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.create({ data: { id: cycleId, name: "B10", createdById: ids.super } });
+    await prisma.submission.create({
+      data: { id: submissionId, title: "B10 Bulletin", programmeId: ids.programmeA, createdById: ids.hod, cycleId },
+    });
+    await prisma.course.create({ data: { submissionId, code: "BTC 101", title: "Confirm me", units: 2, semester: 1, level: 100 } });
+  });
+
+  afterAll(async () => {
+    await prisma.submission.deleteMany({ where: { id: submissionId } });
+    await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+  });
+
+  const read = async () => {
+    const response = await readCourseList(new Request(`http://localhost/api/submissions/${submissionId}/course-list`), context);
+    expect(response.status).toBe(200);
+    return response.json();
+  };
+
+  it("lets only the department's Head confirm, and shows who and when", async () => {
+    authState.userId = ids.coordinator;
+    expect((await confirmCourseListRoute(new Request("http://localhost", { method: "POST" }), context)).status).toBe(403);
+    authState.userId = ids.dean;
+    expect((await confirmCourseListRoute(new Request("http://localhost", { method: "POST" }), context)).status).toBe(403);
+
+    authState.userId = ids.hod;
+    expect((await read()).confirmation).toBeNull();
+    const confirmed = await confirmCourseListRoute(new Request("http://localhost", { method: "POST" }), context);
+    expect(confirmed.status).toBe(200);
+    const state = await confirmed.json();
+    expect(state.confirmation).toMatchObject({ confirmedBy: "Test Hod", courseCount: 1, changedSince: false });
+    expect(await prisma.activityLog.count({ where: { action: "COURSE_LIST_CONFIRMED", entityId: submissionId } })).toBe(1);
+
+    // A change to the list afterwards asks for a new confirmation.
+    await prisma.course.updateMany({ where: { submissionId, code: "BTC 101" }, data: { units: 3 } });
+    expect((await read()).confirmation.changedSince).toBe(true);
+  });
+
+  it("sends change requests to DAP's queue, and shows DAP's answer on the draft", async () => {
+    const ask = (body: object) =>
+      askCourseChange(
+        new Request(`http://localhost/api/submissions/${submissionId}/course-list/requests`, { method: "POST", body: JSON.stringify(body) }),
+        context,
+      );
+    authState.userId = ids.hod;
+    expect((await ask({ kind: "UNITS", details: "Should be three units." })).status).toBe(400);
+    expect((await ask({ kind: "UNITS", courseCode: "BTC 101", details: "short" })).status).toBe(400);
+    const sent = await ask({ kind: "UNITS", courseCode: "btc  101", details: "BTC 101 should be 3 units, as in 2023-2027." });
+    expect(sent.status).toBe(201);
+    const request = await sent.json();
+    expect(request).toMatchObject({ kind: "UNITS", courseCode: "BTC 101", status: "OPEN", requestedBy: "Test Hod" });
+
+    // The queue is DAP's.
+    expect((await listCourseRequests(new Request("http://localhost/api/course-change-requests"))).status).toBe(403);
+    authState.userId = ids.admin;
+    const queue = await (await listCourseRequests(new Request("http://localhost/api/course-change-requests?status=open"))).json();
+    expect(queue.find((item: { id: string }) => item.id === request.id)).toMatchObject({ status: "OPEN", submissionId });
+
+    const answer = (body: object) =>
+      answerCourseRequest(
+        new Request(`http://localhost/api/course-change-requests/${request.id}`, { method: "PATCH", body: JSON.stringify(body) }),
+        { params: Promise.resolve({ id: request.id }) },
+      );
+    expect((await answer({ status: "DECLINED" })).status).toBe(400);
+    expect((await answer({ status: "DECLINED", response: "The 2023-2027 bulletin has 2 units." })).status).toBe(200);
+
+    authState.userId = ids.hod;
+    expect((await read()).requests[0]).toMatchObject({
+      id: request.id,
+      status: "DECLINED",
+      response: "The 2023-2027 bulletin has 2 units.",
+    });
+  });
+});
+

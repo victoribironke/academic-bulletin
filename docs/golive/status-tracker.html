@@ -321,7 +321,7 @@ const GROUPS = [
   { key: "r1", code: "R1", short: "Wed, Dec 2", name: "Head of Department support", date: "Wednesday, December 2, 2026", sub: "Needed for checkpoint CP1 on December 11.", items: [
     ["B1", "Programmes matched to the national curriculum", "CODE+DAP", "todo", "", "DAP approves the list"],
     ["B6", "Who owns each course", "CODE+DAP", "todo", "The defaults for the 23 unowned courses are already filled in file 07 v2.", ""],
-    ["B10", "Heads of Department confirm their course list", "CODE", "todo", "", ""],
+    ["B10", "Heads of Department confirm their course list", "CODE", "ready", "Built: on Course Structure the Head confirms the list (who and when are shown, and a later change asks for a new confirmation) or asks DAP for a change; DAP answers in Administration, Course Requests, and the Head sees the answer on the draft. Hidden until its database update runs (migration 20261124140000_course_list_confirmation).", "The database update on the test site and on live (your yes, with a backup first)", true],
     ["B14", "Programme-specific course settings", "CODE", "partly", "A programme can already keep its own units and semester for a shared course.", "Level and core or elective per programme; load the 83 values in file 09"],
     ["B18", "Course lists for the 18 new programmes", "CODE+DAP", "todo", "", "DAP's curriculum documents, by Friday, November 27"],
     ["C4", "Calendar settings screen", "CODE", "todo", "", ""],

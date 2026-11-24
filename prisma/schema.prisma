@@ -357,6 +357,9 @@ model User {
   phaseTransitions     PhaseTransition[]
   // Comments made by this user
   comments             Comment[]
+  courseListConfirmations CourseListConfirmation[]
+  courseChangeRequests    CourseChangeRequest[]    @relation("CourseChangeRequester")
+  courseChangesResolved   CourseChangeRequest[]    @relation("CourseChangeResolver")
   // Cycles created by this admin
   reviewCycles         ReviewCycle[]
   programmeAssignments UserProgramme[]
@@ -512,6 +515,8 @@ model Submission {
   comments           Comment[]
   courses            Course[]
   courseDescriptions CourseDescription[]
+  courseListConfirmation CourseListConfirmation?
+  courseChangeRequests   CourseChangeRequest[]
 
   @@unique([programmeId, cycleId])
   @@map("submissions")
@@ -937,3 +942,50 @@ model PolicyVersion {
   @@index([createdAt])
   @@map("policy_versions")
 }
+
+// ============================================================================
+// COURSE LIST CONFIRMATION AND CHANGE REQUESTS (task B10)
+// ============================================================================
+
+/// The Head of Department confirmed the programme's course list (B10). The
+/// fingerprint of the list at that moment shows when it changed afterwards.
+model CourseListConfirmation {
+  id            String   @id @default(cuid())
+  submissionId  String   @unique
+  confirmedById String
+  confirmedAt   DateTime @default(now())
+  courseCount   Int
+  fingerprint   String
+
+  submission  Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  confirmedBy User       @relation(fields: [confirmedById], references: [id], onDelete: Restrict)
+
+  @@map("course_list_confirmations")
+}
+
+/// A Head of Department asks DAP to change the course list: add or remove a
+/// course, or change its units or semester (B10). DAP's queue lists them.
+model CourseChangeRequest {
+  id            String    @id @default(cuid())
+  submissionId  String
+  // ADD, REMOVE, UNITS, SEMESTER or OTHER
+  kind          String
+  courseCode    String?
+  details       String
+  // OPEN, DONE or DECLINED
+  status        String    @default("OPEN")
+  response      String?
+  requestedById String
+  requestedAt   DateTime  @default(now())
+  resolvedById  String?
+  resolvedAt    DateTime?
+
+  submission  Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  requestedBy User       @relation("CourseChangeRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  resolvedBy  User?      @relation("CourseChangeResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([status, requestedAt])
+  @@index([submissionId])
+  @@map("course_change_requests")
+}
+
