@@ -24,6 +24,7 @@
     "cycles:open": "tsx scripts/open-cycle.ts",
     "courses:prefill": "tsx scripts/prefill-course-structures.ts",
     "courses:tidy-titles": "tsx scripts/tidy-course-titles.ts",
+    "registry:upload": "tsx scripts/upload-registry.ts",
     "people:import-roster": "tsx scripts/import-roster.ts",
     "db:seed": "bun run prisma/seed.ts",
     "db:seed-units": "bun run scripts/seed-platform.ts",

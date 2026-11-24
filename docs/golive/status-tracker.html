@@ -1,0 +1,560 @@
+<title>ABRS Go-Live Tracker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: one reading column; release strip on top, then "before Thursday", the launch checklist, and every task grouped by release. */
+:root {
+  --bg: #f5f6f8; --surface: #ffffff; --ink: #17202b; --muted: #596475; --line: #dce1e9; --accent: #1d4f91; --accent-soft: #e6eef9;
+  --live: #1c7347; --live-bg: #e1f2e8;
+  --ready: #1b5bb0; --ready-bg: #e3edfa;
+  --partly: #8f5500; --partly-bg: #fbeed6;
+  --todo: #596475; --todo-bg: #eceff4;
+  --dap: #67399c; --dap-bg: #eee5f8;
+  --you: #a8261b; --you-bg: #fce9e7;
+  --font-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e131a; --surface: #151c26; --ink: #e5eaf1; --muted: #9ba6b6; --line: #29323f; --accent: #86b4ff; --accent-soft: #1a2a42;
+  --live: #63d39c; --live-bg: #14372a; --ready: #8db9ff; --ready-bg: #172e4d; --partly: #f1b85c; --partly-bg: #3a2a10;
+  --todo: #a5afbd; --todo-bg: #212a36; --dap: #c7a6f6; --dap-bg: #2d2142; --you: #ff8f86; --you-bg: #3d1c1a; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0e131a; --surface: #151c26; --ink: #e5eaf1; --muted: #9ba6b6; --line: #29323f; --accent: #86b4ff; --accent-soft: #1a2a42;
+  --live: #63d39c; --live-bg: #14372a; --ready: #8db9ff; --ready-bg: #172e4d; --partly: #f1b85c; --partly-bg: #3a2a10;
+  --todo: #a5afbd; --todo-bg: #212a36; --dap: #c7a6f6; --dap-bg: #2d2142; --you: #ff8f86; --you-bg: #3d1c1a; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font-body); margin: 0; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 2rem 4rem; display: grid; gap: 2.5rem; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.2; }
+h1 { font-size: clamp(1.7rem, 4vw, 2.3rem); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.35rem; font-weight: 600; }
+h3 { font-size: 1.02rem; font-weight: 600; }
+p { margin: 0; }
+a { color: var(--accent); }
+a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.muted { color: var(--muted); }
+.mono { font-family: var(--font-mono); }
+.eyebrow { font: 600 0.72rem/1 var(--font-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+section { display: grid; gap: 1rem; min-width: 0; }
+.section-head { display: grid; gap: 0.35rem; }
+.section-head p { max-width: 68ch; }
+
+/* Header */
+.top { display: grid; gap: 0.9rem; }
+.top .lede { max-width: 66ch; color: var(--muted); font-size: 1.02rem; }
+.meta { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; align-items: center; font-size: 0.88rem; color: var(--muted); }
+.deadline { display: inline-flex; gap: 0.5rem; align-items: baseline; background: var(--accent-soft); color: var(--ink); border-radius: 999px; padding: 0.3rem 0.85rem; font-weight: 500; }
+.deadline strong { font-family: var(--font-display); color: var(--accent); font-variant-numeric: tabular-nums; }
+
+/* Legend and pills */
+.legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1.1rem; font-size: 0.86rem; color: var(--muted); }
+.legend span { display: inline-flex; gap: 0.45rem; align-items: center; }
+.pill { display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; font: 600 0.75rem/1 var(--font-body); padding: 0.32rem 0.6rem; border-radius: 999px; }
+.pill::before { content: ""; width: 0.45rem; height: 0.45rem; border-radius: 50%; background: currentColor; }
+.s-live { color: var(--live); background: var(--live-bg); }
+.s-ready { color: var(--ready); background: var(--ready-bg); }
+.s-partly { color: var(--partly); background: var(--partly-bg); }
+.s-todo { color: var(--todo); background: var(--todo-bg); }
+.s-dap { color: var(--dap); background: var(--dap-bg); }
+.you { color: var(--you); background: var(--you-bg); font: 600 0.7rem/1 var(--font-body); padding: 0.25rem 0.5rem; border-radius: 4px; white-space: nowrap; }
+
+/* Release strip */
+.releases { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.75rem; }
+.rel { display: grid; gap: 0.5rem; align-content: start; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0.85rem 0.9rem; text-decoration: none; color: inherit; }
+.rel:hover { border-color: var(--accent); }
+.rel .code { font: 600 0.8rem/1 var(--font-mono); color: var(--accent); }
+.rel .name { font-weight: 600; line-height: 1.25; }
+.rel .date { font-size: 0.8rem; color: var(--muted); }
+.rel .count { font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--todo-bg); }
+.bar i { display: block; height: 100%; }
+.bar .b-live { background: var(--live); } .bar .b-ready { background: var(--ready); } .bar .b-partly { background: var(--partly); } .bar .b-dap { background: var(--dap); }
+
+/* Before Thursday */
+.panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 1.1rem 1.15rem; display: grid; gap: 0.8rem; align-content: start; min-width: 0; }
+.panel.wide { grid-column: 1 / -1; }
+.panel > p.muted { font-size: 0.88rem; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; counter-reset: step; }
+.steps li { counter-increment: step; display: grid; grid-template-columns: 2rem 1fr; gap: 0.2rem 0.6rem; padding: 0.7rem 0; border-top: 1px solid var(--line); }
+.steps li:first-child { border-top: 0; padding-top: 0.2rem; }
+.steps li::before { content: counter(step); grid-row: span 2; font: 600 0.85rem/1 var(--font-mono); color: var(--accent); background: var(--accent-soft); width: 1.7rem; height: 1.7rem; border-radius: 50%; display: grid; place-items: center; }
+.steps .what { font-weight: 600; display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.steps .why { font-size: 0.88rem; color: var(--muted); grid-column: 2; }
+.steps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0 2rem; }
+.plain { list-style: none; margin: 0; padding: 0; display: grid; }
+.plain li { display: grid; grid-template-columns: 1fr auto; gap: 0.15rem 0.75rem; padding: 0.6rem 0; border-top: 1px solid var(--line); align-items: baseline; }
+.plain li:first-child { border-top: 0; padding-top: 0; }
+.plain .t { font-weight: 500; }
+.plain .d { font-size: 0.86rem; color: var(--muted); grid-column: 1 / -1; }
+.plain .when { font: 600 0.78rem/1.2 var(--font-body); color: var(--dap); white-space: nowrap; text-align: right; }
+.plain .when.me { color: var(--accent); }
+.plain .when.you { color: var(--you); background: none; padding: 0; }
+
+/* Checklist */
+.checklist { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.checklist li { display: grid; grid-template-columns: 1fr 9.5rem; gap: 0.25rem 1rem; padding: 0.75rem 1.1rem; border-top: 1px solid var(--line); align-items: start; }
+.checklist li:first-child { border-top: 0; }
+.checklist .item { font-weight: 500; }
+.checklist .item .mono { font-size: 0.78rem; color: var(--muted); font-weight: 500; }
+.checklist .note { font-size: 0.86rem; color: var(--muted); grid-column: 1; }
+.checklist .pill { justify-self: start; grid-row: 1; grid-column: 2; }
+
+/* Task list */
+.controls { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 0.6rem; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.chip { font: 500 0.84rem/1 var(--font-body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 0.45rem 0.8rem; cursor: pointer; display: inline-flex; gap: 0.4rem; align-items: center; }
+.chip .n { color: var(--muted); font-variant-numeric: tabular-nums; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.chip[aria-pressed="true"] .n { color: inherit; opacity: 0.75; }
+.search { flex: 1 1 200px; min-width: 0; max-width: 300px; font: 0.88rem var(--font-body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0.5rem 0.75rem; }
+.group { display: grid; gap: 0.6rem; scroll-margin-top: 4.5rem; }
+.group-head { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; align-items: baseline; justify-content: space-between; }
+.group-head .sub { font-size: 0.88rem; color: var(--muted); }
+.group-head .tally { font-size: 0.82rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rows { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.row { display: grid; grid-template-columns: 3.6rem minmax(0, 1.5fr) 8.5rem minmax(0, 1fr); gap: 0.3rem 1rem; padding: 0.75rem 1rem; border-top: 1px solid var(--line); align-items: start; }
+.row:first-child { border-top: 0; }
+.row .id { font: 600 0.86rem/1.5 var(--font-mono); color: var(--accent); }
+.row .name { font-weight: 600; line-height: 1.35; }
+.row .owner { font: 500 0.7rem/1 var(--font-body); letter-spacing: 0.05em; color: var(--muted); margin-left: 0.4rem; white-space: nowrap; }
+.row .now { font-size: 0.86rem; color: var(--muted); margin-top: 0.2rem; }
+.row .wait { font-size: 0.86rem; display: grid; gap: 0.3rem; justify-items: start; }
+.row .wait .lbl { font: 600 0.68rem/1 var(--font-body); letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+.row .status { padding-top: 0.1rem; }
+.empty { padding: 1rem; color: var(--muted); font-size: 0.9rem; }
+.hidden-note { font-size: 0.9rem; color: var(--muted); }
+footer { font-size: 0.86rem; color: var(--muted); display: grid; gap: 0.4rem; border-top: 1px solid var(--line); padding-top: 1.2rem; }
+
+@media (max-width: 760px) {
+  .row { grid-template-columns: 3.2rem minmax(0, 1fr); }
+  .row .status { grid-column: 2; }
+  .row .wait { grid-column: 2; }
+  .checklist li { grid-template-columns: 1fr; }
+  .checklist .pill { grid-row: auto; grid-column: 1; }
+}
+@media (prefers-reduced-motion: no-preference) { .rel, .chip { transition: border-color 0.15s, background 0.15s; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">Academic Bulletin Review System · DAP work order v2.1</p>
+    <h1>ABRS Go-Live Tracker</h1>
+    <p class="lede">Every task in the work order, release by release: what is live on academicplanning.app, what is built and waiting to run, and what each remaining task is waiting on.</p>
+    <div class="meta">
+      <span class="deadline">R0 launch due Wednesday, November 25, 6:00 pm WAT <strong id="countdown"></strong></span>
+      <span>Updated Monday, November 23, 2026, 11:45 pm WAT</span>
+      <span>Live code: <span class="mono">0cbdfcf</span></span>
+    </div>
+    <div class="legend" aria-label="What the statuses mean">
+      <span><b class="pill s-live">Live</b> built and working on the live site</span>
+      <span><b class="pill s-ready">Ready to run</b> built and tried on the test site; the live run waits on DAP or your yes</span>
+      <span><b class="pill s-partly">Partly done</b> some of it live</span>
+      <span><b class="pill s-todo">To do</b> not started</span>
+      <span><b class="pill s-dap">DAP's task</b> DAP does it</span>
+      <span><b class="you">Needs you</b> waits on your decision or go-ahead</span>
+    </div>
+  </header>
+
+  <section aria-labelledby="releases-h">
+    <div class="section-head">
+      <h2 id="releases-h">Releases at a glance</h2>
+      <p class="muted">Each bar shows the release's tasks and rules by status. Select a release to jump to its tasks.</p>
+    </div>
+    <div class="releases" id="releases"></div>
+  </section>
+
+  <section aria-labelledby="thursday-h">
+    <div class="section-head">
+      <h2 id="thursday-h">Before Heads of Department start on Thursday</h2>
+      <p class="muted">Almost all the R0 code is written. What is left is mostly running it on the live site, in the order below, once DAP's inputs arrive and you say yes to each step.</p>
+    </div>
+    <div class="panels">
+      <div class="panel wide">
+        <h3>Live steps, in order</h3>
+        <p class="muted">Each step changes live data, so each waits for your yes, with a fresh backup first. Every one has already run on the test site.</p>
+        <div class="steps-grid">
+          <ol class="steps">
+            <li><span class="what">Back up the live database</span><span class="why">O3. Taken before each live step, so any of them can be undone in minutes.</span></li>
+            <li><span class="what">Apply the code and name standard <span class="you">Needs you</span></span><span class="why">A5, with B15 programme lengths and the B18 records for the 18 new programmes. Waits for DAP to confirm 3 department names.</span></li>
+            <li><span class="what">Upload the rest of the course registry <span class="you">Needs you</span></span><span class="why">Files 01A parts 1 and 2 (813 Babcock courses, B16), file 07 v2 (77 rows, B17) and the 135 held-back courses in file 03 (B13). The files use the new codes, so this comes after A5. Rehearsed on the test site on November 24: 39 seconds, and a second run changes nothing.</span></li>
+            <li><span class="what">Tidy stored course titles <span class="you">Needs you</span></span><span class="why">B4. Optional before launch. Dry run on the test site first.</span></li>
+            <li><span class="what">DAP signs off the registry</span><span class="why">B9, by 12:00 noon on Wednesday. The drafts are created after it.</span></li>
+          </ol>
+          <ol class="steps" start="6" style="counter-reset: step 5">
+            <li><span class="what">Open the real cycle <span class="you">Needs you</span></span><span class="why">A3: "2027-2031 Bulletin Development Cycle", 66 drafts, the calendar (C1), pre-filled course structures with the General Education block (E1, W1), and Submit to School opening December 14 (F0).</span></li>
+            <li><span class="what">Import the roster <span class="you">Needs you</span></span><span class="why">D2, dry run first. Needs DAP's roster (D1, Tuesday noon) and A5 on live.</span></li>
+            <li><span class="what">Fill in the invitation settings <span class="you">Needs you</span></span><span class="why">D3: reply-to address, launch session and help contact. The daily job then sends the invitations by itself at 8:00 am WAT on Thursday.</span></li>
+            <li><span class="what">Remove the Gmail test accounts from live <span class="you">Needs you</span></span><span class="why">A1. The live site still has them among its 12 active users.</span></li>
+            <li><span class="what">Sign off the launch checklist</span><span class="why">Section 14 of the work order, by 6:00 pm WAT on Wednesday. Its current state is below.</span></li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Waiting on DAP</h3>
+        <ul class="plain">
+          <li><span class="t">Roster of Deans, Heads and DAP officers</span><span class="when">Tue Nov 24, noon</span><span class="d">D1. Feeds the user import (D2) and the named DAP officer in each school's help panel (H1).</span></li>
+          <li><span class="t">Three department names marked "to confirm"</span><span class="when">Before A5</span><span class="d">Medicine (SBMS-MED), Agriculture and Industrial Technology (SSAT-AIT), Basic and Applied Sciences (SSAT-BAS). In the note drafted for you to send.</span></li>
+          <li><span class="t">Units for 14 course rows, titles for 2</span><span class="when">Before step 3</span><span class="d">13 MBBS postings and BU-PUL 120 have no units; PATH 304 and PHAR 305 have no title. Until then those 16 stay out and the rest load. Also: exemptions for ENT 322 and BU-GST 420, and which AGX 503 row to keep.</span></li>
+          <li><span class="t">Registry sign-off</span><span class="when">Wed Nov 25, noon</span><span class="d">B9.</span></li>
+          <li><span class="t">Launch pack</span><span class="when">Wed Nov 25</span><span class="d">H2: two-page guide (with the authenticator set-up in three screenshots), 10-minute video, launch session on Thursday, WhatsApp help group.</span></li>
+          <li><span class="t">Launch-week help desk</span><span class="when">Nov 26 to Dec 4</span><span class="d">O2: a named officer on call 8:00 am to 5:00 pm.</span></li>
+          <li><span class="t">A test inbox for the test site</span><span class="when">Any time</span><span class="d">A1. Until then the test site sends no email at all.</span></li>
+          <li><span class="t">Curriculum documents for the 18 new programmes</span><span class="when">Fri Nov 27</span><span class="d">For their course lists in R1 (B18).</span></li>
+        </ul>
+      </div>
+
+      <div class="panel">
+        <h3>Your decisions</h3>
+        <ul class="plain">
+          <li><span class="t">Send the DAP note</span><span class="when you">Today</span><span class="d">Drafted on November 23: the 3 department names, the 14 rows without units, the two swap-ins, AGX 503.</span></li>
+          <li><span class="t">Say yes to each live step above</span><span class="when you">Tue to Wed</span><span class="d">I ask before each one, with the test-site result.</span></li>
+          <li><span class="t">Invitation settings</span><span class="when you">Before Thu 8:00 am</span><span class="d">Reply-to address, launch session time and link, help contact.</span></li>
+          <li><span class="t">Remove the Gmail test accounts from live</span><span class="when you">Before Thu</span><span class="d">A1.</span></li>
+          <li><span class="t">Add the test site's Google sign-in address</span><span class="when you">Any time</span><span class="d">In the Google Cloud console, so test accounts can sign in to the test site.</span></li>
+          <li><span class="t">Move the site and database to EU West</span><span class="when you">Your call</span><span class="d">S1. The 2-second wait is gone; the 150 ms target needs servers closer to Lagos.</span></li>
+          <li><span class="t">Two test-site clean-ups</span><span class="when you">Any time</span><span class="d">Its daily job still runs at 06:00 UTC (live runs at 07:00), and the old database volume from the restore drill can be deleted.</span></li>
+        </ul>
+      </div>
+
+      <div class="panel">
+        <h3>What I can do next without waiting</h3>
+        <ul class="plain">
+          <li><span class="t">Add a pretend clock to the test site, then run the launch tests</span><span class="when me">Next</span><span class="d">Tests 1, 2, 6, 7, 10, 16 and 17 in section 13 need a test-only "today" setting, which does not exist yet.</span></li>
+          <li><span class="t">One DELETE confirmation for several rows</span><span class="when me">Before Wed</span><span class="d">Q7 and test 16: deleting 12 course rows asks once and lists them.</span></li>
+          <li><span class="t">Dry-run the stored-title tidy on the test site</span><span class="when me">Before Wed</span><span class="d">B4, ahead of step 4.</span></li>
+          <li><span class="t">Babcock courses first in the course picker</span><span class="when me">R0 can follow</span><span class="d">B5.</span></li>
+          <li><span class="t">Course code clean-up and a merge report for DAP</span><span class="when me">R0 can follow</span><span class="d">B3: 176 codes without a space, 15 groups that become duplicates.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="checklist-h">
+    <div class="section-head">
+      <h2 id="checklist-h">Launch checklist</h2>
+      <p class="muted">Section 14 of the work order, signed off by 6:00 pm WAT on Wednesday, November 25, 2026.</p>
+    </div>
+    <ul class="checklist" id="checklist"></ul>
+  </section>
+
+  <section aria-labelledby="tasks-h" id="tasks">
+    <div class="section-head">
+      <h2 id="tasks-h">Every task, release by release</h2>
+      <p class="muted">All 112 tasks and the 18 bulletin rules (W1 to W18), each under the release the work order gives it. Four tasks are split across two releases, as the work order splits them (B18, G2, T1, U8). Filter by status or search by number or words.</p>
+    </div>
+    <div class="controls" role="toolbar" aria-label="Filter tasks">
+      <div id="chips" style="display:flex;flex-wrap:wrap;gap:0.5rem"></div>
+      <label for="q" class="eyebrow" style="position:absolute;left:-9999px">Search tasks</label>
+      <input id="q" class="search" type="search" placeholder="Search, e.g. B16 or invitations" autocomplete="off">
+    </div>
+    <div id="groups" style="display:grid;gap:2rem"></div>
+  </section>
+
+  <footer>
+    <p>Sources: the work order (package file 06, version 2.1), <span class="mono">docs/golive/IMPLEMENTATION_PLAN.md</span>, and the commits on main up to <span class="mono">0cbdfcf</span>.</p>
+    <p>This page is the single list of what is done. It is updated after each change, so chat reports can point here instead of repeating it.</p>
+  </footer>
+</div>
+
+<script>
+const STATUS = {
+  live: { label: "Live", cls: "s-live" },
+  ready: { label: "Ready to run", cls: "s-ready" },
+  partly: { label: "Partly done", cls: "s-partly" },
+  todo: { label: "To do", cls: "s-todo" },
+  dap: { label: "DAP's task", cls: "s-dap" },
+};
+
+// [id, name, owner, status, what is true now, waiting on, needs you]
+const GROUPS = [
+  { key: "r0", code: "R0", short: "Wed, Nov 25", name: "Launch: must have", date: "Wednesday, November 25, 2026, 6:00 pm WAT", sub: "No launch without these. Heads of Department start Thursday, November 26.", items: [
+    ["A1", "Test site", "CODE", "partly", "Live at academic-bulletin-staging.up.railway.app with its own database and storage, a TEST SITE banner and an email guard. The live records and photos are copied in.", "Google sign-in address for the test site (you); a DAP test inbox; Gmail test accounts removed from live (you)", true],
+    ["A2", "Archive the test cycle", "CODE", "live", "The 2026/2027 test cycle was archived on November 23 and tagged TEST. The live dashboard shows 0 drafts. Restore was tried on the test site.", ""],
+    ["A5", "Apply the code and name standard", "CODE+DAP", "ready", "Applied on the test site: 177 records changed, old codes kept as aliases, report in docs/golive/reports.", "DAP's 3 department names, then your yes", true],
+    ["A3", "Open the real cycle", "CODE", "ready", "Rehearsed on the test site: 66 drafts, the calendar loaded, 4,702 course rows pre-filled. Steps in docs/golive/A3_RUNBOOK.md.", "A5, the registry uploads and B9 on live, then your yes", true],
+    ["B2", "The 2023-2027 course lists", "CODE+DAP", "ready", "1,066 courses were uploaded on November 20. The other 956 were uploaded on the test site on November 24 with one script (npm run registry:upload), in 39 seconds; a second run changes nothing.", "A5 on live, then your yes", true],
+    ["B9", "DAP signs off the course registry", "DAP", "dap", "", "DAP, by 12:00 noon on Wednesday, November 25"],
+    ["B13", "Courses the upload template cannot hold", "CODE", "ready", "Live: 0 to 12 units, and sessional courses with no semester. 119 of the 135 held-back courses in file 03 loaded on the test site on November 24; MBBS shows 106 sessional courses.", "A5 on live; DAP: units for 14 rows, titles for PATH 304 and PHAR 305"],
+    ["B15", "Programme records that disagree with the bulletin", "CODE+DAP", "ready", "Lengths fixed (Architecture 4, Estate Management 5, Human Nutrition 5); Christian Religious Studies and International Law added hidden. Applied on the test site.", "Runs with A5 on live"],
+    ["B16", "Accept Babcock course codes", "CODE", "ready", "Live since November 23: BU- codes accepted and tidied everywhere. Files 01A parts 1 and 2 (813 courses) uploaded on the test site on November 24; BU-GST 112 and GST 112 sit side by side.", "A5 on live (the files use the new codes), then your yes"],
+    ["B17", "Different courses with the same title", "CODE", "ready", "Live: a shared title is only a warning when the code matches too. All 77 rows of file 07 v2 loaded on the test site on November 24.", "A5 on live, then your yes"],
+    ["B18", "Set up the 18 new programmes (records and drafts)", "CODE+DAP", "ready", "The 18 programmes and the Department of Dental Surgery, labelled New, applied on the test site. Their drafts come with A3.", "A5 and A3 on live"],
+    ["C1", "Calendar data", "CODE", "ready", "Calendar tables and loader built for section 4.6 (phases, checkpoints, holidays, quiet periods).", "Loads with A3"],
+    ["C2", "The countdown", "CODE", "live", "Counts in Lagos time; tested at 11:58 pm, midnight and over Christmas. Shows once the cycle's calendar is loaded.", ""],
+    ["C3", "Where countdowns appear", "CODE", "live", "Slim bar on every page, the home panel for each role, and the programme header.", ""],
+    ["D1", "Roster", "DAP", "dap", "", "DAP, by 12:00 noon on Tuesday, November 24"],
+    ["D2", "Import users in bulk", "CODE", "ready", "Import built: dry run first, babcock.edu.ng only, problems listed by sheet and row, no email sent.", "D1 roster; A5 on live; your yes", true],
+    ["D3", "Invitations and sign-in tracking", "CODE", "live", "Invitation email, resend, and a \"Not signed in yet\" filter. The live daily job runs at 8:00 am WAT, so Thursday's invitations send by themselves.", "Reply-to, launch session and help contact settings (you)", true],
+    ["D4", "Lock each phase to its owner, on the server", "CODE", "live", "Acting on a phase you do not own is an override with a 20-character reason, flagged in the log and on the programme.", ""],
+    ["D11", "Make the authenticator step painless", "CODE+DAP", "live", "Codes for every role, \"Remember this device for 30 days\", and DAP resets.", "The set-up screenshots belong in DAP's launch pack (H2)"],
+    ["E1", "Course structures in all 66 drafts", "CODE+DAP", "ready", "Pre-fill from file 02 built and rehearsed: 48 full structures, 18 new programmes with the General Education block.", "Runs with A3; DAP answers on the 14 rows, ENT 322, BU-GST 420 and AGX 503"],
+    ["F0", "Submit to School off until December 14", "CODE", "live", "The button waits for the cycle's date; A3 sets it to Monday, December 14, 2026.", ""],
+    ["G6", "Deleted rows coming back", "CODE", "live", "Fixed: removed courses stay removed.", ""],
+    ["H1", "Quick start for each role", "CODE", "live", "Help panel for Heads, coordinators, Deans and DAP in the screens' own words, with the deadline and the school's DAP officer.", "Officer names come from the roster (D1)"],
+    ["H2", "Launch pack", "DAP", "dap", "", "DAP, by Wednesday, November 25"],
+    ["H9", "Academic Policy library", "CODE+DAP", "live", "/policy with contents, search and versions; in the side menu and the help panel.", "Links from check messages come in R1"],
+    ["O2", "Launch-week help desk", "DAP", "dap", "", "DAP, Thursday, November 26 to Friday, December 4"],
+    ["O3", "A way back if something goes wrong", "CODE", "live", "Daily backups. Restore and code rollback tried on the test site on November 23 (docs/golive/ROLLBACK.md).", "A fresh backup and repeat try on November 25, per the checklist"],
+    ["Q6", "New phase names everywhere", "CODE", "live", "The work order's names on every screen and email; a test checks none of the old names remain.", ""],
+    ["Q7", "Type DELETE to confirm every delete", "CODE", "partly", "DELETE required on every delete route and control, checked by a test.", "Still to build: one confirmation for deleting several rows, and a reason when deleting another unit's row"],
+    ["S1", "Remove the 2-second wait on every page", "CODE", "partly", "The 2-second wait is gone. About 0.24 s per request remains because the servers are in the US.", "Moving to EU West for the 150 ms target (your decision)", true],
+    ["T1", "\"My desk\" panel (Heads, Deans, DAP)", "CODE", "live", "Own deadline and programmes, \"What is waiting on you\" and \"Do this next\".", "Other desks come in R1"],
+    ["W1", "Rule: General Education block", "CODE", "ready", "The block is locked, greyed and left out of progress (live). It is inserted into every draft by E1.", "Runs with A3"],
+    ["W11", "Rule: national and Babcock codes kept apart", "CODE", "live", "\"GST 112\" and \"BU-GST 112\" are separate courses (B16).", ""],
+    ["W12", "Rule: programme length by degree", "CODE", "ready", "Lengths set with B15 and B18 on the test site.", "Runs with A5"],
+    ["W17", "Rule: MBBS by Part and year", "CODE", "live", "Sessional courses with no semester are accepted (B13).", ""],
+  ]},
+  { key: "r0f", code: "R0+", short: "By Wed, Dec 2", name: "Launch: can follow", date: "By Wednesday, December 2, 2026 if not ready on November 25", sub: "Allowed to slip to R1. Anything not ready is switched off with its new date noted.", items: [
+    ["A4", "Activity log per cycle, in plain names", "CODE", "live", "Every entry belongs to a cycle; the log opens on the current cycle with a cycle picker and shows names, not record IDs.", ""],
+    ["B3", "Clean up course codes", "CODE", "todo", "", "176 codes without a space and 15 duplicate groups to merge; DAP approves the merge report"],
+    ["B4", "Title casing", "CODE", "partly", "Live: acronyms and Roman numerals kept, typed codes removed from new titles and uploads.", "Stored titles: script ready; dry run on the test site, then your yes", true],
+    ["B5", "Show Babcock courses first", "CODE", "todo", "", ""],
+    ["B8", "Registry completeness report", "CODE", "live", "Records > Registry Report with a spreadsheet download; builds in 0.2 seconds on live.", ""],
+    ["D5", "Recall, kept apart from Return", "CODE", "live", "\"Recall from the Dean\" until the Dean opens the programme; refused after, with the date.", ""],
+    ["H3", "Help button position", "CODE", "live", "Help sits in the top bar on every page and covers nothing.", ""],
+    ["K0", "Check the registry search box", "CODE", "live", "Search runs on the server; \"gst112\" finds \"GST 112\".", ""],
+    ["Q1", "One date format", "CODE", "live", "\"November 26, 2026\" in Lagos time on screens, emails and exports.", ""],
+    ["Q2", "Tables on smaller screens", "CODE", "live", "The programmes and activity tables size their columns to their own width; Status stays visible.", ""],
+  ]},
+  { key: "r1", code: "R1", short: "Wed, Dec 2", name: "Head of Department support", date: "Wednesday, December 2, 2026", sub: "Needed for checkpoint CP1 on December 11.", items: [
+    ["B1", "Programmes matched to the national curriculum", "CODE+DAP", "todo", "", "DAP approves the list"],
+    ["B6", "Who owns each course", "CODE+DAP", "todo", "The defaults for the 23 unowned courses are already filled in file 07 v2.", ""],
+    ["B10", "Heads of Department confirm their course list", "CODE", "todo", "", ""],
+    ["B14", "Programme-specific course settings", "CODE", "partly", "A programme can already keep its own units and semester for a shared course.", "Level and core or elective per programme; load the 83 values in file 09"],
+    ["B18", "Course lists for the 18 new programmes", "CODE+DAP", "todo", "", "DAP's curriculum documents, by Friday, November 27"],
+    ["C4", "Calendar settings screen", "CODE", "todo", "", ""],
+    ["C6", "What happens at a deadline", "CODE", "todo", "", ""],
+    ["D9", "General Education desk", "CODE+DAP", "todo", "", ""],
+    ["E2", "Narrative sections filled in", "CODE+DAP", "todo", "", ""],
+    ["E3", "Compare with 2023-2027", "CODE", "todo", "", ""],
+    ["G1", "Head of Department home page", "CODE", "partly", "\"My desk\" and the countdown are on the home page (T1, C3).", "Programme cards with honest progress; \"Continue where I stopped\""],
+    ["G2", "Programme coordinators", "CODE", "partly", "The programme coordinator role exists and imports with the roster.", "Check it against the work order's rules for coordinators"],
+    ["G4", "Ticks in the section list", "CODE", "todo", "", ""],
+    ["G5", "Honest progress", "CODE", "partly", "General Education rows never count as the Head's progress.", "Pre-filled rows count only once the Head confirms them"],
+    ["H4", "Help under each field", "CODE+DAP", "todo", "", "DAP picks the example programmes"],
+    ["H6", "Ask DAP", "CODE", "todo", "", ""],
+    ["H8", "Clinics", "CODE+DAP", "todo", "", ""],
+    ["K1", "One search table", "CODE", "todo", "", ""],
+    ["K2", "Search settings file", "CODE", "todo", "", ""],
+    ["K3", "Forgiving course codes and synonyms", "CODE", "partly", "\"gst112\" finds \"GST 112\" in the registry search (K0).", "Synonyms, \"bu eco 125\", old unit codes"],
+    ["K4", "Search box and command palette", "CODE", "todo", "", ""],
+    ["K6", "Only what you may see", "CODE", "partly", "Lists are already scoped by role, school and department on the server.", "Search itself comes with K1"],
+    ["Q3", "Readable activity log", "CODE", "partly", "Names instead of record IDs, done with A4.", "Remove \"Click Add Row\" text from read-only screens"],
+    ["S2", "Load each programme once", "CODE", "todo", "", ""],
+    ["T1", "\"My desk\" for every other desk", "CODE", "todo", "Heads, Deans and DAP have it (R0).", ""],
+    ["T2", "Desk status", "CODE", "todo", "", ""],
+    ["T3", "Reminder agent", "CODE", "todo", "", "DAP checks 20 sample messages"],
+    ["T4", "Raising concerns to supervisors", "CODE", "todo", "", ""],
+    ["T5", "DAP stays in charge of the agent", "CODE", "todo", "", ""],
+    ["T6", "Agent safe by design", "CODE", "todo", "", ""],
+    ["U1", "Plain words on every screen", "CODE+DAP", "todo", "", ""],
+    ["U6", "Welcome tour and practice programme", "CODE", "todo", "", ""],
+    ["U7", "Helpful messages and empty screens", "CODE", "todo", "", ""],
+    ["U8", "Test with real people", "DAP+CODE", "dap", "", "Sessions Monday, November 30 to Tuesday, December 1 (and December 8 to 9 before R2)"],
+    ["W13", "Rule: university-wide admission wording", "CODE", "todo", "", "With E2"],
+    ["W14", "Rule: same page order for every programme", "CODE", "todo", "", ""],
+    ["W16", "Rule: shared courses", "CODE", "todo", "", "With B14"],
+    ["W18", "Rule: programmes with options", "CODE", "todo", "", ""],
+  ]},
+  { key: "r2", code: "R2", short: "Fri, Dec 11", name: "Quality checks", date: "Friday, December 11, 2026", sub: "Submissions open on Monday, December 14.", items: [
+    ["B11", "Fill the missing descriptions", "CODE+DAP", "todo", "", ""],
+    ["E4", "Shared facts entered once", "CODE+DAP", "todo", "", ""],
+    ["F1", "Rules engine", "CODE", "todo", "Basic Submit checks exist today (units, required fields, CGPA range).", ""],
+    ["F2", "Readiness panel", "CODE", "todo", "", ""],
+    ["F3", "Firm gates", "CODE", "todo", "", ""],
+    ["F4", "GRACE gate", "CODE+DAP", "partly", "The GRACE gate at Submit and at every approval is live, with a logged override.", "DAP exemptions with a reason; General Education checked at its own desk"],
+    ["F6", "Credit arithmetic from the Academic Policy", "CODE+DAP", "todo", "", ""],
+    ["G2", "Lecturer accounts", "CODE", "todo", "", ""],
+    ["G3", "One way to save", "CODE", "todo", "", ""],
+    ["G7", "Comments in one place", "CODE", "todo", "", ""],
+    ["G8", "Departments with several programmes", "CODE", "todo", "", ""],
+    ["H5", "Short videos", "DAP+CODE", "dap", "", "DAP records them; they get placed in the app"],
+    ["H7", "AI helper panel", "CODE", "todo", "", ""],
+    ["K5", "Search filters", "CODE", "todo", "", ""],
+    ["Q4", "Names under photos", "CODE", "todo", "", ""],
+    ["Q5", "True-to-print preview", "CODE", "todo", "", ""],
+    ["S3", "Speed checks on every change", "CODE", "todo", "", ""],
+    ["U2", "Work is never lost", "CODE", "todo", "", ""],
+    ["U3", "Undo and the Archive", "CODE", "partly", "Deleted items go to the Archive and can be restored.", "The 10-second Undo link"],
+    ["U4", "Phones, tablets and slow connections", "CODE", "todo", "", ""],
+    ["U5", "Usable by everyone (WCAG 2.2 AA)", "CODE", "todo", "", ""],
+    ["W2", "Rule: units match contact hours", "CODE", "todo", "", ""],
+    ["W3", "Rule: electives in named groups", "CODE", "todo", "", ""],
+    ["W4", "Rule: credit summary built by the app", "CODE", "todo", "", ""],
+    ["W5", "Rule: graduation numbers written by the app", "CODE", "todo", "", ""],
+    ["W6", "Rule: CGPA of at least 2.00", "CODE", "live", "2.00 to 5.00 on save and on Submit; new drafts start at 2.00.", ""],
+    ["W7", "Rule: final-year project", "CODE", "todo", "", ""],
+    ["W8", "Rule: industrial training semesters", "CODE", "todo", "", ""],
+    ["W9", "Rule: 16 to 24 credits a semester", "CODE", "partly", "The Registry Report already flags semesters outside 16 to 24 (B8).", "The warning inside drafts; DAP's approved exceptions from file 03"],
+    ["W10", "Rule: course numbers match level and semester", "CODE", "todo", "", ""],
+    ["W15", "Rule: course description layout", "CODE", "todo", "", "With Q5"],
+  ]},
+  { key: "r3", code: "R3", short: "Fri, Jan 8, 2027", name: "Oversight", date: "Friday, January 8, 2027", sub: "Deans review as programmes arrive.", items: [
+    ["B12", "Registry changes after sign-off", "CODE", "todo", "", ""],
+    ["D6", "School Board record on approval", "CODE", "todo", "", ""],
+    ["D7", "Dean returns with a turnaround time", "CODE", "todo", "", ""],
+    ["F5", "AI consistency checks", "CODE", "todo", "", ""],
+    ["K7", "Learn from failed searches", "CODE", "todo", "", ""],
+    ["L1", "Dean's school workspace", "CODE", "todo", "", ""],
+    ["L2", "DAP control tower", "CODE", "todo", "", ""],
+    ["O1", "Dean briefing", "DAP", "dap", "", "DAP, by Friday, January 15, 2027"],
+  ]},
+  { key: "r4", code: "R4", short: "Fri, Feb 19, 2027", name: "DAP Vetting", date: "Friday, February 19, 2027", sub: "Phase 3 opens formally on February 26, 2027.", items: [
+    ["N1", "DAP vetting queues", "CODE", "todo", "", ""],
+    ["N2", "Revision requests", "CODE", "todo", "", ""],
+    ["N3", "Show only what changed", "CODE", "todo", "", ""],
+  ]},
+  { key: "r5", code: "R5", short: "Fri, Apr 9, 2027", name: "Publication", date: "Friday, April 9, 2027", sub: "Phase 5 opens on April 19, 2027.", items: [
+    ["C7", "Re-plan from the Senate date", "CODE", "todo", "", ""],
+    ["D8", "Babcock Press role", "CODE+DAP", "todo", "", ""],
+    ["D10", "Registry role for Senate", "CODE", "todo", "", ""],
+    ["N4", "Phases 6 to 10 once for the whole bulletin", "CODE", "todo", "", ""],
+    ["N5", "Bulletin generator", "CODE", "todo", "", ""],
+    ["N6", "Senate record", "CODE", "todo", "", ""],
+    ["N7", "Babcock Press workspace", "CODE", "todo", "", ""],
+    ["N8", "Digital publication record", "CODE", "todo", "", ""],
+    ["N9", "Errata and archiving", "CODE", "todo", "", ""],
+  ]},
+];
+
+// Section 14 launch checklist: [item, tasks, status, note]
+const CHECKLIST = [
+  ["Test site live; the live site has no test accounts and no test drafts in the current cycle", "A1, A2", "partly", "Test site live and test drafts archived. The Gmail test accounts are still on live."],
+  ["Codes and names match section 1.1; old codes work as aliases", "A5", "ready", "Done on the test site. Waits for DAP's 3 department names."],
+  ["Real cycle open with the section 4.6 calendar; 66 drafts created", "A3, B18", "ready", "Rehearsed on the test site."],
+  ["Registry: BU- codes accepted and 01A uploaded; file 07 v2 uploaded; held-back courses loaded; programme records fixed; DAP sign-off recorded", "B16, B17, B13, B15, B9", "partly", "The code is live, and the uploads were rehearsed on the test site on November 24. On live they come after A5; the sign-off is DAP's."],
+  ["The 48 existing drafts have full course structures, and every draft has the General Education block, locked", "E1, W1", "ready", "Rehearsed on the test site; runs with A3."],
+  ["The 18 new programmes exist with their school, department, length and New label", "B18", "ready", "Done on the test site; runs with A5."],
+  ["Heads, coordinators and Deans imported; invitations scheduled for 8:00 am WAT Thursday", "D1, D2, D3", "ready", "Import and scheduled invitations built. Waits for DAP's roster and the invitation settings."],
+  ["Authenticator set-up under 5 minutes, and DAP can reset it", "D11", "live", "To be timed in launch test 1."],
+  ["Phases locked to their owners on the server; all forbidden-action tests refused", "D4", "live", ""],
+  ["Countdowns and the basic My desk panel correct for Heads, Deans and DAP", "C1, C2, C3, T1", "ready", "Live, and they show once A3 loads the calendar."],
+  ["Submit to School switched off until December 14, 2026", "F0", "live", "The date is set when A3 opens the cycle."],
+  ["Role-specific help with named DAP officers; Academic Policy readable; launch pack ready; launch session booked", "H1, H2, H9, O2", "partly", "Help and the policy library are live. Officer names come from the roster; the launch pack and session are DAP's."],
+  ["New phase names everywhere", "Q6", "live", ""],
+  ["Every delete asks for DELETE, on screen and on the server", "Q7", "partly", "One confirmation for several rows still to build."],
+  ["The 2-second wait gone", "S1", "live", "Gone. The stricter 150 ms target needs the region move."],
+  ["Tests 1, 2, 6, 7, 10, 16 and 17 in section 13 passed on the test site", "", "todo", "Needs a pretend clock on the test site first."],
+  ["Database backup taken and the way back tried on the test site on November 25", "O3", "todo", "Tried on November 23; to repeat on the day."],
+  ["Anything from the can-follow list not ready is switched off, with its new date noted", "", "todo", "Today that is B3 and B5, and B4's stored titles."],
+];
+
+const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+const pill = (s) => el("span", "pill " + STATUS[s].cls, STATUS[s].label);
+const ORDER = ["live", "ready", "partly", "dap", "todo"];
+
+function tally(items) {
+  const t = { live: 0, ready: 0, partly: 0, todo: 0, dap: 0 };
+  items.forEach((i) => t[i[3]]++);
+  return t;
+}
+function bar(t, total) {
+  const b = el("div", "bar"); b.setAttribute("aria-hidden", "true");
+  ["live", "ready", "partly", "dap"].forEach((s) => { if (t[s]) { const i = el("i", "b-" + s); i.style.width = (100 * t[s] / total) + "%"; b.appendChild(i); } });
+  return b;
+}
+function summary(t, total) {
+  const parts = [];
+  if (t.live) parts.push(t.live + " live");
+  if (t.ready) parts.push(t.ready + " ready to run");
+  if (t.partly) parts.push(t.partly + " partly");
+  if (t.dap) parts.push(t.dap + " DAP");
+  if (t.todo) parts.push(t.todo + " to do");
+  return total + " items: " + parts.join(", ");
+}
+
+// Release strip
+const strip = document.getElementById("releases");
+GROUPS.forEach((g) => {
+  const t = tally(g.items), total = g.items.length;
+  const a = el("a", "rel"); a.href = "#" + g.key;
+  a.append(el("span", "code", g.code), el("span", "name", g.name), el("span", "date", g.short), bar(t, total), el("span", "count", (t.live) + " of " + total + " live"));
+  a.setAttribute("aria-label", g.code + " " + g.name + ": " + summary(t, total));
+  strip.appendChild(a);
+});
+
+// Checklist
+const cl = document.getElementById("checklist");
+CHECKLIST.forEach(([item, tasks, s, note]) => {
+  const li = el("li");
+  const it = el("span", "item", item + " ");
+  if (tasks) it.appendChild(el("span", "mono", "(" + tasks + ")"));
+  li.append(it, pill(s));
+  if (note) li.appendChild(el("span", "note", note));
+  cl.appendChild(li);
+});
+
+// Task groups with filters
+let filter = "all", query = "";
+const all = GROUPS.flatMap((g) => g.items);
+const FILTERS = [["all", "All", all.length], ["you", "Needs you", all.filter((i) => i[6]).length], ...ORDER.map((s) => [s, STATUS[s].label, all.filter((i) => i[3] === s).length])];
+const chips = document.getElementById("chips");
+FILTERS.forEach(([k, label, n]) => {
+  const b = el("button", "chip"); b.type = "button"; b.dataset.k = k; b.setAttribute("aria-pressed", k === filter ? "true" : "false");
+  b.append(document.createTextNode(label), el("span", "n", String(n)));
+  b.addEventListener("click", () => { filter = k; chips.querySelectorAll(".chip").forEach((c) => c.setAttribute("aria-pressed", c.dataset.k === k ? "true" : "false")); render(); });
+  chips.appendChild(b);
+});
+document.getElementById("q").addEventListener("input", (e) => { query = e.target.value.trim().toLowerCase(); render(); });
+
+function matches(i) {
+  if (filter === "you" && !i[6]) return false;
+  if (filter !== "all" && filter !== "you" && i[3] !== filter) return false;
+  if (query) return (i[0] + " " + i[1] + " " + i[2] + " " + i[4] + " " + i[5]).toLowerCase().includes(query);
+  return true;
+}
+function render() {
+  const root = document.getElementById("groups"); root.replaceChildren();
+  let shown = 0;
+  GROUPS.forEach((g) => {
+    const t = tally(g.items), total = g.items.length;
+    const sec = el("div", "group"); sec.id = g.key;
+    const head = el("div", "group-head");
+    const left = el("div"); left.style.display = "grid"; left.style.gap = "0.2rem";
+    const h = el("h3"); h.append(el("span", "mono", g.code + " "), document.createTextNode(g.name + " · " + g.date));
+    left.append(h, el("span", "sub", g.sub));
+    head.append(left, el("span", "tally", summary(t, total)));
+    sec.appendChild(head);
+    const list = el("div", "rows");
+    const items = g.items.filter(matches);
+    items.forEach((i) => {
+      const [id, name, owner, s, now, wait, you] = i;
+      const row = el("div", "row");
+      const main = el("div"); main.style.minWidth = "0";
+      const nm = el("div", "name", name); nm.appendChild(el("span", "owner", owner));
+      main.appendChild(nm);
+      if (now) main.appendChild(el("p", "now", now));
+      const st = el("div", "status"); st.appendChild(pill(s));
+      const w = el("div", "wait");
+      if (wait) { w.append(el("span", "lbl", s === "dap" ? "When" : "Waiting on"), el("span", "", wait)); }
+      if (you) w.appendChild(el("span", "you", "Needs you"));
+      row.append(el("span", "id", id), main, st, w);
+      list.appendChild(row);
+    });
+    shown += items.length;
+    if (items.length === 0) { list.appendChild(el("p", "empty", "Nothing in this release matches the filter.")); }
+    sec.appendChild(list);
+    root.appendChild(sec);
+  });
+}
+render();
+
+// Countdown to R0: 6:00 pm WAT = 17:00 UTC on November 25, 2026
+(function () {
+  const out = document.getElementById("countdown");
+  const target = Date.UTC(2026, 10, 25, 17, 0, 0);
+  function tick() {
+    const ms = target - Date.now();
+    if (ms <= 0) { out.textContent = "· due date reached"; return; }
+    const h = Math.floor(ms / 3600000), d = Math.floor(h / 24);
+    out.textContent = "· " + (d >= 1 ? d + " day" + (d > 1 ? "s " : " ") + (h % 24) + " h" : h + " h " + Math.floor((ms % 3600000) / 60000) + " min") + " left";
+  }
+  tick(); setInterval(tick, 60000);
+})();
+</script>

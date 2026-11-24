@@ -86,11 +86,27 @@ export async function parseSpreadsheetFile(
     throw new Error("Please select a CSV or Excel workbook (.csv or .xlsx).");
   }
 
-  const ExcelJS = await import("exceljs");
+  return parseSpreadsheetBuffer(await file.arrayBuffer());
+}
+
+/**
+ * Reads an .xlsx workbook's first sheet (or the named one) the way the upload
+ * screen does, so a script reads a package file exactly as an upload would.
+ */
+export async function parseSpreadsheetBuffer(
+  buffer: ArrayBuffer | Uint8Array,
+  sheetName?: string,
+): Promise<SpreadsheetRecord[]> {
+  // In the browser bundle the module has Workbook itself; in Node (scripts) it sits under default.
+  const loaded = (await import("exceljs")) as unknown as typeof import("exceljs") & { default?: typeof import("exceljs") };
+  const ExcelJS = loaded.default ?? loaded;
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load((await file.arrayBuffer()) as never);
-  const worksheet = workbook.worksheets[0];
-  if (!worksheet) return [];
+  await workbook.xlsx.load(buffer as never);
+  const worksheet = sheetName ? workbook.getWorksheet(sheetName) : workbook.worksheets[0];
+  if (!worksheet) {
+    if (sheetName) throw new Error(`The workbook has no sheet called "${sheetName}".`);
+    return [];
+  }
 
   const rows: unknown[][] = [];
   worksheet.eachRow({ includeEmpty: false }, (excelRow) => {

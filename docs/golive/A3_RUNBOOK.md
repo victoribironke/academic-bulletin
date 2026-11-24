@@ -5,7 +5,18 @@ Rehearsed on the test site on Monday, November 23, 2026 (reports in `docs/golive
 ## Before starting
 
 1. DAP has confirmed the 3 department names (SBMS-MED, SSAT-AIT, SSAT-BAS), and A5 (codes and names standard) has run on live.
-2. Registry uploads are done if possible (B2: file 01A parts 1 and 2, file 07 version 2, file 03 "Not uploaded"), so the BU- rows link to their Registry records at once. If they come later, the upload links them by code.
+2. Registry uploads are done (B2, B13, B16, B17), so the BU- rows link to their Registry records at once. Rehearsed on the test site on November 24, 2026 (39 seconds from Lagos; reports `docs/golive/reports/B2_registry_upload_*_test_site.md`):
+
+   ```
+   P="../ABRS Import Package (November 20, 2026)"
+   DATABASE_URL_FILE=<file> npm run registry:upload -- --by <admin email> \
+     --file "$P/01A_Registry_Upload_Babcock-specific_courses_part1.xlsx" \
+     --file "$P/01A_Registry_Upload_Babcock-specific_courses_part2.xlsx" \
+     --file "$P/07_Retry_after_fixes_77_skipped_rows_v2_owners_filled.xlsx" \
+     --held-back "$P/03_Exceptions_and_Conflicts.xlsx" \
+     --report docs/golive/reports/B2_registry_upload_dry_run_live.md
+   ```
+   Read the dry-run report, then run it again with `--report docs/golive/reports/B2_registry_upload_applied_live.md --confirm`. It writes nothing unless every file is clean, and a second run changes nothing. Expect 813 + 36 + 107 new courses and 41 + 12 updates; 16 held-back courses wait for DAP (14 with no units, PATH 304 and PHAR 305 with no title). BU-GEG 403 and 404 get the work order's default owner, the School of Engineering (B6).
 3. DAP has signed off the Registry (B9), and answered the E1 questions (units, the two General Education swap-ins, AGX 503). Anything still open is left out of the drafts and listed in the report.
 4. A fresh manual backup of the live database (Railway, Postgres, Backups, New backup).
 5. The test cycle is archived (A2, done November 23).
