@@ -103,6 +103,8 @@ import { GET as listArchive } from "@/app/api/archive/route";
 import { POST as restoreArchived } from "@/app/api/archive/[id]/restore/route";
 import { DELETE as removeArchived } from "@/app/api/archive/[id]/route";
 import { DELETE as deleteCourseRows } from "@/app/api/courses/bulk/route";
+import { confirmCourseList as confirmCourseListNow } from "@/lib/courses/course-list";
+import { GET as readSectionMarks } from "@/app/api/submissions/[id]/sections/route";
 import { GET as readCourseList, POST as confirmCourseListRoute } from "@/app/api/submissions/[id]/course-list/route";
 import { POST as askCourseChange } from "@/app/api/submissions/[id]/course-list/requests/route";
 import { GET as listCourseRequests } from "@/app/api/course-change-requests/route";
@@ -614,7 +616,17 @@ describe("submission progress visibility", () => {
       expect(response.status).toBe(200);
       const submissions = await response.json();
       expect(submissions).toHaveLength(1);
+      // G5: the course list counts once the Head confirms it.
       expect(submissions[0].progress).toMatchObject({
+        percentage: 88,
+        completedSections: 7,
+        totalSections: 8,
+      });
+      await confirmCourseListNow(ids.submission, ids.hod);
+      const confirmed = await (
+        await listSubmissions(new NextRequest(`http://localhost/api/submissions?cycleId=${ids.cycle}`))
+      ).json();
+      expect(confirmed[0].progress).toMatchObject({
         percentage: 100,
         completedSections: 8,
         totalSections: 8,
@@ -622,6 +634,7 @@ describe("submission progress visibility", () => {
       expect(submissions[0].content).toBeUndefined();
       expect(submissions[0].courses).toBeUndefined();
     } finally {
+      await prisma.courseListConfirmation.deleteMany({ where: { submissionId: ids.submission } });
       await prisma.courseDescription.deleteMany({ where: { courseId: course.id } });
       await prisma.course.delete({ where: { id: course.id } });
       await prisma.staff.delete({ where: { id: staff.id } });
@@ -6552,6 +6565,17 @@ describe("Heads of Department confirm their course list (B10)", () => {
     // A change to the list afterwards asks for a new confirmation.
     await prisma.course.updateMany({ where: { submissionId, code: "BTC 101" }, data: { units: 3 } });
     expect((await read()).confirmation.changedSince).toBe(true);
+  });
+
+  it("marks the course list section amber until it is confirmed again (G4, G5)", async () => {
+    authState.userId = ids.hod;
+    const marks = async () =>
+      (await (await readSectionMarks(new Request(`http://localhost/api/submissions/${submissionId}/sections`), context)).json()).marks;
+    expect((await marks()).courses).toMatchObject({ state: "check", label: "Needs checking: confirm the list" });
+    await confirmCourseListRoute(new Request("http://localhost", { method: "POST" }), context);
+    expect((await marks()).courses).toMatchObject({ state: "done" });
+    authState.userId = ids.dean;
+    expect((await readSectionMarks(new Request("http://localhost"), { params: Promise.resolve({ id: submissionId }) })).status).toBe(200);
   });
 
   it("sends change requests to DAP's queue, and shows DAP's answer on the draft", async () => {

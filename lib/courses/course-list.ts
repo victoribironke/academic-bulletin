@@ -274,3 +274,30 @@ export async function resolveChangeRequest(
     return requestView(updated);
   });
 }
+
+/**
+ * Which of these drafts have their course list confirmed and unchanged since
+ * (G5: a pre-filled list counts as done only then). Empty where the B10
+ * tables don't exist yet.
+ */
+export async function confirmedCourseLists(
+  drafts: { id: string; courses: Row[] }[],
+): Promise<Set<string>> {
+  if (drafts.length === 0) return new Set();
+  try {
+    const confirmations = await prisma.courseListConfirmation.findMany({
+      where: { submissionId: { in: drafts.map((draft) => draft.id) } },
+      select: { submissionId: true, fingerprint: true },
+    });
+    const byDraft = new Map(confirmations.map((item) => [item.submissionId, item.fingerprint]));
+    return new Set(
+      drafts
+        .filter((draft) => draft.courses.length > 0 && byDraft.get(draft.id) === courseListFingerprint(draft.courses))
+        .map((draft) => draft.id),
+    );
+  } catch (error) {
+    if (isNotSwitchedOn(error)) return new Set();
+    throw error;
+  }
+}
+

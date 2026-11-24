@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
 import { preloadGstCoursesForSubmission } from "@/lib/courses/gst-pool";
 import { calculateSubmissionProgress } from "@/lib/submissions/progress";
+import { confirmedCourseLists } from "@/lib/courses/course-list";
 import { recordActivity } from "@/lib/activity-log";
 import { TOTAL_PHASES } from "@/lib/submissions/phases";
 import { NOT_IN_ARCHIVED_CYCLE } from "@/lib/cycles/archive";
@@ -173,19 +174,20 @@ export async function GET(request: NextRequest) {
         courses: {
           select: {
             code: true,
+            units: true,
+            semester: true,
+            level: true,
+            status: true,
             masterCourse: { select: { type: true, ownership: true } },
-            description: {
-              select: {
-                courseContent: true,
-                learningOutcomes: true,
-              },
-            },
+            description: { select: { courseContent: true, learningOutcomes: true, graceStatus: true } },
           },
         },
       },
       orderBy: { updatedAt: "desc" },
     });
 
+    // G5: a pre-filled course list counts once the Head has confirmed it.
+    const confirmedLists = await confirmedCourseLists(submissions);
     return NextResponse.json(
       submissions.map((submission) => {
         const { content, courses, ...submissionFields } = submission;
@@ -205,6 +207,7 @@ export async function GET(request: NextRequest) {
               isGeneralEducation: isGeneralEducationCourse(course),
               description: course.description,
             })),
+            courseListConfirmed: confirmedLists.has(submission.id),
           }),
         };
       }),

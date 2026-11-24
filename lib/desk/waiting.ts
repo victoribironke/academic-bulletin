@@ -11,6 +11,7 @@ import prisma from "@/lib/prisma";
 import type { ApiUser } from "@/lib/api-auth";
 import { isGeneralEducationCourse } from "@/lib/courses/general-education";
 import { calculateSubmissionProgress } from "@/lib/submissions/progress";
+import { confirmedCourseLists } from "@/lib/courses/course-list";
 import { PHASE_NAMES } from "@/lib/submissions/phases";
 
 export type WaitingKind = "REVISION_REQUESTED" | "WAITING_FOR_REVIEW" | "VETTING" | "OPEN_COMMENTS" | "SECTIONS_TO_FINISH";
@@ -89,8 +90,12 @@ export async function waitingWorkFor(user: ApiUser, nowArg?: Date): Promise<Wait
         courses: {
           select: {
             code: true,
+            units: true,
+            semester: true,
+            level: true,
+            status: true,
             masterCourse: { select: { type: true, ownership: true } },
-            description: { select: { courseContent: true, learningOutcomes: true } },
+            description: { select: { courseContent: true, learningOutcomes: true, graceStatus: true } },
           },
         },
         comments: { where: { status: "OPEN" }, select: { createdAt: true }, orderBy: { createdAt: "asc" } },
@@ -98,6 +103,8 @@ export async function waitingWorkFor(user: ApiUser, nowArg?: Date): Promise<Wait
       },
     });
     const items: WaitingItem[] = [];
+    // G5: a pre-filled course list counts once the Head has confirmed it.
+    const confirmedLists = await confirmedCourseLists(drafts);
     for (const draft of drafts) {
       const programme = draft.programme.name;
       const href = `/submissions/${draft.id}`;
@@ -134,6 +141,7 @@ export async function waitingWorkFor(user: ApiUser, nowArg?: Date): Promise<Wait
           isGeneralEducation: isGeneralEducationCourse(course),
           description: course.description,
         })),
+        courseListConfirmed: confirmedLists.has(draft.id),
       });
       const unfinished = progress.sections.filter((section) => !section.complete);
       if (unfinished.length > 0) {
@@ -142,7 +150,7 @@ export async function waitingWorkFor(user: ApiUser, nowArg?: Date): Promise<Wait
             key: `${draft.id}:sections`,
             kind: "SECTIONS_TO_FINISH",
             programme,
-            text: `${unfinished.length} of ${progress.sections.length} sections to finish: ${unfinished.map((section) => section.label).join(", ")}`,
+            text: `${unfinished.length} of ${progress.sections.length} sections to finish: ${unfinished.map((section) => (section.hint ? `${section.label} (${section.hint})` : section.label)).join(", ")}`,
             href: `${href}?section=${unfinished[0].key}`,
             since: draft.createdAt,
           }),

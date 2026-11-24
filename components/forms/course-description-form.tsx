@@ -532,6 +532,8 @@ export function CourseDescriptionForm({
       // queues the saved text for a check but doesn't run one on a draft.
       if (saved.size > 0) {
         void refreshGraceProgress();
+        // G4: the section list refreshes its ticks.
+        window.dispatchEvent(new CustomEvent("bulletin:section-saved", { detail: { submissionId } }));
         setDirtyDescriptions((prev) => {
           const next = new Set(prev);
           saved.forEach((id) => next.delete(id));
@@ -545,7 +547,7 @@ export function CourseDescriptionForm({
         clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [dirtyDescriptions, descriptions, disabled, refreshGraceProgress]);
+  }, [dirtyDescriptions, descriptions, disabled, refreshGraceProgress, submissionId]);
 
   const addLearningOutcome = (courseId: string) => {
     const current = descriptions[courseId]?.learningOutcomes || [];
@@ -595,6 +597,7 @@ export function CourseDescriptionForm({
       });
       if (res.ok) {
         const savedDescription = (await res.json()) as CourseDescription;
+        window.dispatchEvent(new CustomEvent("bulletin:section-saved", { detail: { submissionId } }));
         setDescriptions((prev) => ({
           ...prev,
           [courseId]: {

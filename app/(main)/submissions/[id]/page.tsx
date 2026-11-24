@@ -1,5 +1,6 @@
 "use client";
 
+import { SectionMarkIcon, sectionMarkWords, useSectionMarks } from "@/components/submissions/section-marks";
 import { useState, useEffect, use, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -507,6 +508,12 @@ export default function SubmissionDetailPage({
     "idle" | "saving" | "saved" | "error"
   >("idle");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  // G4: the section list's marks, refreshed after a save, when comments
+  // change, and on moving to another section.
+  const sectionMarks = useSectionMarks(
+    id,
+    `${lastSavedAt?.getTime() ?? 0}:${submission?.comments.filter((c) => c.status === "OPEN").length ?? 0}:${activeSection}`,
+  );
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const deanFileRef = useRef<HTMLInputElement>(null);
   const hodFileRef = useRef<HTMLInputElement>(null);
@@ -1211,8 +1218,6 @@ export default function SubmissionDetailPage({
     </div>
   ) : null;
   const openCommentCount = submission.comments.filter((c) => c.status === "OPEN").length;
-  const commentCountFor = (key: string) =>
-    submission.comments.filter((c) => c.section === key && c.status === "OPEN").length;
 
   return (
     <div className="space-y-4">
@@ -1621,6 +1626,7 @@ export default function SubmissionDetailPage({
                 {sections.map((section, index) => (
                   <SelectItem key={section.key} value={section.key}>
                     {index + 1}. {section.title}
+                    {sectionMarkWords(sectionMarks?.[section.key])}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1630,7 +1636,6 @@ export default function SubmissionDetailPage({
             {sections.map((section, index) => {
               const Icon = section.icon;
               const active = section.key === activeSection;
-              const open = commentCountFor(section.key);
               return (
                 <li key={section.key}>
                   <button
@@ -1654,14 +1659,8 @@ export default function SubmissionDetailPage({
                     </span>
                     <Icon className="size-4 shrink-0" />
                     <span className="min-w-0 flex-1 truncate">{section.title}</span>
-                    {open > 0 && (
-                      <span
-                        className="rounded-full bg-muted px-1.5 text-[11px] font-semibold text-foreground"
-                        title={`${open} open comment${open === 1 ? "" : "s"}`}
-                      >
-                        {open}
-                      </span>
-                    )}
+                    {/* G4: a tick, an amber dot, or a red number (to fix plus open comments). */}
+                    <SectionMarkIcon mark={sectionMarks?.[section.key]} />
                   </button>
                 </li>
               );

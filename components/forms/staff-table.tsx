@@ -502,6 +502,8 @@ export function StaffTable({
         toast.success("All staff saved successfully");
         markDirty(false);
         deleteReasons.current = [];
+        // G4: the section list refreshes its ticks (staff belong to the department).
+        window.dispatchEvent(new CustomEvent("bulletin:section-saved", { detail: { departmentId } }));
       }
     } catch (error) {
       console.error("Failed to save staff:", error);

@@ -5,6 +5,8 @@ export interface SubmissionProgressSection {
   label: string;
   percentage: number;
   complete: boolean;
+  /** What finishes it, when that isn't obvious ("confirm the list"). */
+  hint?: string;
 }
 
 export interface SubmissionProgress {
@@ -39,6 +41,8 @@ interface CourseProgressData {
   description?: {
     courseContent?: string | null;
     learningOutcomes?: unknown;
+    /** G5: a description the GRACE check sent back isn't finished work. */
+    graceStatus?: string | null;
   } | null;
 }
 
@@ -66,14 +70,23 @@ function section(
   return { key, label, percentage, complete: percentage === 100 };
 }
 
+/**
+ * How far a draft is (G5, honest progress): only correct work the department
+ * owns counts. The General Education block never counts (W1); a pre-filled
+ * course list counts once the Head of Department has confirmed it (B10) and
+ * it hasn't changed since; a course description the GRACE check sent back
+ * doesn't count.
+ */
 export function calculateSubmissionProgress({
   content,
   activeStaffCount,
   courses: allCourses,
+  courseListConfirmed = false,
 }: {
   content?: SubmissionProgressContent | null;
   activeStaffCount: number;
   courses: CourseProgressData[];
+  courseListConfirmed?: boolean;
 }): SubmissionProgress {
   const programmeInfo = content?.programmeInfo;
   // W1: the General Education block is the General Education desk's work.
@@ -82,7 +95,8 @@ export function calculateSubmissionProgress({
     const description = course.description;
     return (
       hasText(description?.courseContent) &&
-      hasListValue(description?.learningOutcomes)
+      hasListValue(description?.learningOutcomes) &&
+      description?.graceStatus !== "NEEDS_REVISION"
     );
   }).length;
 
@@ -111,7 +125,10 @@ export function calculateSubmissionProgress({
       typeof content?.minimumCGPA === "number" && content.minimumCGPA > 0,
       typeof content?.totalUnits === "number" && content.totalUnits > 0,
     ]),
-    section("courses", "Course Structure", [courses.length > 0]),
+    {
+      ...section("courses", "Course Structure", [courses.length > 0 && courseListConfirmed]),
+      ...(courses.length > 0 && !courseListConfirmed && { hint: "confirm the list" }),
+    },
     section(
       "descriptions",
       "Course Details",

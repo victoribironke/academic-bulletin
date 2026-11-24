@@ -51,9 +51,10 @@ describe("submission content progress", () => {
       ],
     });
 
+    // Course Structure isn't done until the Head confirms the list (G5).
     expect(progress).toMatchObject({
-      percentage: 88,
-      completedSections: 6,
+      percentage: 75,
+      completedSections: 5,
       totalSections: 8,
     });
     expect(progress.sections.find((item) => item.key === "descriptions")).toMatchObject({
@@ -64,5 +65,22 @@ describe("submission content progress", () => {
       percentage: 50,
       complete: false,
     });
+  });
+
+  it("counts a course list only once it is confirmed, and not a description GRACE sent back (G5)", () => {
+    const courses = [
+      { description: { courseContent: "Complete course content.", learningOutcomes: ["Explain"], graceStatus: "COMPLIANT" } },
+      { description: { courseContent: "Complete but sent back.", learningOutcomes: ["Explain"], graceStatus: "NEEDS_REVISION" } },
+    ];
+    const unconfirmed = calculateSubmissionProgress({ content: null, activeStaffCount: 0, courses });
+    expect(unconfirmed.sections.find((item) => item.key === "courses")).toMatchObject({
+      complete: false,
+      hint: "confirm the list",
+    });
+    expect(unconfirmed.sections.find((item) => item.key === "descriptions")).toMatchObject({ percentage: 50 });
+
+    const confirmed = calculateSubmissionProgress({ content: null, activeStaffCount: 0, courses, courseListConfirmed: true });
+    expect(confirmed.sections.find((item) => item.key === "courses")).toMatchObject({ complete: true });
+    expect(confirmed.sections.find((item) => item.key === "courses")?.hint).toBeUndefined();
   });
 });
