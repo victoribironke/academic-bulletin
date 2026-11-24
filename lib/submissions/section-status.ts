@@ -77,56 +77,68 @@ export function sectionMarks(
   return marks;
 }
 
-/** Progress for one draft, the same way the dashboard and My desk work it out (G5). */
-export async function draftProgress(submissionId: string): Promise<SubmissionProgress> {
-  const draft = await prisma.submission.findUniqueOrThrow({
-    where: { id: submissionId },
+const progressSelect = {
+  id: true,
+  programme: { select: { department: { select: { _count: { select: { staff: { where: { isActive: true } } } } } } } },
+  content: {
     select: {
-      id: true,
-      programme: { select: { department: { select: { _count: { select: { staff: { where: { isActive: true } } } } } } } },
-      content: {
-        select: {
-          programmeInfo: true,
-          philosophy: true,
-          mission: true,
-          vision: true,
-          objectives: true,
-          uniqueFeatures: true,
-          employability: true,
-          utmeRequirements: true,
-          directEntryRequirements: true,
-          transferRequirements: true,
-          minimumDuration: true,
-          graduationRequirements: true,
-          minimumCGPA: true,
-          totalUnits: true,
-          sectionF: true,
-          sectionG: true,
-        },
-      },
-      courses: {
-        select: {
-          code: true,
-          units: true,
-          semester: true,
-          level: true,
-          status: true,
-          masterCourse: { select: { type: true, ownership: true } },
-          description: { select: { courseContent: true, learningOutcomes: true, graceStatus: true } },
-        },
-      },
+      programmeInfo: true,
+      philosophy: true,
+      mission: true,
+      vision: true,
+      objectives: true,
+      uniqueFeatures: true,
+      employability: true,
+      utmeRequirements: true,
+      directEntryRequirements: true,
+      transferRequirements: true,
+      minimumDuration: true,
+      graduationRequirements: true,
+      minimumCGPA: true,
+      totalUnits: true,
+      sectionF: true,
+      sectionG: true,
     },
-  });
-  const confirmed = await confirmedCourseLists([draft]);
-  return calculateSubmissionProgress({
-    content: draft.content,
-    activeStaffCount: draft.programme.department._count.staff,
-    courses: draft.courses.map((course) => ({
-      isGeneralEducation: isGeneralEducationCourse(course),
-      description: course.description,
-    })),
-    courseListConfirmed: confirmed.has(draft.id),
-  });
+  },
+  courses: {
+    select: {
+      code: true,
+      units: true,
+      semester: true,
+      level: true,
+      status: true,
+      masterCourse: { select: { type: true, ownership: true } },
+      description: { select: { courseContent: true, learningOutcomes: true, graceStatus: true } },
+    },
+  },
+} as const;
+
+/** Progress for several drafts, the same way the dashboard and My desk work it out (G5). */
+export async function progressForDrafts(submissionIds: string[]): Promise<Map<string, SubmissionProgress>> {
+  if (submissionIds.length === 0) return new Map();
+  const drafts = await prisma.submission.findMany({ where: { id: { in: submissionIds } }, select: progressSelect });
+  const confirmed = await confirmedCourseLists(drafts);
+  return new Map(
+    drafts.map((draft) => [
+      draft.id,
+      calculateSubmissionProgress({
+        content: draft.content,
+        activeStaffCount: draft.programme.department._count.staff,
+        courses: draft.courses.map((course) => ({
+          isGeneralEducation: isGeneralEducationCourse(course),
+          description: course.description,
+        })),
+        courseListConfirmed: confirmed.has(draft.id),
+      }),
+    ]),
+  );
+}
+
+/** Progress for one draft (G5). */
+export async function draftProgress(submissionId: string): Promise<SubmissionProgress> {
+  const progress = (await progressForDrafts([submissionId])).get(submissionId);
+  if (!progress) throw new Error("No such draft.");
+  return progress;
 }
 
 export async function getSectionMarks(submissionId: string) {

@@ -5481,6 +5481,10 @@ describe("cycle calendar (C1) and countdowns (C3)", () => {
       });
       expect(head.phases).toBeUndefined();
       expect(head.programmes.map((item: { submissionId: string }) => item.submissionId)).toContain(submissionId);
+      // G1: each programme with its honest progress and where to continue.
+      const mine = head.programmes.find((item: { submissionId: string }) => item.submissionId === submissionId);
+      expect(mine.progress).toMatchObject({ totalSections: 8 });
+      expect(typeof mine.progress.percentage).toBe("number");
 
       const dean = await deadlinesFor(ids.dean);
       expect(dean.desk.label).toBe("School Board Harmonisation");

@@ -12,6 +12,9 @@ import type { Countdown, DeadlineStatus } from "@/lib/calendar/countdown";
 import type { PhaseListRow } from "@/lib/calendar/desk";
 import { cn } from "@/lib/utils";
 import { WaitingWork } from "@/components/desk/waiting-work";
+import { ContinueWhereStopped } from "@/components/desk/continue-where-stopped";
+import { Progress } from "@/components/ui/progress";
+import { useUser } from "@/contexts/user-context";
 
 type ProgrammeDeadline = {
   submissionId: string;
@@ -19,6 +22,8 @@ type ProgrammeDeadline = {
   phase: number;
   status: string;
   countdown: Countdown | null;
+  /** G1: honest progress (G5), and the first section still to finish. */
+  progress?: { percentage: number; completedSections: number; totalSections: number; next: string | null } | null;
 };
 
 export type Deadlines = {
@@ -139,11 +144,14 @@ export function ProgrammeCountdown({ submissionId }: { submissionId: string }) {
 /** The home page panel: your deadline, then the programmes or phases you look after. */
 export function DeadlinesPanel() {
   const deadlines = useDeadlines();
+  const { currentUser } = useUser();
   if (!deadlines?.cycle) return null;
   const { desk, programmes, phases } = deadlines;
   return (
     <section className="space-y-3" aria-label="Deadlines">
       {desk && <CountdownCard countdown={desk} title={`Your deadline: ${desk.label}`} />}
+      {/* G1: straight back to the last section opened in this browser. */}
+      {currentUser && <ContinueWhereStopped userId={currentUser.id} />}
       {/* T1: the desk's own waiting work, with "Do this next". */}
       <WaitingWork />
 
@@ -153,7 +161,8 @@ export function DeadlinesPanel() {
           <ul className="divide-y">
             {programmes.map((item) => (
               <li key={item.submissionId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 text-sm">
-                <Link href={`/submissions/${item.submissionId}`} className="min-w-0 font-medium hover:underline">
+                <span className="min-w-0 space-y-1">
+                <Link href={`/submissions/${item.submissionId}`} className="font-medium hover:underline">
                   {item.programme.name}
                   {item.programme.isNew && (
                     <span className="ml-2 rounded border border-brand-gold/50 bg-brand-gold/10 px-1.5 py-0.5 text-[11px] font-medium">
@@ -161,6 +170,18 @@ export function DeadlinesPanel() {
                     </span>
                   )}
                 </Link>
+                {item.progress && (
+                  <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Progress value={item.progress.percentage} className="h-1.5 w-24" aria-label={`${item.programme.name}: ${item.progress.percentage}% done`} />
+                    {item.progress.completedSections} of {item.progress.totalSections} sections done
+                    {item.progress.next && (
+                      <Link href={`/submissions/${item.submissionId}?section=${item.progress.next}`} className="font-medium text-foreground underline-offset-4 hover:underline">
+                        Continue
+                      </Link>
+                    )}
+                  </span>
+                )}
+                </span>
                 <span className="flex flex-wrap items-center gap-2 text-muted-foreground">
                   <span>
                     Phase {item.phase} · {item.status}

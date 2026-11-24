@@ -1,5 +1,6 @@
 "use client";
 
+import { rememberLastPlace } from "@/components/desk/continue-where-stopped";
 import { SectionMarkIcon, sectionMarkWords, useSectionMarks } from "@/components/submissions/section-marks";
 import { useState, useEffect, use, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
@@ -510,6 +511,17 @@ export default function SubmissionDetailPage({
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   // G4: the section list's marks, refreshed after a save, when comments
   // change, and on moving to another section.
+  // G1: remember the last section opened, for "Continue where you stopped".
+  useEffect(() => {
+    if (!currentUser || !submission) return;
+    rememberLastPlace(currentUser.id, {
+      submissionId: id,
+      programme: submission.programme.name,
+      section: activeSection,
+      sectionTitle: sections.find((section) => section.key === activeSection)?.title ?? activeSection,
+      at: new Date().toISOString(),
+    });
+  }, [currentUser, submission, id, activeSection]);
   const sectionMarks = useSectionMarks(
     id,
     `${lastSavedAt?.getTime() ?? 0}:${submission?.comments.filter((c) => c.status === "OPEN").length ?? 0}:${activeSection}`,

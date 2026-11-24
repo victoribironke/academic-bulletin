@@ -10,6 +10,8 @@ import {
 } from "@/lib/calendar/desk";
 import { STATUS_LABELS } from "@/lib/submissions/phases";
 import { calendarNow } from "@/lib/clock";
+import { progressForDrafts } from "@/lib/submissions/section-status";
+import type { SubmissionProgress } from "@/lib/submissions/progress";
 
 /** Phases 1 to 5 run programme by programme; each has its own countdown. */
 const PROGRAMME_PHASES = 5;
@@ -69,26 +71,37 @@ export async function GET(request: NextRequest) {
             ? { programmeId: { in: user.programmeIds } }
             : { programme: { departmentId: user.departmentId } }
           : null;
-    const programmes = scope
-      ? (
-          await prisma.submission.findMany({
-            where: { cycleId: calendar.cycleId, ...scope },
-            select: {
-              id: true,
-              currentPhase: true,
-              status: true,
-              programme: { select: { id: true, name: true, code: true, departmentId: true, isNew: true } },
-            },
-            orderBy: { programme: { name: "asc" } },
-          })
-        ).map((submission) => ({
-          submissionId: submission.id,
-          programme: { name: submission.programme.name, code: submission.programme.code, isNew: submission.programme.isNew },
-          phase: submission.currentPhase,
-          status: STATUS_LABELS[submission.status],
-          countdown: submission.status === "APPROVED" ? null : programmeCountdown(submission.programme, submission.currentPhase),
-        }))
-      : undefined;
+    const drafts = scope
+      ? await prisma.submission.findMany({
+          where: { cycleId: calendar.cycleId, ...scope },
+          select: {
+            id: true,
+            currentPhase: true,
+            status: true,
+            programme: { select: { id: true, name: true, code: true, departmentId: true, isNew: true } },
+          },
+          orderBy: { programme: { name: "asc" } },
+        })
+      : null;
+    // G1: each programme with its honest progress (G5).
+    const progress = drafts ? await progressForDrafts(drafts.map((draft) => draft.id)) : new Map<string, SubmissionProgress>();
+    const programmes = drafts?.map((submission) => {
+      const done = progress.get(submission.id);
+      return {
+        submissionId: submission.id,
+        programme: { name: submission.programme.name, code: submission.programme.code, isNew: submission.programme.isNew },
+        phase: submission.currentPhase,
+        status: STATUS_LABELS[submission.status],
+        countdown: submission.status === "APPROVED" ? null : programmeCountdown(submission.programme, submission.currentPhase),
+        progress: done && {
+          percentage: done.percentage,
+          completedSections: done.completedSections,
+          totalSections: done.totalSections,
+          // The first section still to finish, to open the draft there.
+          next: done.sections.find((section) => !section.complete)?.key ?? null,
+        },
+      };
+    });
 
     return NextResponse.json({
       cycle: { id: calendar.cycleId, name: calendar.cycleName },
