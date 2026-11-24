@@ -9,6 +9,7 @@ import {
   phaseList,
 } from "@/lib/calendar/desk";
 import { STATUS_LABELS } from "@/lib/submissions/phases";
+import { calendarNow } from "@/lib/clock";
 
 /** Phases 1 to 5 run programme by programme; each has its own countdown. */
 const PROGRAMME_PHASES = 5;
@@ -26,7 +27,8 @@ export async function GET(request: NextRequest) {
     const user = auth.user;
     const calendar = await loadActiveCycleCalendar();
     if (!calendar) return NextResponse.json({ cycle: null });
-    const now = new Date();
+    // The test site's pretend clock, if a tester set one (section 13).
+    const now = await calendarNow();
 
     const programmeCountdown = (programme: { id: string; departmentId: string }, currentPhase: number) =>
       currentPhase <= PROGRAMME_PHASES

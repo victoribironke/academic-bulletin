@@ -1,3 +1,4 @@
+import { calendarNow } from "@/lib/clock";
 import prisma from "@/lib/prisma";
 
 /**
@@ -48,17 +49,17 @@ export function submissionWindow(
   };
 }
 
-/** The window for one submission, read from its cycle. */
+/** The window for one submission, read from its cycle (by default as of the test site's pretend clock, if set). */
 export async function getSubmissionWindow(
   submissionId: string,
-  now: Date = new Date(),
+  now?: Date,
 ): Promise<SubmissionWindow> {
   const submission = await prisma.submission.findUnique({
     where: { id: submissionId },
     select: { currentPhase: true, cycle: { select: { submissionsOpenAt: true } } },
   });
   if (!submission) return { open: true };
-  return submissionWindow(submission.cycle?.submissionsOpenAt, submission.currentPhase, now);
+  return submissionWindow(submission.cycle?.submissionsOpenAt, submission.currentPhase, now ?? (await calendarNow()));
 }
 
 /**

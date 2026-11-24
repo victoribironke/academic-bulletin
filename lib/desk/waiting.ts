@@ -5,6 +5,7 @@
  * right screen; the first is "Do this next". Scoped like the dashboard, so
  * nobody sees another desk's work.
  */
+import { calendarNow } from "@/lib/clock";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import type { ApiUser } from "@/lib/api-auth";
@@ -52,7 +53,9 @@ export function orderWaiting(items: WaitingItem[]): WaitingItem[] {
 
 const lastTransition = { orderBy: { transitionedAt: "desc" as const }, take: 1, select: { action: true, remarks: true, transitionedAt: true } };
 
-export async function waitingWorkFor(user: ApiUser, now: Date = new Date()): Promise<WaitingItem[]> {
+export async function waitingWorkFor(user: ApiUser, nowArg?: Date): Promise<WaitingItem[]> {
+  // By default as of the test site's pretend clock, if a tester set one.
+  const now = nowArg ?? (await calendarNow());
   const cycle = await prisma.reviewCycle.findFirst({
     where: { isActive: true, archivedAt: null },
     orderBy: { startedAt: "desc" },

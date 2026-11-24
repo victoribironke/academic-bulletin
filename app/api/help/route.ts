@@ -1,3 +1,4 @@
+import { calendarNow } from "@/lib/clock";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
@@ -26,7 +27,7 @@ export async function GET() {
       generalHelp: process.env.INVITATION_HELP_CONTACT?.trim() || null,
       cycle: cycle?.name ?? null,
       submitOpens:
-        cycle?.submissionsOpenAt && cycle.submissionsOpenAt > new Date()
+        cycle?.submissionsOpenAt && cycle.submissionsOpenAt > (await calendarNow())
           ? formatOpeningDate(cycle.submissionsOpenAt)
           : null,
     });
