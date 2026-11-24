@@ -5,6 +5,9 @@ import { isMissingSearchTable, refreshSearchIndex } from "@/lib/search/sync";
 import { processPendingGraceAssessments } from "@/lib/courses/grace-compliance";
 import { pruneRateLimits } from "@/lib/rate-limit";
 import { sendDueInvitations } from "@/lib/people/invitations";
+import { runAgent } from "@/lib/agent/run";
+import { isNotSwitchedOn } from "@/lib/courses/course-list";
+import { dailyWorkDue } from "@/lib/agent/rules";
 
 // Sending one summary email per recipient can take a little while.
 export const maxDuration = 60;
@@ -15,10 +18,15 @@ const GRACE_TIME_BUDGET_MS = 30_000;
 /**
  * GET /api/cron/daily
  *
- * The app's single daily job, called at 06:00 UTC (07:00 Lagos) by the
- * `daily-job` service in the Railway project: a scheduled curl that exits
- * after the call, and marks the run failed when this answers with an error.
- * It does several independent things, so one failing doesn't stop the rest:
+ * The app's daily job, called by the `daily-job` service in the Railway
+ * project at 06:00 and 07:00 UTC (7:00 and 8:00 am in Lagos): a scheduled curl
+ * that exits after the call, and marks the run failed when this answers with
+ * an error.
+ *
+ * Every call runs the reminder agent (T3): it prepares the day's messages at
+ * 7:00 and sends those DAP hasn't held at 8:00, if sending is switched on.
+ * The rest runs once a day, at the 8:00 call. It does several independent
+ * things, so one failing doesn't stop the rest:
  *
  * 1. Health check: confirms the database answers (reported as keepAlive).
  * 2. Daily summary emails to admins and HODs (lib/email/notifications.ts).
@@ -34,6 +42,20 @@ export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // T3: the reminder agent, on every call (prepare at 7:00, send at 8:00).
+  const now = new Date();
+  let agent: Record<string, unknown> = { ok: false };
+  try {
+    agent = { ok: true, ...(await runAgent(now)) };
+  } catch (error) {
+    agent = { ok: false, switchedOn: !isNotSwitchedOn(error) };
+    if (!isNotSwitchedOn(error)) console.error("The reminder agent's run failed:", error);
+  }
+  // Everything else waits for the 8:00 am call, so it runs once a day.
+  if (!dailyWorkDue(now)) {
+    return NextResponse.json({ ok: true, agent, dailyWork: "Runs at the 8:00 am call.", at: now.toISOString() });
   }
 
   let keepAlive: { ok: boolean; users?: number; expiredRateLimits?: number | null } = {
@@ -106,7 +128,7 @@ export async function GET(request: NextRequest) {
 
   const ok = keepAlive.ok && digest.ok === true && grace.ok === true && invitations.ok === true;
   return NextResponse.json(
-    { ok, keepAlive, invitations, digest, grace, search, at: new Date().toISOString() },
+    { ok, keepAlive, invitations, digest, grace, search, agent, at: new Date().toISOString() },
     { status: ok ? 200 : 500 },
   );
 }

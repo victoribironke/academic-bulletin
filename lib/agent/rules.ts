@@ -142,3 +142,14 @@ export function maySendAt(now: Date): { ok: boolean; because: string | null } {
   }
   return { ok: true, because: null };
 }
+
+/**
+ * The daily job is called at 7:00 and at 8:00 am WAT. The agent runs at both;
+ * the rest of the day's work (digests, invitations, GRACE backlog, search
+ * rebuild) only at the later call, from 7:45 am, so it runs once a day.
+ */
+export function dailyWorkDue(now: Date): boolean {
+  const wat = new Date(now.getTime() + 60 * 60 * 1000);
+  return wat.getUTCHours() * 60 + wat.getUTCMinutes() >= 7 * 60 + 45;
+}
+

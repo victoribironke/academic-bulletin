@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_WORKING_WEEK, addDays, type DateKey } from "@/lib/calendar/dates";
 import type { DeadlineStatus } from "@/lib/calendar/countdown";
-import { decideForDesk, maySendAt } from "@/lib/agent/rules";
+import { dailyWorkDue, decideForDesk, maySendAt } from "@/lib/agent/rules";
 
 // Task T3 against launch test 8 (section 13): the 2027-2031 calendar.
 const calendar = {
@@ -80,5 +80,10 @@ describe("the reminder agent's rules (T3, T4; launch test 8)", () => {
     expect(maySendAt(wat("2026-12-12T12:00:00")).because).toBe("It is the Sabbath.");
     expect(maySendAt(wat("2026-12-28T09:00:00")).because).toMatch(/quiet period/);
     expect(maySendAt(wat("2027-01-04T08:00:00")).ok).toBe(true);
+  });
+
+  it("leaves the rest of the daily job to the 8:00 am call", () => {
+    expect(dailyWorkDue(new Date("2026-12-07T06:00:30Z"))).toBe(false); // 7:00 WAT: the agent prepares
+    expect(dailyWorkDue(new Date("2026-12-07T07:00:30Z"))).toBe(true); // 8:00 WAT
   });
 });
