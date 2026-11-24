@@ -5487,6 +5487,8 @@ describe("cycle calendar (C1) and countdowns (C3)", () => {
       // G1: each programme with its honest progress and where to continue.
       const mine = head.programmes.find((item: { submissionId: string }) => item.submissionId === submissionId);
       expect(mine.progress).toMatchObject({ totalSections: 8 });
+      // T2: the status comes with its reason in words.
+      expect(mine.countdown.statusReason).toMatch(/^(On track|Keep an eye on it|At risk|Overdue): /);
       expect(typeof mine.progress.percentage).toBe("number");
 
       const dean = await deadlinesFor(ids.dean);

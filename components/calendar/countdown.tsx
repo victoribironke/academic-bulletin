@@ -76,8 +76,10 @@ export function DeadlineStatusPill({ countdown, className }: { countdown: Countd
         STATUS_STYLES[countdown.status],
         className,
       )}
+      title={countdown.statusReason}
     >
       {countdown.statusLabel}
+      {countdown.statusReason && <span className="sr-only">. {countdown.statusReason}</span>}
     </span>
   );
 }
@@ -120,6 +122,8 @@ export function CountdownCard({ countdown, title }: { countdown: Countdown; titl
       <p className="mt-3 text-sm">
         {[countdown.nextLine, countdown.workingDaysLine].filter(Boolean).join(" · ")}
       </p>
+      {/* T2: the reason for the status, in words. */}
+      {countdown.statusReason && <p className="mt-1 text-sm text-muted-foreground">{countdown.statusReason}</p>}
     </div>
   );
 }

@@ -56,6 +56,8 @@ export type Countdown = {
   workingDaysLine: string;
   status: DeadlineStatus;
   statusLabel: string;
+  /** Task T2: why, in words ("At risk: CP1 was missed on ..."), when worked out. */
+  statusReason?: string;
   dueDate: DateKey;
 };
 
@@ -74,7 +76,8 @@ export function buildCountdown(input: CountdownInput): Countdown {
       ? `Due today at ${formatDueTime(dueTime)}`
       : `${plural(days, "day")} left`;
 
-  // Simple rule until desk status (task T2) can weigh the work left.
+  // The simple rule by days left; a desk's own status (task T2, lib/desk/status.ts)
+  // replaces it where the work left is known.
   const status: DeadlineStatus = overdue ? "OVERDUE" : workingDaysLeft <= 5 ? "KEEP_AN_EYE" : "ON_TRACK";
 
   let nextLine: string | null = null;

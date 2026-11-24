@@ -34,7 +34,18 @@ type PhaseRow = {
   hardStop: boolean;
 };
 
-type CheckpointRow = { phase: number; code: string; name: string; type: string; dueAt: DateKey; desks: string[] };
+type CheckpointRow = {
+  phase: number;
+  code: string;
+  name: string;
+  type: string;
+  dueAt: DateKey;
+  desks: string[];
+  /** Draft sections (1 to 8) that should be done by then. */
+  sections: number[];
+  /** What else should be true, e.g. COURSE_LIST_CONFIRMED (section 4.6). */
+  requires: string[];
+};
 
 type ExtensionRow = { scope: string; targetId: string; phase: number | null; newDueAt: DateKey };
 
@@ -89,6 +100,8 @@ export async function loadActiveCycleCalendar(): Promise<CycleCalendar | null> {
         type: checkpoint.type,
         dueAt: key(checkpoint.dueAt)!,
         desks: checkpoint.desks,
+        sections: checkpoint.sections,
+        requires: checkpoint.requires,
       }))
       .sort((a, b) => a.dueAt.localeCompare(b.dueAt)),
     extensions: cycle.extensions.map((extension) => ({

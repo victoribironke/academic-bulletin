@@ -12,6 +12,8 @@ import { STATUS_LABELS } from "@/lib/submissions/phases";
 import { calendarNow } from "@/lib/clock";
 import { progressForDrafts } from "@/lib/submissions/section-status";
 import type { SubmissionProgress } from "@/lib/submissions/progress";
+import { headDeskStatus, programmeDeskStatuses, withDeskStatus } from "@/lib/desk/programme-status";
+import type { DeskStatus } from "@/lib/desk/status";
 
 /** Phases 1 to 5 run programme by programme; each has its own countdown. */
 const PROGRAMME_PHASES = 5;
@@ -52,14 +54,17 @@ export async function GET(request: NextRequest) {
       }
       const submission = await prisma.submission.findUnique({
         where: { id: submissionId },
-        select: { cycleId: true, currentPhase: true, status: true, programme: { select: { id: true, departmentId: true } } },
+        select: { id: true, cycleId: true, currentPhase: true, status: true, updatedAt: true, programme: { select: { id: true, departmentId: true } } },
       });
       if (!submission || submission.cycleId !== calendar.cycleId || submission.status === "APPROVED") {
         return NextResponse.json({ cycle: { id: calendar.cycleId, name: calendar.cycleName }, programme: null });
       }
+      // T2: the programme's status by the section 7.2 rules, in Departmental Drafting.
+      const status =
+        submission.currentPhase === 1 ? (await programmeDeskStatuses(calendar, [submission], now)).get(submission.id) : null;
       return NextResponse.json({
         cycle: { id: calendar.cycleId, name: calendar.cycleName },
-        programme: programmeCountdown(submission.programme, submission.currentPhase),
+        programme: withDeskStatus(programmeCountdown(submission.programme, submission.currentPhase), status),
       });
     }
 
@@ -78,6 +83,7 @@ export async function GET(request: NextRequest) {
             id: true,
             currentPhase: true,
             status: true,
+            updatedAt: true,
             programme: { select: { id: true, name: true, code: true, departmentId: true, isNew: true } },
           },
           orderBy: { programme: { name: "asc" } },
@@ -85,6 +91,10 @@ export async function GET(request: NextRequest) {
       : null;
     // G1: each programme with its honest progress (G5).
     const progress = drafts ? await progressForDrafts(drafts.map((draft) => draft.id)) : new Map<string, SubmissionProgress>();
+    // T2: each programme's status in Departmental Drafting (section 7.2).
+    const statuses = drafts
+      ? await programmeDeskStatuses(calendar, drafts.filter((draft) => draft.currentPhase === 1), now)
+      : new Map<string, DeskStatus>();
     const programmes = drafts?.map((submission) => {
       const done = progress.get(submission.id);
       return {
@@ -92,7 +102,10 @@ export async function GET(request: NextRequest) {
         programme: { name: submission.programme.name, code: submission.programme.code, isNew: submission.programme.isNew },
         phase: submission.currentPhase,
         status: STATUS_LABELS[submission.status],
-        countdown: submission.status === "APPROVED" ? null : programmeCountdown(submission.programme, submission.currentPhase),
+        countdown:
+          submission.status === "APPROVED"
+            ? null
+            : withDeskStatus(programmeCountdown(submission.programme, submission.currentPhase), statuses.get(submission.id)),
         progress: done && {
           percentage: done.percentage,
           completedSections: done.completedSections,
@@ -105,7 +118,17 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       cycle: { id: calendar.cycleId, name: calendar.cycleName },
-      desk: deskCountdown(calendar, user, now),
+      desk:
+        user.role === "HOD" || user.role === "PROGRAMME_COORDINATOR"
+          ? withDeskStatus(
+              deskCountdown(calendar, user, now),
+              headDeskStatus(
+                (drafts ?? [])
+                  .filter((draft) => statuses.has(draft.id))
+                  .map((draft) => ({ programme: draft.programme.name, status: statuses.get(draft.id)! })),
+              ),
+            )
+          : deskCountdown(calendar, user, now),
       ...(programmes && { programmes }),
       ...(isAdministrator(user) && { phases: phaseList(calendar, now) }),
     });

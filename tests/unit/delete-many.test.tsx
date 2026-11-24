@@ -114,3 +114,17 @@ describe("the DELETE box for several rows", () => {
     expect(onConfirm).toHaveBeenCalledWith("Moved to the new programme.");
   });
 });
+
+describe("an empty table (Q3)", () => {
+  it("asks for a row only when rows can be added", () => {
+    const { rerender } = render(
+      <DynamicTable<Row> columns={columns} data={[]} onChange={vi.fn()} createEmptyRow={() => ({ code: "", title: "" })} />,
+    );
+    expect(screen.getByText(/Choose "Add Row" below/)).toBeTruthy();
+    rerender(
+      <DynamicTable<Row> columns={columns} data={[]} onChange={vi.fn()} createEmptyRow={() => ({ code: "", title: "" })} disabled />,
+    );
+    expect(screen.queryByText(/Add Row/)).toBeNull();
+    expect(screen.getByText("Nothing here yet.")).toBeTruthy();
+  });
+});

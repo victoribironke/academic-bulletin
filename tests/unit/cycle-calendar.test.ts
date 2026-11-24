@@ -38,6 +38,8 @@ const calendar: CycleCalendar = {
       type: checkpoint.type ?? "CHECKPOINT",
       dueAt: checkpoint.dueAt,
       desks: checkpoint.desks ?? [],
+      sections: checkpoint.sections ?? [],
+      requires: checkpoint.requires ?? [],
     }))
     .sort((a, b) => a.dueAt.localeCompare(b.dueAt)),
   extensions: [{ scope: "DEPARTMENT", targetId: "dept-late", phase: 1, newDueAt: "2027-02-12" }],

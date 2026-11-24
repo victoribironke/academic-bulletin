@@ -324,7 +324,8 @@ export function DynamicTable<T extends Record<string, unknown>>({
                   }
                   className="h-20 text-center text-muted-foreground"
                 >
-                  No entries. Click &quot;Add Row&quot; to add one.
+                  {/* Q3: read-only screens don't tell people to add rows. */}
+                  {disabled ? "Nothing here yet." : <>No entries yet. Choose &quot;Add Row&quot; below to add one.</>}
                 </TableCell>
               </TableRow>
             ) : (
