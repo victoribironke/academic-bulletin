@@ -6473,3 +6473,36 @@ describe("deleting several rows, reasons and the Archive (Q7)", () => {
     expect((await remove("DELETE")).status).toBe(404);
   });
 });
+
+describe("Babcock courses first in the picker (B5)", () => {
+  beforeAll(async () => {
+    await prisma.masterCourse.createMany({
+      data: [
+        { id: "b5-linked", code: "ZBF 101", title: "Offered by link", units: 2, level: 100, semester: 1, ownership: "INSTITUTIONAL" },
+        { id: "b5-babcock", code: "BU-ZBF 102", title: "Offered by code", units: 2, level: 100, semester: 1, ownership: "INSTITUTIONAL" },
+        { id: "b5-national", code: "ZBF 103", title: "National curriculum only", units: 2, level: 100, semester: 1, ownership: "INSTITUTIONAL" },
+      ],
+    });
+    await prisma.programmeCourse.create({ data: { programmeId: ids.programmeA, courseId: "b5-linked" } });
+  });
+
+  afterAll(async () => {
+    await prisma.masterCourse.deleteMany({ where: { id: { startsWith: "b5-" } } });
+  });
+
+  const list = async (offered: string) => {
+    authState.userId = ids.hod;
+    const response = await listMasterCourses(
+      new Request(`http://localhost/api/master-courses?page=1&q=ZBF&offered=${offered}`),
+    );
+    expect(response.status).toBe(200);
+    return ((await response.json()) as { items: { code: string; offered: boolean }[] }).items;
+  };
+
+  it("shows a Head only the courses Babcock offers, unless they include the national curriculum", async () => {
+    expect((await list("only")).map((course) => course.code)).toEqual(["BU-ZBF 102", "ZBF 101"]);
+    const all = await list("first");
+    expect(all.map((course) => course.code)).toEqual(["ZBF 101", "BU-ZBF 102", "ZBF 103"]);
+    expect(all.map((course) => course.offered)).toEqual([true, true, false]);
+  });
+});

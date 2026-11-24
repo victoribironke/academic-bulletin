@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -95,6 +96,8 @@ interface MasterCourse {
   courseContent?: string;
   labWork?: string;
   entrepreneurialAspect?: string;
+  /** B5: offered at Babcock, not only in the national curriculum. */
+  offered?: boolean;
 }
 
 interface PreviousSubmission {
@@ -180,6 +183,9 @@ export function CourseTable({
   const [isLoadingMasterCourses, setIsLoadingMasterCourses] = useState(false);
   const [registrySearch, setRegistrySearch] = useState("");
   const [registryLevel, setRegistryLevel] = useState("all");
+  // B5: the picker shows the courses Babcock offers; the national curriculum
+  // is one switch away.
+  const [includeNational, setIncludeNational] = useState(false);
   const [registryPage, setRegistryPage] = useState(1);
   const [registryTotal, setRegistryTotal] = useState(0);
   const debouncedRegistrySearch = useDebouncedValue(registrySearch.trim(), 300);
@@ -359,6 +365,7 @@ export function CourseTable({
     });
     if (debouncedRegistrySearch) params.set("q", debouncedRegistrySearch);
     if (registryLevel !== "all") params.set("level", registryLevel);
+    params.set("offered", includeNational ? "first" : "only");
 
     fetch(`/api/master-courses?${params}`, { signal: controller.signal })
       .then((res) => (res.ok ? res.json() : null))
@@ -374,7 +381,7 @@ export function CourseTable({
         if (!controller.signal.aborted) setIsLoadingMasterCourses(false);
       });
     return () => controller.abort();
-  }, [importDialogOpen, departmentId, registryPage, debouncedRegistrySearch, registryLevel]);
+  }, [importDialogOpen, departmentId, registryPage, debouncedRegistrySearch, registryLevel, includeNational]);
 
   // Open import dialog and load courses
   const openImportDialog = () => {
@@ -980,6 +987,17 @@ export function CourseTable({
             }}
             searchPlaceholder="Search code or title"
             filters={
+              <>
+              <label className="flex items-center gap-2 whitespace-nowrap text-sm">
+                <Switch
+                  checked={includeNational}
+                  onCheckedChange={(on) => {
+                    setIncludeNational(on);
+                    setRegistryPage(1);
+                  }}
+                />
+                Include the national curriculum
+              </label>
               <Select
                 value={registryLevel}
                 onValueChange={(value) => {
@@ -999,6 +1017,7 @@ export function CourseTable({
                   ))}
                 </SelectContent>
               </Select>
+              </>
             }
           />
 
@@ -1014,7 +1033,9 @@ export function CourseTable({
                   : "No discoverable courses found in the registry."}
                 <br />
                 <span className="text-sm">
-                  Courses must be marked as discoverable to appear here.
+                  {includeNational
+                    ? "Courses must be marked as discoverable to appear here."
+                    : "Only courses Babcock offers are shown. Turn on \u201cInclude the national curriculum\u201d to search it too."}
                 </span>
               </div>
             ) : (
@@ -1080,6 +1101,11 @@ export function CourseTable({
                             </Badge>
                           </TableCell>
                           <TableCell className="whitespace-nowrap p-2 text-xs text-muted-foreground">
+                            {includeNational && (
+                              <Badge variant={mc.offered ? "secondary" : "outline"} className="mr-1">
+                                {mc.offered ? "Babcock" : "National curriculum"}
+                              </Badge>
+                            )}
                             {mc.ownership === "INSTITUTIONAL"
                               ? "University-wide"
                               : mc.ownership === "SCHOOL"

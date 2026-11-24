@@ -29,6 +29,17 @@ const VALID_COURSE_TYPES = [
 const VALID_OWNERSHIP = ["DEPARTMENT", "SCHOOL", "INSTITUTIONAL"];
 const VALID_LEVELS = [100, 200, 300, 400, 500, 600];
 
+/**
+ * B5: a course Babcock offers is linked to a Babcock programme or has a
+ * Babcock (BU-) code; the rest are reference courses from the national
+ * curriculum only.
+ */
+const OFFERED_COURSE: Prisma.MasterCourseWhereInput = {
+  OR: [{ programmeLinks: { some: {} } }, { code: { startsWith: "BU-" } }],
+};
+const isOffered = (course: { code: string; _count?: { programmeLinks: number } }) =>
+  course.code.startsWith("BU-") || (course._count?.programmeLinks ?? 0) > 0;
+
 // GET /api/master-courses - Get all master courses with filters
 export async function GET(request: Request) {
   try {
@@ -43,6 +54,9 @@ export async function GET(request: Request) {
     const level = searchParams.get("level");
     const semester = searchParams.get("semester");
     const discoverable = searchParams.get("discoverable");
+    // B5: "only" lists courses Babcock offers (linked to a programme, or a
+    // BU- code); "first" lists the national curriculum too, Babcock first.
+    const offered = searchParams.get("offered");
     // K0: the search term, under any of the names callers use.
     const query = (searchParams.get("q") ?? searchParams.get("search") ?? searchParams.get("query"))?.trim();
     // `page` asks for one page of full rows; `fields=summary` asks for every
@@ -128,8 +142,12 @@ export async function GET(request: Request) {
       };
       where.AND = [search];
     }
+    if (offered === "only") {
+      where.AND = [...((where.AND as Prisma.MasterCourseWhereInput[] | undefined) ?? []), OFFERED_COURSE];
+    }
 
     const orderBy: Prisma.MasterCourseOrderByWithRelationInput[] = [
+      ...(offered === "first" ? [{ programmeLinks: { _count: "desc" as const } }] : []),
       { level: "asc" },
       { semester: "asc" },
       { code: "asc" },
@@ -211,7 +229,9 @@ export async function GET(request: Request) {
 
     if (paginated) {
       const total = await prisma.masterCourse.count({ where });
-      return NextResponse.json(pageResult(courses, total, page, pageSize));
+      return NextResponse.json(
+        pageResult(courses.map((course) => ({ ...course, offered: isOffered(course) })), total, page, pageSize),
+      );
     }
     return NextResponse.json(courses);
   } catch (error) {
