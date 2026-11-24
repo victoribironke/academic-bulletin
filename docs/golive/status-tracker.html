@@ -147,8 +147,8 @@ footer { font-size: 0.86rem; color: var(--muted); display: grid; gap: 0.4rem; bo
     <p class="lede">Every task in the work order, release by release: what is live on academicplanning.app, what is built and waiting to run, and what each remaining task is waiting on.</p>
     <div class="meta">
       <span class="deadline">R0 launch due Wednesday, November 25, 6:00 pm WAT <strong id="countdown"></strong></span>
-      <span>Updated Tuesday, November 24, 2026, 10:50 am WAT</span>
-      <span>Live code: <span class="mono">f609d4f</span></span>
+      <span>Updated Tuesday, November 24, 2026, 12:25 pm WAT</span>
+      <span>Live code: <span class="mono">8db3bda</span></span>
     </div>
     <div class="legend" aria-label="What the statuses mean">
       <span><b class="pill s-live">Live</b> built and working on the live site</span>
@@ -225,11 +225,10 @@ footer { font-size: 0.86rem; color: var(--muted); display: grid; gap: 0.4rem; bo
       <div class="panel">
         <h3>What I can do next without waiting</h3>
         <ul class="plain">
-          <li><span class="t">Add a pretend clock to the test site, then run the launch tests</span><span class="when me">Next</span><span class="d">Tests 1, 2, 6, 7, 10, 16 and 17 in section 13 need a test-only "today" setting, which does not exist yet.</span></li>
-          <li><span class="t">One DELETE confirmation for several rows</span><span class="when me">Before Wed</span><span class="d">Q7 and test 16: deleting 12 course rows asks once and lists them.</span></li>
+          <li><span class="t">One DELETE confirmation for several rows, and permanent removal from the Archive</span><span class="when me">Before Wed</span><span class="d">Q7 and launch test 16: deleting 12 course rows asks once and lists them; removing an item from the Archive for good needs a Super Administrator and DELETE. Neither is built yet.</span></li>
           <li><span class="t">Dry-run the stored-title tidy on the test site</span><span class="when me">Before Wed</span><span class="d">B4, ahead of step 4.</span></li>
           <li><span class="t">Babcock courses first in the course picker</span><span class="when me">R0 can follow</span><span class="d">B5.</span></li>
-          <li><span class="t">Course code clean-up and a merge report for DAP</span><span class="when me">R0 can follow</span><span class="d">B3: 176 codes without a space, 15 groups that become duplicates.</span></li>
+          <li><span class="t">Course code clean-up and a merge report for DAP</span><span class="when me">R0 can follow</span><span class="d">B3: 176 codes without a space, and 17 codes that exist in two forms (such as BIO102 and BIO 102). Launch test 10 fails until this is done.</span></li>
         </ul>
       </div>
     </div>
@@ -257,7 +256,7 @@ footer { font-size: 0.86rem; color: var(--muted); display: grid; gap: 0.4rem; bo
   </section>
 
   <footer>
-    <p>Sources: the work order (package file 06, version 2.1), <span class="mono">docs/golive/IMPLEMENTATION_PLAN.md</span>, and the commits on main up to <span class="mono">f609d4f</span>.</p>
+    <p>Sources: the work order (package file 06, version 2.1), <span class="mono">docs/golive/IMPLEMENTATION_PLAN.md</span>, and the commits on main up to <span class="mono">8db3bda</span>.</p>
     <p>This page is the single list of what is done. It is updated after each change, so chat reports can point here instead of repeating it.</p>
   </footer>
 </div>
@@ -274,7 +273,7 @@ const STATUS = {
 // [id, name, owner, status, what is true now, waiting on, needs you]
 const GROUPS = [
   { key: "r0", code: "R0", short: "Wed, Nov 25", name: "Launch: must have", date: "Wednesday, November 25, 2026, 6:00 pm WAT", sub: "No launch without these. Heads of Department start Thursday, November 26.", items: [
-    ["A1", "Test site", "CODE", "partly", "Live at academic-bulletin-staging.up.railway.app with its own database and storage, a TEST SITE banner and an email guard. The live records and photos are copied in.", "Google sign-in address for the test site (you); a DAP test inbox; Gmail test accounts removed from live (you)", true],
+    ["A1", "Test site", "CODE", "partly", "Live at academic-bulletin-staging.up.railway.app with its own database and storage, a TEST SITE banner, a pretend clock for the launch tests and an email guard. The live records and photos are copied in.", "Google sign-in address for the test site (you); a DAP test inbox; Gmail test accounts removed from live (you)", true],
     ["A2", "Archive the test cycle", "CODE", "live", "The 2026/2027 test cycle was archived on November 23 and tagged TEST. The live dashboard shows 0 drafts. Restore was tried on the test site.", ""],
     ["A5", "Apply the code and name standard", "CODE+DAP", "ready", "Applied on the test site: 177 records changed, old codes kept as aliases, report in docs/golive/reports.", "DAP's 3 department names, then your yes", true],
     ["A3", "Open the real cycle", "CODE", "ready", "Rehearsed twice on the test site, the second time in launch order after the registry uploads (November 24): 66 drafts, the calendar loaded, 4,702 course rows pre-filled. Steps in docs/golive/A3_RUNBOOK.md.", "A5, the registry uploads and B9 on live, then your yes", true],
@@ -302,7 +301,7 @@ const GROUPS = [
     ["O2", "Launch-week help desk", "DAP", "dap", "", "DAP, Thursday, November 26 to Friday, December 4"],
     ["O3", "A way back if something goes wrong", "CODE", "live", "Daily backups. Restore and code rollback tried on the test site on November 23 (docs/golive/ROLLBACK.md).", "A fresh backup and repeat try on November 25, per the checklist"],
     ["Q6", "New phase names everywhere", "CODE", "live", "The work order's names on every screen and email; a test checks none of the old names remain.", ""],
-    ["Q7", "Type DELETE to confirm every delete", "CODE", "partly", "DELETE required on every delete route and control, checked by a test.", "Still to build: one confirmation for deleting several rows, and a reason when deleting another unit's row"],
+    ["Q7", "Type DELETE to confirm every delete", "CODE", "partly", "DELETE required on every delete route and control, checked by a test. The Archive lists deleted items and restores them.", "Still to build: one confirmation for deleting several rows, permanent removal from the Archive (Super Administrator and DELETE), and a reason when deleting another unit's row"],
     ["S1", "Remove the 2-second wait on every page", "CODE", "partly", "The 2-second wait is gone. About 0.24 s per request remains because the servers are in the US.", "Moving to EU West for the 150 ms target (your decision)", true],
     ["T1", "\"My desk\" panel (Heads, Deans, DAP)", "CODE", "live", "Own deadline and programmes, \"What is waiting on you\" and \"Do this next\".", "Other desks come in R1"],
     ["W1", "Rule: General Education block", "CODE", "ready", "The block is locked, greyed and left out of progress (live). It is inserted into every draft by E1.", "Runs with A3"],
@@ -312,7 +311,7 @@ const GROUPS = [
   ]},
   { key: "r0f", code: "R0+", short: "By Wed, Dec 2", name: "Launch: can follow", date: "By Wednesday, December 2, 2026 if not ready on November 25", sub: "Allowed to slip to R1. Anything not ready is switched off with its new date noted.", items: [
     ["A4", "Activity log per cycle, in plain names", "CODE", "live", "Every entry belongs to a cycle; the log opens on the current cycle with a cycle picker and shows names, not record IDs.", ""],
-    ["B3", "Clean up course codes", "CODE", "todo", "", "176 codes without a space and 15 duplicate groups to merge; DAP approves the merge report"],
+    ["B3", "Clean up course codes", "CODE", "todo", "", "176 codes without a space and 17 codes in two forms to merge (launch test 10 fails until then); DAP approves the merge report"],
     ["B4", "Title casing", "CODE", "partly", "Live: acronyms and Roman numerals kept, typed codes removed from new titles and uploads.", "Stored titles: script ready; dry run on the test site, then your yes", true],
     ["B5", "Show Babcock courses first", "CODE", "todo", "", ""],
     ["B8", "Registry completeness report", "CODE", "live", "Records > Registry Report with a spreadsheet download; builds in 0.2 seconds on live.", ""],
@@ -438,9 +437,9 @@ const CHECKLIST = [
   ["Submit to School switched off until December 14, 2026", "F0", "live", "The date is set when A3 opens the cycle."],
   ["Role-specific help with named DAP officers; Academic Policy readable; launch pack ready; launch session booked", "H1, H2, H9, O2", "partly", "Help and the policy library are live. Officer names come from the roster; the launch pack and session are DAP's."],
   ["New phase names everywhere", "Q6", "live", ""],
-  ["Every delete asks for DELETE, on screen and on the server", "Q7", "partly", "One confirmation for several rows still to build."],
+  ["Every delete asks for DELETE, on screen and on the server", "Q7", "partly", "One confirmation for several rows, and permanent removal from the Archive, still to build."],
   ["The 2-second wait gone", "S1", "live", "Gone. The stricter 150 ms target needs the region move."],
-  ["Tests 1, 2, 6, 7, 10, 16 and 17 in section 13 passed on the test site", "", "todo", "Needs a pretend clock on the test site first."],
+  ["Tests 1, 2, 6, 7, 10, 16 and 17 in section 13 passed on the test site", "", "partly", "The pretend clock is on the test site (November 24). Database checks: 16 pass, and test 10 fails on duplicate codes (B3). Test 16 lacks the 12-row confirmation and permanent removal (Q7). Timing the sign-in waits for the test site's Google sign-in address. Parts of tests 1, 2 and 6 come in R1 to R3. Details in docs/golive/LAUNCH_TESTS.md."],
   ["Database backup taken and the way back tried on the test site on November 25", "O3", "todo", "Tried on November 23; to repeat on the day."],
   ["Anything from the can-follow list not ready is switched off, with its new date noted", "", "todo", "Today that is B3 and B5, and B4's stored titles."],
 ];
