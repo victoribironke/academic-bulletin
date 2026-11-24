@@ -22,9 +22,31 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
+// 0. Tables the app manages itself, outside prisma/schema.prisma (the search
+//    table, with its tsvector column, task K1), step into another schema while
+//    Prisma checks its own tables, so db push never offers to drop them, and
+//    come straight back afterwards, data and indexes untouched.
+const KEPT_TABLES = ["search_documents"];
+const KEPT_SCHEMA = "app_kept";
+async function moveKeptTables(from, to) {
+  const mover = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await mover.connect();
+  try {
+    await mover.query(`CREATE SCHEMA IF NOT EXISTS ${KEPT_SCHEMA}`);
+    for (const table of KEPT_TABLES) {
+      const { rows } = await mover.query("SELECT to_regclass($1) AS found", [`${from}.${table}`]);
+      if (rows[0].found) await mover.query(`ALTER TABLE ${from}.${table} SET SCHEMA ${to}`);
+    }
+  } finally {
+    await mover.end();
+  }
+}
+await moveKeptTables("public", KEPT_SCHEMA);
+
 // 1. Tables, columns and indexes from prisma/schema.prisma. Prisma refuses
 //    any change that would lose data, so this never drops anything.
 const push = spawnSync("npx", ["prisma", "db", "push"], { stdio: "inherit" });
+await moveKeptTables(KEPT_SCHEMA, "public");
 if (push.status !== 0) {
   console.error("prisma db push failed; the deploy stops here.");
   process.exit(push.status ?? 1);
