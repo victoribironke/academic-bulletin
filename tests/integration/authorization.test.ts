@@ -105,6 +105,9 @@ import { DELETE as removeArchived } from "@/app/api/archive/[id]/route";
 import { DELETE as deleteCourseRows } from "@/app/api/courses/bulk/route";
 import { confirmCourseList as confirmCourseListNow } from "@/lib/courses/course-list";
 import { GET as readSectionMarks } from "@/app/api/submissions/[id]/sections/route";
+import { GET as readDraftQuestions, POST as askDapRoute } from "@/app/api/submissions/[id]/questions/route";
+import { GET as readDapInbox } from "@/app/api/dap-questions/route";
+import { PATCH as answerDapQuestion } from "@/app/api/dap-questions/[id]/route";
 import { GET as readCourseList, POST as confirmCourseListRoute } from "@/app/api/submissions/[id]/course-list/route";
 import { POST as askCourseChange } from "@/app/api/submissions/[id]/course-list/requests/route";
 import { GET as listCourseRequests } from "@/app/api/course-change-requests/route";
@@ -6616,6 +6619,74 @@ describe("Heads of Department confirm their course list (B10)", () => {
       status: "DECLINED",
       response: "The 2023-2027 bulletin has 2 units.",
     });
+  });
+});
+
+describe("Ask DAP (H6)", () => {
+  const cycleId = "h6-cycle";
+  const submissionId = "h6-submission";
+  const officerId = "h6-officer";
+  const context = { params: Promise.resolve({ id: submissionId }) };
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.create({ data: { id: cycleId, name: "H6", createdById: ids.super } });
+    await prisma.submission.create({
+      data: { id: submissionId, title: "H6 Bulletin", programmeId: ids.programmeA, createdById: ids.hod, cycleId },
+    });
+    // The DAP officer for school A (an Academic Planning admin linked to it, D1).
+    await prisma.user.create({
+      data: { id: officerId, email: `${officerId}@babcock.edu.ng`, firstName: "Ofe", lastName: "Officer", role: "ADMIN", schoolId: ids.schoolA },
+    });
+  });
+
+  afterAll(async () => {
+    await prisma.submission.deleteMany({ where: { id: submissionId } });
+    await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+    await prisma.activityLog.deleteMany({ where: { actorId: officerId } });
+    await prisma.user.deleteMany({ where: { id: officerId } });
+  });
+
+  it("sends a question about a field to the school's officer, and shows the answer on the draft", async () => {
+    const ask = (body: object) =>
+      askDapRoute(new Request(`http://localhost/api/submissions/${submissionId}/questions`, { method: "POST", body: JSON.stringify(body) }), context);
+    authState.userId = ids.hod;
+    expect((await ask({ section: "overview", question: "Why?" })).status).toBe(400);
+    const sent = await ask({ section: "overview", field: "Philosophy", question: "Must the philosophy name the programme?" });
+    expect(sent.status).toBe(201);
+    const question = await sent.json();
+    expect(question).toMatchObject({ section: "overview", field: "Philosophy", status: "OPEN", officerId, officer: "Ofe Officer", askedBy: "Test Hod", overdue: false });
+    expect(new Date(question.dueAt).getTime()).toBeGreaterThan(Date.now());
+
+    // Someone who can't see the draft can't ask about it.
+    authState.userId = ids.coordinator;
+    const other = await prisma.submission.findFirst({ where: { programmeId: ids.programmeB }, select: { id: true } });
+    if (other) {
+      expect(
+        (await askDapRoute(new Request("http://localhost", { method: "POST", body: JSON.stringify({ section: "overview", question: "Not my programme at all." }) }), { params: Promise.resolve({ id: other.id }) })).status,
+      ).toBe(403);
+    }
+
+    // DAP's inbox, for DAP only; the officer can narrow it to their own.
+    authState.userId = ids.hod;
+    expect((await readDapInbox(new Request("http://localhost/api/dap-questions"))).status).toBe(403);
+    authState.userId = officerId;
+    const inbox = await (await readDapInbox(new Request("http://localhost/api/dap-questions?status=open&mine=1"))).json();
+    expect(inbox.map((item: { id: string }) => item.id)).toContain(question.id);
+    authState.userId = ids.admin;
+    const notMine = await (await readDapInbox(new Request("http://localhost/api/dap-questions?status=open&mine=1"))).json();
+    expect(notMine.map((item: { id: string }) => item.id)).not.toContain(question.id);
+
+    authState.userId = officerId;
+    const answered = await answerDapQuestion(
+      new Request(`http://localhost/api/dap-questions/${question.id}`, { method: "PATCH", body: JSON.stringify({ answer: "Yes: name it, so it can't be mistaken for another programme." }) }),
+      { params: Promise.resolve({ id: question.id }) },
+    );
+    expect(answered.status).toBe(200);
+
+    authState.userId = ids.hod;
+    const onDraft = await (await readDraftQuestions(new Request("http://localhost"), context)).json();
+    expect(onDraft[0]).toMatchObject({ id: question.id, status: "ANSWERED", answeredBy: "Ofe Officer", overdue: false });
+    expect(onDraft[0].answer).toContain("name it");
   });
 });
 

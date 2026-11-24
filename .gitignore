@@ -115,3 +115,5 @@ updates-2-feb-2026.md
 !prisma/migrations/20261124130000_course_code_unique/migration.sql
 !prisma/migrations/20261124140000_course_list_confirmation/
 !prisma/migrations/20261124140000_course_list_confirmation/migration.sql
+!prisma/migrations/20261124150000_dap_questions/
+!prisma/migrations/20261124150000_dap_questions/migration.sql

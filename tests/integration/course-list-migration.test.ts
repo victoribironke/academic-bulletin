@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import prisma from "@/lib/prisma";
 import { getCourseListState, isNotSwitchedOn } from "@/lib/courses/course-list";
+import { questionsForDraft } from "@/lib/help/ask-dap";
 
 // B10 goes live before its database update runs on a site: until then the
 // panel must say "not switched on" instead of failing. Then the migration
@@ -30,5 +31,28 @@ describe("the B10 database update", () => {
       expect(round).toBeGreaterThan(0);
     }
     expect(await getCourseListState("no-such-draft")).toEqual({ confirmation: null, requests: [] });
+  });
+
+  it("does the same for Ask DAP (H6)", async () => {
+    await prisma.$executeRawUnsafe('DROP TABLE IF EXISTS "dap_questions"');
+    const error = await questionsForDraft("no-such-draft").then(
+      () => null,
+      (caught: unknown) => caught,
+    );
+    expect(isNotSwitchedOn(error)).toBe(true);
+    const sql = readFileSync("prisma/migrations/20261124150000_dap_questions/migration.sql", "utf8");
+    const statements = sql
+      .split("\n")
+      .filter((line) => !line.startsWith("--"))
+      .join("\n")
+      .split(";")
+      .map((statement) => statement.trim())
+      .filter(Boolean);
+    expect(statements).toHaveLength(3);
+    for (const round of [1, 2]) {
+      for (const statement of statements) await prisma.$executeRawUnsafe(statement);
+      expect(round).toBeGreaterThan(0);
+    }
+    expect(await questionsForDraft("no-such-draft")).toEqual([]);
   });
 });

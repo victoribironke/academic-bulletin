@@ -1,5 +1,6 @@
 "use client";
 
+import { AskDap } from "@/components/submissions/ask-dap";
 import { rememberLastPlace } from "@/components/desk/continue-where-stopped";
 import { SectionMarkIcon, sectionMarkWords, useSectionMarks } from "@/components/submissions/section-marks";
 import { useState, useEffect, use, useCallback, useRef } from "react";
@@ -1685,14 +1686,25 @@ export default function SubmissionDetailPage({
           <Card>
             <CardContent>
               <div className="space-y-4">
-                <div>
-                  <h3 className="font-semibold flex items-center gap-2">
-                    <SectionIcon className="h-5 w-5" />
-                    {currentSection?.title}
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    {currentSection?.description}
-                  </p>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="font-semibold flex items-center gap-2">
+                      <SectionIcon className="h-5 w-5" />
+                      {currentSection?.title}
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      {currentSection?.description}
+                    </p>
+                  </div>
+                  {/* H6: a question about this section goes to the school's DAP officer. */}
+                  <div className="sm:max-w-sm">
+                    <AskDap
+                      key={activeSection}
+                      submissionId={id}
+                      section={activeSection}
+                      sectionTitle={currentSection?.title ?? activeSection}
+                    />
+                  </div>
                 </div>
                 <Separator />
 

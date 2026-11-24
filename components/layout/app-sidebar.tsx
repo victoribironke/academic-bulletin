@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import {
   Archive,
   Inbox,
+  MessageCircleQuestion,
   BookOpen,
   CalendarClock,
   ChevronsUpDown,
@@ -144,6 +145,12 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/activity-log",
         icon: ScrollText,
         permission: "view:audit",
+      },
+      {
+        title: "DAP Questions",
+        href: "/dap-questions",
+        icon: MessageCircleQuestion,
+        roles: ["ADMIN", "SUPER_ADMIN"],
       },
       {
         title: "Course Requests",

@@ -37,7 +37,7 @@ export function button(link: string, label: string): string {
   return `<p style="margin:24px 0 0"><a href="${escapeHtml(link)}" style="display:inline-block;background:#003cbb;color:#ffffff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:600">${escapeHtml(label)}</a></p>`;
 }
 
-function renderEmail(opts: {
+export function renderEmail(opts: {
   heading: string;
   intro: string;
   details: Array<[string, string]>;
