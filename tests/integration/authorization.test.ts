@@ -108,6 +108,7 @@ import { GET as readSectionMarks } from "@/app/api/submissions/[id]/sections/rou
 import { GET as readDraftQuestions, POST as askDapRoute } from "@/app/api/submissions/[id]/questions/route";
 import { GET as readDapInbox } from "@/app/api/dap-questions/route";
 import { PATCH as answerDapQuestion } from "@/app/api/dap-questions/[id]/route";
+import { DELETE as removeCalendarEntry, GET as readCalendarSettings, POST as changeCalendar } from "@/app/api/cycles/[id]/calendar/route";
 import { GET as readCourseList, POST as confirmCourseListRoute } from "@/app/api/submissions/[id]/course-list/route";
 import { POST as askCourseChange } from "@/app/api/submissions/[id]/course-list/requests/route";
 import { GET as listCourseRequests } from "@/app/api/course-change-requests/route";
@@ -6689,6 +6690,83 @@ describe("Ask DAP (H6)", () => {
     const onDraft = await (await readDraftQuestions(new Request("http://localhost"), context)).json();
     expect(onDraft[0]).toMatchObject({ id: question.id, status: "ANSWERED", answeredBy: "Ofe Officer", overdue: false });
     expect(onDraft[0].answer).toContain("name it");
+  });
+});
+
+describe("calendar settings screen (C4, C6)", () => {
+  const cycleId = "c4-cycle";
+  const context = { params: Promise.resolve({ id: cycleId }) };
+  const settings = JSON.parse(readFileSync(join(process.cwd(), "data/calendar/2027-2031.json"), "utf8")) as CalendarSettings;
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.create({ data: { id: cycleId, name: "C4 calendar", createdById: ids.super } });
+    await prisma.$transaction((tx) => applyCalendarSettings(tx, cycleId, settings));
+  });
+
+  afterAll(async () => {
+    await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+  });
+
+  const change = (body: object) =>
+    changeCalendar(new Request(`http://localhost/api/cycles/${cycleId}/calendar`, { method: "POST", body: JSON.stringify(body) }), context);
+  const log = (action: string) => prisma.activityLog.findFirst({ where: { action, entityId: cycleId }, orderBy: { createdAt: "desc" } });
+
+  it("is DAP's: Heads and Deans can't read or change it", async () => {
+    authState.userId = ids.hod;
+    expect((await readCalendarSettings(new Request("http://localhost"), context)).status).toBe(403);
+    expect((await change({ action: "holiday", date: "2026-12-31", name: "New Year's Eve" })).status).toBe(403);
+    authState.userId = ids.admin;
+    const calendar = await (await readCalendarSettings(new Request("http://localhost"), context)).json();
+    expect(calendar.phases).toHaveLength(10);
+    expect(calendar.holidays.map((holiday: { name: string }) => holiday.name)).toContain("Christmas Day");
+  });
+
+  it("moves a phase or checkpoint only with a reason, logs it, and moves Submit's opening with it", async () => {
+    authState.userId = ids.admin;
+    expect((await change({ action: "phase", phase: 1, opensAt: "2026-11-26", dueAt: "2027-02-11", reason: "short" })).status).toBe(400);
+    expect((await change({ action: "phase", phase: 1, opensAt: "2027-03-01", dueAt: "2027-02-11", reason: "Senate asked for a week more." })).status).toBe(400);
+    const moved = await change({ action: "phase", phase: 1, opensAt: "2026-11-26", dueAt: "2027-02-11", reason: "Senate asked for a week more.", notify: false });
+    expect(moved.status).toBe(200);
+    expect((await moved.json()).calendar.phases[0]).toMatchObject({ phase: 1, dueAt: "2027-02-11" });
+    expect((await log("CALENDAR_PHASE_CHANGED"))?.description).toBe(
+      "Changed Phase 1 (Departmental Drafting): due Thursday, February 4, 2027 to Thursday, February 11, 2027. Reason: Senate asked for a week more.",
+    );
+
+    expect((await change({ action: "checkpoint", code: "SUBMIT_OPEN", dueAt: "2026-12-15", reason: "The checks go live a day later.", notify: false })).status).toBe(200);
+    const cycle = await prisma.reviewCycle.findUniqueOrThrow({ where: { id: cycleId } });
+    expect(cycle.submissionsOpenAt?.toISOString()).toBe("2026-12-14T23:00:00.000Z");
+  });
+
+  it("adds and removes holidays and quiet periods, sets quiet hours, and removes only after DELETE", async () => {
+    authState.userId = ids.admin;
+    expect((await change({ action: "holiday", date: "2026-12-31", name: "New Year's Eve" })).status).toBe(200);
+    expect((await change({ action: "holiday", date: "2026-12-31", name: "Again" })).status).toBe(409);
+    expect((await change({ action: "quiet-period", from: "2027-04-02", to: "2027-04-01", label: "Easter" })).status).toBe(400);
+    expect((await change({ action: "quiet-hours", weekdays: "6pm to 8am" })).status).toBe(400);
+    expect((await change({ action: "quiet-hours", weekdays: "18:00-07:30", sabbath: "Friday 18:00 to Saturday 19:00" })).status).toBe(200);
+    expect((await prisma.reviewCycle.findUniqueOrThrow({ where: { id: cycleId } })).quietHours).toMatchObject({ weekdays: "18:00-07:30" });
+
+    const holiday = await prisma.cycleHoliday.findFirstOrThrow({ where: { cycleId, name: "New Year's Eve" } });
+    const remove = (confirm?: string) =>
+      removeCalendarEntry(
+        new Request("http://localhost", { method: "DELETE", body: JSON.stringify({ kind: "holiday", itemId: holiday.id, ...(confirm && { confirm }) }) }),
+        context,
+      );
+    expect((await remove()).status).toBe(400);
+    expect((await remove("DELETE")).status).toBe(200);
+    expect(await prisma.cycleHoliday.count({ where: { id: holiday.id } })).toBe(0);
+    expect((await log("CALENDAR_HOLIDAY_REMOVED"))?.description).toContain("New Year's Eve");
+  });
+
+  it("grants an extension later than the phase's date, with a reason (C6: nothing locks, the date moves)", async () => {
+    authState.userId = ids.admin;
+    expect((await change({ action: "extension", scope: "DEPARTMENT", targetId: ids.departmentA, phase: 1, newDueAt: "2027-02-01", reason: "Head of Department was ill for a week." })).status).toBe(400);
+    expect((await change({ action: "extension", scope: "DEPARTMENT", targetId: ids.departmentA, phase: 1, newDueAt: "2027-02-18", reason: "x" })).status).toBe(400);
+    const granted = await change({ action: "extension", scope: "DEPARTMENT", targetId: ids.departmentA, phase: 1, newDueAt: "2027-02-18", reason: "Head of Department was ill for a week." });
+    expect(granted.status).toBe(200);
+    const extension = (await granted.json()).calendar.extensions[0];
+    expect(extension).toMatchObject({ scope: "DEPARTMENT", targetId: ids.departmentA, newDueAt: "2027-02-18", approvedBy: "Academic Admin" });
+    expect((await log("CALENDAR_EXTENSION_GRANTED"))?.description).toContain("to Thursday, February 18, 2027. Reason: Head of Department was ill for a week.");
   });
 });
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { usePermission, useUser } from "@/contexts/user-context";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -327,6 +328,13 @@ export default function ReviewCyclesPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
+                      {/* C4: phase dates, checkpoints, holidays, quiet periods, extensions. */}
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={`/review-cycles/${cycle.id}/calendar`} aria-label={`Calendar for ${cycle.name}`}>
+                          <CalendarClock />
+                          <span className="hidden sm:inline">Calendar</span>
+                        </Link>
+                      </Button>
                       <Button
                         variant="outline"
                         size="sm"
