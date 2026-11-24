@@ -363,6 +363,7 @@ model User {
   dapQuestionsAsked       DapQuestion[]            @relation("DapQuestionAsker")
   dapQuestionsAssigned    DapQuestion[]            @relation("DapQuestionOfficer")
   dapQuestionsAnswered    DapQuestion[]            @relation("DapQuestionAnswerer")
+  agentMessages           AgentMessage[]           @relation("AgentMessageRecipient")
   // Cycles created by this admin
   reviewCycles         ReviewCycle[]
   programmeAssignments UserProgramme[]
@@ -1025,5 +1026,53 @@ model DapQuestion {
   @@index([status, dueAt])
   @@index([submissionId])
   @@map("dap_questions")
+}
+
+// ============================================================================
+// REMINDER AGENT (tasks T3 to T6)
+// ============================================================================
+
+/// One message from the reminder agent to one desk on one day (T3): prepared
+/// at 7:00 am WAT, held for DAP to read, sent at 8:00 am. Kept for good, with
+/// the facts it used (T5).
+model AgentMessage {
+  id          String    @id @default(cuid())
+  /// "HOD:<user id>": the desk the message is for
+  deskKey     String
+  recipientId String
+  /// Supervisors and DAP leadership copied (T4)
+  ccIds       String[]  @default([])
+  forDate     DateTime  @db.Date
+  /// PREPARED, HELD, SENT, SKIPPED or FAILED
+  status      String    @default("PREPARED")
+  subject     String
+  body        String
+  reasons     String[]  @default([])
+  facts       Json
+  /// AI or TEMPLATE
+  writtenBy   String
+  editedById  String?
+  preparedAt  DateTime  @default(now())
+  sentAt      DateTime?
+  error       String?
+
+  recipient User @relation("AgentMessageRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@unique([deskKey, forDate])
+  @@index([forDate, status])
+  @@index([recipientId, sentAt])
+  @@map("agent_messages")
+}
+
+/// DAP's controls for the agent (T5): "sending" (on or off), "pause:ALL",
+/// and "pause:<desk key>" for one desk.
+model AgentControl {
+  key         String   @id
+  value       String
+  reason      String?
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("agent_controls")
 }
 

@@ -1,0 +1,16 @@
+{
+  "agent": {
+    "statusCheckAt": "06:00",
+    "prepareAt": "07:00",
+    "sendAt": "08:00",
+    "timezone": "Africa/Lagos",
+    "cadence": { "ON_TRACK": "weekly:MON", "KEEP_AN_EYE": "weekly:MON,THU", "AT_RISK": "every:2:workingDays", "OVERDUE": "daily" },
+    "checkpointDaysBefore": [7, 2],
+    "finalDaysBefore": [21, 14, 7, 3, 1],
+    "escalation": { "AT_RISK_afterMessages": 2, "OVERDUE_supervisorFromDay": 1, "OVERDUE_leadershipFromDay": 3 },
+    "limits": { "maxMessagesPerDeskPerDay": 1, "aiTimeoutMs": 10000, "samplesPerRun": 20 },
+    "quiet": { "hours": "18:00-08:00", "sabbath": "FRI 18:00 - SAT 19:00", "periods": ["2026-12-24..2027-01-03"] },
+    "channels": ["EMAIL", "IN_APP"],
+    "fallback": "TEMPLATE"
+  }
+}

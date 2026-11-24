@@ -109,6 +109,8 @@ import { GET as readDraftQuestions, POST as askDapRoute } from "@/app/api/submis
 import { GET as readDapInbox } from "@/app/api/dap-questions/route";
 import { PATCH as answerDapQuestion } from "@/app/api/dap-questions/[id]/route";
 import { DELETE as removeCalendarEntry, GET as readCalendarSettings, POST as changeCalendar } from "@/app/api/cycles/[id]/calendar/route";
+import { GET as readAgent, POST as controlAgent } from "@/app/api/agent/route";
+import { planDay, prepareDay, sendDue } from "@/lib/agent/run";
 import { GET as readCourseList, POST as confirmCourseListRoute } from "@/app/api/submissions/[id]/course-list/route";
 import { POST as askCourseChange } from "@/app/api/submissions/[id]/course-list/requests/route";
 import { GET as listCourseRequests } from "@/app/api/course-change-requests/route";
@@ -6767,6 +6769,86 @@ describe("calendar settings screen (C4, C6)", () => {
     const extension = (await granted.json()).calendar.extensions[0];
     expect(extension).toMatchObject({ scope: "DEPARTMENT", targetId: ids.departmentA, newDueAt: "2027-02-18", approvedBy: "Academic Admin" });
     expect((await log("CALENDAR_EXTENSION_GRANTED"))?.description).toContain("to Thursday, February 18, 2027. Reason: Head of Department was ill for a week.");
+  });
+});
+
+describe("the reminder agent (T3 to T6)", () => {
+  const cycleId = "t3-cycle";
+  const submissionId = "t3-submission";
+  const settings = JSON.parse(readFileSync(join(process.cwd(), "data/calendar/2027-2031.json"), "utf8")) as CalendarSettings;
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.create({ data: { id: cycleId, name: "T3 agent cycle", createdById: ids.super, isActive: true } });
+    await prisma.$transaction((tx) => applyCalendarSettings(tx, cycleId, settings));
+    await prisma.submission.create({ data: { id: submissionId, title: "T3 Bulletin", programmeId: ids.programmeA, createdById: ids.hod, cycleId } });
+  });
+
+  afterAll(async () => {
+    await prisma.agentMessage.deleteMany({});
+    await prisma.agentControl.deleteMany({});
+    await prisma.submission.deleteMany({ where: { id: submissionId } });
+    await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+  });
+
+  const control = (body: object) => controlAgent(new Request("http://localhost/api/agent", { method: "POST", body: JSON.stringify(body) }));
+
+  it("dry-runs a date: who hears from it and why, writing nothing", async () => {
+    const plan = await planDay("2026-12-04");
+    const head = plan.find((item) => item.facts.deskKey === `HOD:${ids.hod}`);
+    // The test Head never signed in and the draft is empty, so the desk is At risk too.
+    expect(head?.decision).toMatchObject({ write: true, reasons: ["CP1 in 7 days", "At risk (every second working day)"] });
+    expect(head?.preview.body).toContain("CP1 is in 7 days (Friday, December 11, 2026).");
+    expect(head?.preview.body).toContain(`/submissions/${submissionId}`);
+    // A Saturday: nobody.
+    expect((await planDay("2026-12-05")).every((item) => !item.decision.write)).toBe(true);
+    expect(await prisma.agentMessage.count()).toBe(0);
+
+    authState.userId = ids.hod;
+    expect((await readAgent(new Request("http://localhost/api/agent?date=2026-12-04"))).status).toBe(403);
+    authState.userId = ids.admin;
+    const view = await (await readAgent(new Request("http://localhost/api/agent?date=2026-12-04"))).json();
+    expect(view.plan.find((item: { deskKey: string }) => item.deskKey === `HOD:${ids.hod}`)).toMatchObject({ write: true, status: { status: "AT_RISK" } });
+    expect(view.controls).toMatchObject({ sending: false, pausedAll: false });
+  });
+
+  it("prepares once, holds a paused desk, and never touches the drafts (T6)", async () => {
+    const before = await prisma.submission.findUniqueOrThrow({ where: { id: submissionId }, select: { updatedAt: true } });
+    expect((await prepareDay("2026-12-04", { useAi: false })).prepared).toBeGreaterThan(0);
+    expect((await prepareDay("2026-12-04", { useAi: false })).prepared).toBe(0);
+    const message = await prisma.agentMessage.findFirstOrThrow({ where: { deskKey: `HOD:${ids.hod}` } });
+    expect(message).toMatchObject({ status: "PREPARED", writtenBy: "TEMPLATE" });
+    expect(message.reasons).toContain("CP1 in 7 days");
+
+    authState.userId = ids.admin;
+    expect((await control({ action: "pause", deskKey: `HOD:${ids.hod}`, reason: "Head on leave this week" })).status).toBe(200);
+    await prepareDay("2026-12-09", { useAi: false });
+    expect((await prisma.agentMessage.findFirstOrThrow({ where: { deskKey: `HOD:${ids.hod}`, forDate: new Date("2026-12-09T00:00:00Z") } })).status).toBe("HELD");
+    expect((await control({ action: "resume", deskKey: `HOD:${ids.hod}` })).status).toBe(200);
+
+    const after = await prisma.submission.findUniqueOrThrow({ where: { id: submissionId }, select: { updatedAt: true } });
+    expect(after.updatedAt.getTime()).toBe(before.updatedAt.getTime());
+  });
+
+  it("sends only when a Super Administrator has switched sending on, after the hour's hold", async () => {
+    const at = new Date("2026-12-04T09:00:00+01:00");
+    await prisma.agentMessage.updateMany({ where: { forDate: new Date("2026-12-04T00:00:00Z") }, data: { preparedAt: new Date("2026-12-04T07:00:00+01:00") } });
+    expect(await sendDue(at)).toMatchObject({ sent: 0, because: "Sending is switched off." });
+
+    authState.userId = ids.admin;
+    expect((await control({ action: "sending", value: "on" })).status).toBe(403);
+    authState.userId = ids.super;
+    expect((await control({ action: "sending", value: "on" })).status).toBe(200);
+    // Not in quiet hours (7:30 am is before 8:00).
+    expect(await sendDue(new Date("2026-12-04T07:30:00+01:00"))).toMatchObject({ sent: 0, because: "It is outside 8:00 am to 6:00 pm." });
+    // The test site has no email service, so the try is recorded as not sent.
+    await sendDue(at);
+    const tried = await prisma.agentMessage.findFirstOrThrow({ where: { deskKey: `HOD:${ids.hod}`, forDate: new Date("2026-12-04T00:00:00Z") } });
+    expect(tried.status).toBe("FAILED");
+    expect(await prisma.activityLog.count({ where: { action: "AGENT_MESSAGE_FAILED", entityId: tried.id } })).toBe(1);
+
+    authState.userId = ids.admin;
+    expect((await control({ action: "edit", messageId: tried.id, subject: "x", body: "short" })).status).toBe(400);
+    expect((await control({ action: "hold", messageId: tried.id })).status).toBe(200);
   });
 });
 

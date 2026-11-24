@@ -12,6 +12,7 @@ import type { Countdown, DeadlineStatus } from "@/lib/calendar/countdown";
 import type { PhaseListRow } from "@/lib/calendar/desk";
 import { cn } from "@/lib/utils";
 import { WaitingWork } from "@/components/desk/waiting-work";
+import { AgentMessages } from "@/components/desk/agent-messages";
 import { ContinueWhereStopped } from "@/components/desk/continue-where-stopped";
 import { Progress } from "@/components/ui/progress";
 import { useUser } from "@/contexts/user-context";
@@ -158,6 +159,8 @@ export function DeadlinesPanel() {
       {currentUser && <ContinueWhereStopped userId={currentUser.id} />}
       {/* T1: the desk's own waiting work, with "Do this next". */}
       <WaitingWork />
+      {/* T3: the reminder agent's messages, in the app as well as by email. */}
+      <AgentMessages />
 
       {programmes && programmes.length > 0 && (
         <div className="rounded-lg border bg-card">

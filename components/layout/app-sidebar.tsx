@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import {
   Archive,
   Inbox,
+  BellRing,
   MessageCircleQuestion,
   BookOpen,
   CalendarClock,
@@ -145,6 +146,12 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/activity-log",
         icon: ScrollText,
         permission: "view:audit",
+      },
+      {
+        title: "Reminder Agent",
+        href: "/agent",
+        icon: BellRing,
+        roles: ["ADMIN", "SUPER_ADMIN"],
       },
       {
         title: "DAP Questions",
