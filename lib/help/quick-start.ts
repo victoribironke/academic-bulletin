@@ -26,14 +26,19 @@ export const SIGN_IN_STEP =
 const list = (items: readonly string[]) =>
   `${items.slice(0, -1).map((item) => `**${item}**`).join(", ")} and **${items[items.length - 1]}**`;
 
-function departmentSteps(submitOpens: string | null): string[] {
+function departmentSteps(submitOpens: string | null, coordinator = false): string[] {
   return [
     "Your **Dashboard** shows **Your deadline** for Departmental Drafting, the next checkpoint and your programmes. Open a programme there or from **Submissions**.",
     `Work through the eight sections in order: ${list(DRAFT_SECTION_TITLES)}.`,
     "Your work saves as you type, and **All changes saved** shows when it has. **Save draft** saves at once.",
     "**Course Structure** starts filled in from the 2023-2027 bulletin: check it level by level. The grey rows with a lock are the General Education block. Every student takes them, and only the General Education desk can change them.",
-    `When every section is complete, use **Submit to School**${submitOpens ? ` (it opens on ${submitOpens})` : ""}. Your Dean then reviews the programme at School Board Harmonisation.`,
+    coordinator
+      ? "When every section is complete, tell your Head of Department: only the Head submits the programme to the School. Until then you can keep editing."
+      : `When every section is complete, use **Submit to School**${submitOpens ? ` (it opens on ${submitOpens})` : ""}. Your Dean then reviews the programme at School Board Harmonisation.`,
     `If the Dean sends it back, it shows **${STATUS_LABELS.CORRECTIONS_REQUIRED}**, with the Dean's remarks at the top of the programme.`,
+    ...(coordinator
+      ? []
+      : ["To share the drafting, name a **programme coordinator** for a programme under **Coordinators**. They can edit the whole programme; only you submit it."]),
   ];
 }
 
@@ -41,7 +46,7 @@ function departmentSteps(submitOpens: string | null): string[] {
 export function quickStartFor(role: string, submitOpens: string | null = null): QuickStart {
   if (role === "HOD") return { title: "Quick start for Heads of Department", steps: departmentSteps(submitOpens) };
   if (role === "PROGRAMME_COORDINATOR") {
-    return { title: "Quick start for programme coordinators", steps: departmentSteps(submitOpens) };
+    return { title: "Quick start for programme coordinators", steps: departmentSteps(submitOpens, true) };
   }
   if (role === "DEAN") {
     return {

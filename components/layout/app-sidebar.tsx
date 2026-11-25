@@ -24,6 +24,7 @@ import {
   BookOpenText,
   BookMarked,
   ClipboardList,
+  UsersRound,
 } from "lucide-react";
 import {
   Sidebar,
@@ -137,6 +138,13 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/staff",
         icon: UserCog,
         permission: "view:staff",
+      },
+      // G2: the Head names programme coordinators for the department's programmes.
+      {
+        title: "Coordinators",
+        href: "/coordinators",
+        icon: UsersRound,
+        roles: ["HOD"],
       },
     ],
   },

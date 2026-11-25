@@ -6,9 +6,8 @@ import { getAllowedWorkflowActions, resolveWorkflowTransition } from "@/lib/subm
 describe("recalling a submitted programme (D5)", () => {
   it("is offered to the department while the programme waits at School Board Harmonisation", () => {
     expect(getAllowedWorkflowActions({ role: "HOD", currentPhase: 2, currentStatus: "IN_REVIEW" })).toEqual(["RECALL"]);
-    expect(getAllowedWorkflowActions({ role: "PROGRAMME_COORDINATOR", currentPhase: 2, currentStatus: "IN_REVIEW" })).toEqual([
-      "RECALL",
-    ]);
+    // G2: only the Head of Department recalls; a coordinator drafts.
+    expect(getAllowedWorkflowActions({ role: "PROGRAMME_COORDINATOR", currentPhase: 2, currentStatus: "IN_REVIEW" })).toEqual([]);
     // The Dean keeps their own actions; nobody recalls from later phases.
     expect(getAllowedWorkflowActions({ role: "DEAN", currentPhase: 2, currentStatus: "IN_REVIEW" })).toEqual(["APPROVE", "RETURN"]);
     expect(getAllowedWorkflowActions({ role: "HOD", currentPhase: 3, currentStatus: "IN_REVIEW" })).toEqual([]);

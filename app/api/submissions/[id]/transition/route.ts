@@ -6,6 +6,7 @@ import {
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
 import {
+  COORDINATOR_SUBMIT_NOTE,
   clearedPreviousGate,
   getWorkflowAccess,
   readOverrideReason,
@@ -119,6 +120,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       owners: await loadPhaseOwners(),
     });
     if (!access.actions.includes(action)) {
+      // G2: say who submits, rather than a bare refusal.
+      if (user.role === "PROGRAMME_COORDINATOR" && (action === "SUBMIT" || action === "RECALL")) {
+        return NextResponse.json({ error: COORDINATOR_SUBMIT_NOTE, code: "HEAD_SUBMITS" }, { status: 403 });
+      }
       return NextResponse.json(
         { error: "This action is not available to your role at the current phase." },
         { status: 403 },

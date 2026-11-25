@@ -38,6 +38,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   "course-requests": "Course Requests",
   "dap-questions": "DAP Questions",
   agent: "Reminder Agent",
+  coordinators: "Programme Coordinators",
 };
 
 /** DAP sees every owner's list there, under another name (B6). */

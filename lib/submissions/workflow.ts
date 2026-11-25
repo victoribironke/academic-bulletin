@@ -50,6 +50,10 @@ export const DEFAULT_PHASE_OWNERS: PhaseOwnerRule[] = [
 /** Actions that close the current phase and move the bulletin forward. */
 export const PHASE_CLEARING_ACTIONS: SubmissionAction[] = ["SUBMIT", "APPROVE"];
 
+/** What a programme coordinator sees where the Submit button would be (G2). */
+export const COORDINATOR_SUBMIT_NOTE =
+  "Only your Head of Department submits this programme. Tell them when every section is complete.";
+
 export function isPhaseOwner(
   { role, userId }: { role: UserRole; userId?: string },
   phase: number,
@@ -96,6 +100,9 @@ export function getWorkflowAccess({
   owners,
 }: WorkflowState): WorkflowAccess {
   const none = { actions: [], viaOverride: false };
+  // G2: a programme coordinator drafts the whole programme, but only the Head
+  // of Department submits it (or recalls it). Editing stays with them.
+  if (role === "PROGRAMME_COORDINATOR") return none;
   if (
     !Number.isInteger(currentPhase) ||
     currentPhase < 1 ||

@@ -30,6 +30,7 @@ const ACTIONS: Action[] = [
   { title: "Open the Academic Policy", href: "/policy", words: "rules regulations" },
   { title: "Academic Load policy", href: "/policy#academic-load", words: "units credits semester load" },
   { title: "Open the Course Registry", href: "/master-courses", words: "courses master registry" },
+  { title: "Programme coordinators", href: "/coordinators", words: "coordinator name invite drafter delegate", roles: ["HOD"] },
   { title: "Courses we own", href: "/courses-we-own", words: "owned shared descriptions learning outcomes", roles: ["HOD", "PROGRAMME_COORDINATOR", "DEAN"] },
   { title: "Course owners", href: "/courses-we-own", words: "owned shared general education desk unowned", roles: ADMIN },
   { title: "Open the staff directory", href: "/staff", words: "people lecturers" },

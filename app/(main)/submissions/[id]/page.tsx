@@ -82,6 +82,7 @@ import {
   phaseHeading,
 } from "@/lib/submissions/phases";
 import type { SubmissionWorkflow } from "@/lib/submissions/phase-owners";
+import { COORDINATOR_SUBMIT_NOTE } from "@/lib/submissions/workflow";
 import { PageHeader } from "@/components/shared/page-header";
 import { formatDate, formatTime } from "@/lib/dates/format";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -1412,6 +1413,13 @@ export default function SubmissionDetailPage({
                   )}
                 </div>
               )}
+              {/* G2: a coordinator drafts; only the Head of Department submits. */}
+              {currentUser?.role === "PROGRAMME_COORDINATOR" &&
+                isAssignedSubmission &&
+                submission.currentPhase === 1 &&
+                (submission.status === "DRAFT" || submission.status === "CORRECTIONS_REQUIRED") && (
+                  <p className="max-w-xs text-xs text-muted-foreground">{COORDINATOR_SUBMIT_NOTE}</p>
+                )}
               {/* Preview button - available to all viewers */}
               <BulletinPreview
                 submission={
