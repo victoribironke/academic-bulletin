@@ -2,6 +2,8 @@
 
 Rehearsed on the test site on Monday, November 23, 2026 (reports in `docs/golive/reports/E1_*_test_site.md`).
 
+**Done on live on Wednesday, November 25, 2026, 6:22 to 6:35 pm WAT**, in this order: A5 with DAP's three confirmed names (`--confirmed-names SBMS-MED,SSAT-AIT,SSAT-BAS`), the registry uploads, file 09 again, the owner fill, DAP's B9 sign-off, then the steps below, with DAP's two General Education exemptions (`--exempt "JSEH-LLS-FFS:ENT 322" --exempt "VSSS-PSP-PCR:BU-GST 420"`), and a full search rebuild (`npm run search:index`). Restore point: the 17:45 backup (`ROLLBACK.md`). Reports: `docs/golive/reports/*_live.md`; launch checks 17 pass, 1 not yet due, 1 fail (B3).
+
 ## Before starting
 
 1. DAP has confirmed the 3 department names (SBMS-MED, SSAT-AIT, SSAT-BAS), and A5 (codes and names standard) has run on live.
