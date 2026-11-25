@@ -18,7 +18,7 @@
  */
 import type { Prisma } from "@prisma/client";
 import type prisma from "@/lib/prisma";
-import { isGeneralEducationCourse } from "@/lib/courses/general-education";
+import { isGeneralEducationCourse, isGeneralEducationFamily } from "@/lib/courses/general-education";
 import { normalizeLearningOutcomes, prepareCourseGraceState } from "@/lib/courses/grace-compliance";
 import { propagateMasterCourseChanges } from "@/lib/courses/propagation";
 import { recordActivity, AUTOSAVE_COALESCE_MINUTES } from "@/lib/activity-log";
@@ -84,7 +84,8 @@ export function descriptionAccess(
   const owns = owner ? ownsCourse(owner, place) : null;
   if (options.isAdministrator) return owner ? "OWNER" : "LOCAL";
   if (owns === true) return "OWNER";
-  if (isGeneralEducationCourse(course)) return "LOCKED";
+  // DEC8: GST, BU-GST and ENT belong to the General Education desk.
+  if (isGeneralEducationCourse(course) || isGeneralEducationFamily(course.code)) return "LOCKED";
   if (!owner || owns === null) return "LOCAL";
   return "LOCKED";
 }
@@ -99,7 +100,7 @@ export function isOwnedElsewhere(
 
 export function sharedCourseLockedMessage(owner: CourseOwner | null | undefined, code: string): string {
   const name = ownerName(owner);
-  if (!name && isGeneralEducationCourse({ code, masterCourse: owner })) {
+  if (!name && (isGeneralEducationCourse({ code, masterCourse: owner }) || isGeneralEducationFamily(code))) {
     return "General Education courses are written by the General Education desk for every programme, so their description can't be changed here (rule W1). Ask DAP if something is wrong.";
   }
   return `${code} is taught by ${name ?? "another department"}, which writes its description for every programme that uses it (rule W16). Ask them, or DAP, if something is wrong.`;
@@ -113,14 +114,14 @@ export type TeachingText = {
 };
 
 /**
- * W16: the owner saved a shared course's description in a draft. The text
- * goes on the Registry course and into every other open draft row that uses
- * it (drafts under review or approved, and archived cycles, stay as they
- * are). Call it inside the transaction that saved the owner's row.
+ * W16: the owner saved a shared course's description, in a draft or on
+ * "Courses we own" (B6). The text goes on the Registry course and into every
+ * other open draft row that uses it (drafts under review or approved, and
+ * archived cycles, stay as they are). Call it inside a transaction.
  */
 export async function shareTeachingText(
   tx: Prisma.TransactionClient,
-  input: { masterCourseId: string; sourceCourseId: string; actorId: string; text: TeachingText },
+  input: { masterCourseId: string; sourceCourseId?: string; actorId: string; text: TeachingText },
 ): Promise<{ draftRowsUpdated: number; programmes: string[] }> {
   const course = await tx.masterCourse.update({
     where: { id: input.masterCourseId },

@@ -11,6 +11,7 @@
  */
 import prisma from "@/lib/prisma";
 import { COURSE_CODE_PATTERN } from "@/lib/validation/name-format";
+import { isGeneralEducationFamily } from "@/lib/courses/general-education";
 
 /** Academic Policy, Academic Load: 16 to 24 credits a semester. */
 export const SEMESTER_CREDIT_RANGE = { min: 16, max: 24 } as const;
@@ -131,7 +132,9 @@ export function buildCompletenessReport(input: {
         missingOutcomes += 1;
         issue(code, title, "No learning outcomes");
       }
-      if (link.course.ownership !== "INSTITUTIONAL" && !link.course.ownerDeptId && !link.course.ownerSchoolId) {
+      // B6: every course needs a department or school, except General
+      // Education, which the General Education desk owns (DEC8).
+      if (!isGeneralEducationFamily(code) && !link.course.ownerDeptId && !link.course.ownerSchoolId) {
         noOwner += 1;
         issue(code, title, "No owner department or school");
       }

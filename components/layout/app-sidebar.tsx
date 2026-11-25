@@ -22,6 +22,7 @@ import {
   UserCog,
   Users,
   BookOpenText,
+  BookMarked,
   ClipboardList,
 } from "lucide-react";
 import {
@@ -110,6 +111,19 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/master-courses",
         icon: BookOpen,
         permission: "view:schools",
+      },
+      // B6: the courses a department teaches for the university (W16).
+      {
+        title: "Courses We Own",
+        href: "/courses-we-own",
+        icon: BookMarked,
+        roles: ["HOD", "PROGRAMME_COORDINATOR", "DEAN"],
+      },
+      {
+        title: "Course Owners",
+        href: "/courses-we-own",
+        icon: BookMarked,
+        roles: ["ADMIN", "SUPER_ADMIN"],
       },
       // B8: DAP's Registry completeness report.
       {
@@ -341,7 +355,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
               <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
               <SidebarMenu>
                 {items.map((item) => (
-                  <SidebarMenuItem key={item.href}>
+                  <SidebarMenuItem key={`${item.href}:${item.title}`}>
                     <SidebarMenuButton
                       asChild
                       tooltip={item.title}
