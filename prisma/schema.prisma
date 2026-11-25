@@ -282,6 +282,29 @@ model CycleQuietPeriod {
   @@map("cycle_quiet_periods")
 }
 
+/// Task H8: DAP's online clinics for Heads of Department. Each row is one
+/// weekly slot with its joining link, shown on the home page until
+/// `untilDate`; no clinic falls on a holiday or in a quiet period.
+model CycleClinic {
+  id        String   @id @default(cuid())
+  cycleId   String
+  /// MON to FRI, or SUN (never the Sabbath)
+  weekday   String
+  /// "HH:MM", West Africa Time
+  startTime String
+  minutes   Int      @default(30)
+  title     String
+  joinUrl   String
+  /// The last day the clinic runs (Friday, January 29, 2027 by default)
+  untilDate DateTime @db.Date
+  createdAt DateTime @default(now())
+
+  cycle ReviewCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@index([cycleId])
+  @@map("cycle_clinics")
+}
+
 /// An old school, department or programme code kept findable after the code
 /// standard of November 23, 2026 (task A5). Uploads that use it are accepted
 /// with a warning naming the new code until `validUntil` (end of
@@ -485,6 +508,7 @@ model ReviewCycle {
   extensions   CycleExtension[]
   holidays     CycleHoliday[]
   quietPeriods CycleQuietPeriod[]
+  clinics      CycleClinic[]
 
   @@map("review_cycles")
 }

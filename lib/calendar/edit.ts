@@ -1,7 +1,7 @@
 /**
  * Task C4: DAP changes a cycle's calendar on screen: phase dates,
- * checkpoints, holidays, quiet periods and quiet hours, and grants
- * extensions with a reason. Every change is logged, and the people a date
+ * checkpoints, holidays, quiet periods and quiet hours, and the clinics for
+ * Heads of Department (task H8), and grants extensions with a reason. Every change is logged, and the people a date
  * change affects are told by email.
  *
  * Nothing locks at a deadline (task C6, decision DEC10): the desk shows
@@ -9,7 +9,8 @@
  */
 import prisma from "@/lib/prisma";
 import { recordActivity } from "@/lib/activity-log";
-import { type DateKey, formatLongDate, isDateKey, startOfDateInstant } from "@/lib/calendar/dates";
+import { type DateKey, type Weekday, dateKeyAt, formatLongDate, isDateKey, startOfDateInstant } from "@/lib/calendar/dates";
+import { clinicSessions, describeClinic, readClinicInput, sortClinics } from "@/lib/calendar/clinic-sessions";
 import { SUBMISSIONS_OPEN_CHECKPOINT } from "@/lib/calendar/settings";
 import { isEmailConfigured, sendEmail } from "@/lib/email/resend";
 import { renderEmail } from "@/lib/email/notifications";
@@ -54,10 +55,16 @@ export async function calendarForEditing(cycleId: string) {
       checkpoints: { orderBy: { dueAt: "asc" } },
       holidays: { orderBy: { date: "asc" } },
       quietPeriods: { orderBy: { fromDate: "asc" } },
+      clinics: true,
       extensions: { orderBy: { createdAt: "desc" } },
     },
   });
   if (!cycle) return null;
+  const daysOff = {
+    holidays: cycle.holidays.map((holiday) => keyOf(holiday.date)!),
+    breaks: cycle.quietPeriods.map((period) => ({ from: keyOf(period.fromDate)!, to: keyOf(period.toDate)! })),
+  };
+  const now = new Date();
   const [departments, programmes, approvers] = await Promise.all([
     prisma.department.findMany({ select: { id: true, name: true, code: true }, orderBy: { name: "asc" } }),
     prisma.programme.findMany({ select: { id: true, name: true, code: true }, orderBy: { name: "asc" } }),
@@ -92,6 +99,19 @@ export async function calendarForEditing(cycleId: string) {
     })),
     holidays: cycle.holidays.map((holiday) => ({ id: holiday.id, date: keyOf(holiday.date)!, name: holiday.name })),
     quietPeriods: cycle.quietPeriods.map((period) => ({ id: period.id, from: keyOf(period.fromDate)!, to: keyOf(period.toDate)!, label: period.label })),
+    clinics: sortClinics(cycle.clinics.map((clinic) => ({ ...clinic, weekday: clinic.weekday as Weekday, untilDate: keyOf(clinic.untilDate)! }))).map(
+      (clinic) => ({
+        id: clinic.id,
+        title: clinic.title,
+        weekday: clinic.weekday,
+        startTime: clinic.startTime,
+        minutes: clinic.minutes,
+        joinUrl: clinic.joinUrl,
+        untilDate: clinic.untilDate,
+        schedule: describeClinic(clinic),
+        next: clinicSessions([clinic], daysOff, now, { limit: 1 })[0] ?? null,
+      }),
+    ),
     extensions: cycle.extensions.map((extension) => {
       const approver = approvers.find((person) => person.id === extension.approvedById);
       return {
@@ -252,6 +272,27 @@ export async function addQuietPeriod(cycleId: string, input: { from?: unknown; t
   });
 }
 
+/** Task H8: a weekly clinic for Heads of Department, with its joining link. */
+export async function addClinic(cycleId: string, input: Record<string, unknown>, actorId: string) {
+  const read = readClinicInput(input, dateKeyAt(new Date()));
+  if ("error" in read) throw new CalendarEditError(read.error);
+  const clinic = read.value;
+  await prisma.$transaction(async (tx) => {
+    await tx.cycleClinic.create({ data: { cycleId, ...clinic, untilDate: dateOnly(clinic.untilDate) } });
+    // The joining link stays out of the log: it can carry the meeting's passcode.
+    await recordActivity(
+      {
+        actorId,
+        action: "CALENDAR_CLINIC_ADDED",
+        entityType: "REVIEW_CYCLE",
+        entityId: cycleId,
+        description: `Added a clinic: ${clinic.title}, ${describeClinic(clinic).replace(/^Every/, "every")}, until ${formatLongDate(clinic.untilDate)}. Heads of Department see it on their home page.`,
+      },
+      tx,
+    );
+  });
+}
+
 const TIME_RANGE = /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/;
 
 export async function setQuietHours(cycleId: string, input: { weekdays?: unknown; sabbath?: unknown }, actorId: string) {
@@ -318,7 +359,7 @@ export async function grantExtension(
   return { told };
 }
 
-/** Removes a holiday, quiet period or extension (the route checks the typed DELETE). */
+/** Removes a holiday, quiet period, clinic or extension (the route checks the typed DELETE). */
 export async function removeCalendarItem(cycleId: string, kind: unknown, id: unknown, actorId: string) {
   const itemId = typeof id === "string" ? id : "";
   if (kind === "holiday") {
@@ -339,6 +380,15 @@ export async function removeCalendarItem(cycleId: string, kind: unknown, id: unk
     });
     return;
   }
+  if (kind === "clinic") {
+    const item = await prisma.cycleClinic.findFirst({ where: { id: itemId, cycleId } });
+    if (!item) throw new CalendarEditError("That clinic is no longer in the calendar.", 404);
+    await prisma.$transaction(async (tx) => {
+      await tx.cycleClinic.delete({ where: { id: item.id } });
+      await recordActivity({ actorId, action: "CALENDAR_CLINIC_REMOVED", entityType: "REVIEW_CYCLE", entityId: cycleId, description: `Removed the clinic ${item.title} (${describeClinic({ ...item, weekday: item.weekday as Weekday })}). It no longer shows on the home page.` }, tx);
+    });
+    return;
+  }
   if (kind === "extension") {
     const item = await prisma.cycleExtension.findFirst({ where: { id: itemId, cycleId } });
     if (!item) throw new CalendarEditError("That extension is no longer in the calendar.", 404);
@@ -348,5 +398,5 @@ export async function removeCalendarItem(cycleId: string, kind: unknown, id: unk
     });
     return;
   }
-  throw new CalendarEditError("Choose a holiday, quiet period or extension to remove.");
+  throw new CalendarEditError("Choose a holiday, quiet period, clinic or extension to remove.");
 }

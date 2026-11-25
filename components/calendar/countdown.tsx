@@ -13,6 +13,7 @@ import type { PhaseListRow } from "@/lib/calendar/desk";
 import { cn } from "@/lib/utils";
 import { WaitingWork } from "@/components/desk/waiting-work";
 import { AgentMessages } from "@/components/desk/agent-messages";
+import { ClinicsCard } from "@/components/desk/clinics-card";
 import { ContinueWhereStopped } from "@/components/desk/continue-where-stopped";
 import { Progress } from "@/components/ui/progress";
 import { useUser } from "@/contexts/user-context";
@@ -161,6 +162,8 @@ export function DeadlinesPanel() {
       <WaitingWork />
       {/* T3: the reminder agent's messages, in the app as well as by email. */}
       <AgentMessages />
+      {/* H8: the next clinics with DAP, for Heads of Department and coordinators. */}
+      <ClinicsCard />
 
       {programmes && programmes.length > 0 && (
         <div className="rounded-lg border bg-card">

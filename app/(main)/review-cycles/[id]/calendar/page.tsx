@@ -3,15 +3,15 @@
 /**
  * Task C4: the cycle's calendar for DAP. Change phase dates and checkpoints
  * (with a reason; the people affected are told by email), holidays, quiet
- * periods and quiet hours, and grant extensions with a reason. Every change
- * is logged. Nothing locks at a deadline (task C6): the desk shows Overdue
+ * periods and quiet hours, the clinics for Heads of Department (task H8),
+ * and grant extensions with a reason. Every change is logged. Nothing locks at a deadline (task C6): the desk shows Overdue
  * and an extension moves its date.
  */
 import { use, useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { useUser } from "@/contexts/user-context";
 import { PageHeader } from "@/components/shared/page-header";
 import { ErrorState, TableSkeleton } from "@/components/shared/states";
@@ -34,6 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDate } from "@/lib/dates/format";
+import { CLINIC_MINUTES, CLINIC_TITLE, CLINIC_WEEKDAYS, CLINICS_END, WEEKDAY_NAMES } from "@/lib/calendar/clinic-sessions";
 
 type Calendar = {
   cycle: { id: string; name: string; isActive: boolean; archived: boolean; dueTime: string };
@@ -42,6 +43,14 @@ type Calendar = {
   checkpoints: { code: string; name: string; phase: number; type: string; dueAt: string }[];
   holidays: { id: string; date: string; name: string }[];
   quietPeriods: { id: string; from: string; to: string; label: string }[];
+  clinics: {
+    id: string;
+    title: string;
+    joinUrl: string;
+    untilDate: string;
+    schedule: string;
+    next: { day: string; time: string } | null;
+  }[];
   extensions: {
     id: string;
     scope: string;
@@ -61,6 +70,7 @@ type Editing =
   | { kind: "checkpoint"; code: string; name: string; dueAt: string }
   | { kind: "holiday" }
   | { kind: "quiet-period" }
+  | { kind: "clinic" }
   | { kind: "extension" };
 
 const day = (key: string | null) => (key ? formatDate(`${key}T12:00:00Z`) : "No date");
@@ -138,7 +148,7 @@ export default function CycleCalendarPage({ params }: { params: Promise<{ id: st
     }
   };
 
-  const remove = async (kind: "holiday" | "quiet" | "extension", itemId: string, title: string, description: string) => {
+  const remove = async (kind: "holiday" | "quiet" | "clinic" | "extension", itemId: string, title: string, description: string) => {
     const confirmed = await confirmDelete({ title, description, actionLabel: "Remove" });
     if (!confirmed) return;
     const res = await fetch(`/api/cycles/${id}/calendar`, {
@@ -172,7 +182,7 @@ export default function CycleCalendarPage({ params }: { params: Promise<{ id: st
       </Button>
       <PageHeader
         title={`Calendar: ${calendar.cycle.name}`}
-        description="Phase dates, checkpoints, holidays, quiet periods and extensions. Every change is logged; a new date is emailed to the people it affects. Nothing locks at a deadline: the desk shows Overdue, and an extension moves its date."
+        description="Phase dates, checkpoints, holidays, quiet periods, clinics and extensions. Every change is logged; a new date is emailed to the people it affects. Nothing locks at a deadline: the desk shows Overdue, and an extension moves its date."
       />
       {readOnly && <p className="text-sm text-muted-foreground">This cycle is archived, so its calendar can&apos;t change.</p>}
 
@@ -364,6 +374,56 @@ export default function CycleCalendarPage({ params }: { params: Promise<{ id: st
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-2">
           <div>
+            <CardTitle className="text-base">Clinics</CardTitle>
+            <CardDescription>
+              Online clinics for Heads of Department, two a week until {day(CLINICS_END)}. Their home page shows the next ones with the joining link; none falls on a holiday or in a quiet period.
+            </CardDescription>
+          </div>
+          {!readOnly && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => open({ kind: "clinic" }, { title: CLINIC_TITLE, weekday: "TUE", startTime: "14:00", minutes: String(CLINIC_MINUTES), untilDate: CLINICS_END })}
+            >
+              <Plus /> Add
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent>
+          <ul className="divide-y text-sm">
+            {calendar.clinics.map((clinic) => (
+              <li key={clinic.id} className="flex items-center justify-between gap-2 py-2">
+                <span className="min-w-0 space-y-0.5">
+                  <span className="block font-medium">
+                    {clinic.schedule} · {clinic.title}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    Until {day(clinic.untilDate)} · {clinic.next ? `Next: ${clinic.next.day}, ${clinic.next.time}` : "No more sessions"} ·{" "}
+                    <a href={clinic.joinUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 underline-offset-4 hover:underline">
+                      Joining link <ExternalLink className="size-3" />
+                    </a>
+                  </span>
+                </span>
+                {!readOnly && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Remove ${clinic.schedule}`}
+                    onClick={() => void remove("clinic", clinic.id, `Remove the clinic ${clinic.schedule.toLowerCase()}?`, "It no longer shows on the Heads' home page. The change is logged.")}
+                  >
+                    <Trash2 />
+                  </Button>
+                )}
+              </li>
+            ))}
+            {calendar.clinics.length === 0 && <li className="py-2 text-muted-foreground">No clinics yet. Add the two weekly clinics with their joining links.</li>}
+          </ul>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-2">
+          <div>
             <CardTitle className="text-base">Extensions</CardTitle>
             <CardDescription>A later due date for one department or programme, with a reason. Its Head and coordinators are told.</CardDescription>
           </div>
@@ -421,6 +481,7 @@ export default function CycleCalendarPage({ params }: { params: Promise<{ id: st
                 if (editing.kind === "checkpoint") void send({ action: "checkpoint", code: editing.code, ...form, notify }, "Date changed.");
                 if (editing.kind === "holiday") void send({ action: "holiday", ...form }, "Holiday added.");
                 if (editing.kind === "quiet-period") void send({ action: "quiet-period", ...form }, "Quiet period added.");
+                if (editing.kind === "clinic") void send({ action: "clinic", ...form }, "Clinic added. Heads of Department see it on their home page.");
                 if (editing.kind === "extension") void send({ action: "extension", ...form }, "Extension granted.");
               }}
             >
@@ -434,14 +495,18 @@ export default function CycleCalendarPage({ params }: { params: Promise<{ id: st
                         ? "Add a holiday"
                         : editing.kind === "quiet-period"
                           ? "Add a quiet period"
-                          : "Grant an extension"}
+                          : editing.kind === "clinic"
+                            ? "Add a clinic"
+                            : "Grant an extension"}
                 </DialogTitle>
                 <DialogDescription>
                   {editing.kind === "phase" || editing.kind === "checkpoint"
                     ? "The reason goes in the activity log and to the people affected."
                     : editing.kind === "extension"
                       ? "The department's Head and coordinators are told by email."
-                      : "The change is logged."}
+                      : editing.kind === "clinic"
+                        ? "A weekly slot, West Africa Time. The change is logged; the joining link is not."
+                        : "The change is logged."}
                 </DialogDescription>
               </DialogHeader>
 
@@ -488,6 +553,43 @@ export default function CycleCalendarPage({ params }: { params: Promise<{ id: st
                   <div className="space-y-1">
                     <Label htmlFor={`${formId}-qt`}>Last day</Label>
                     <Input id={`${formId}-qt`} type="date" required {...field("to")} />
+                  </div>
+                </div>
+              )}
+              {editing.kind === "clinic" && (
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="space-y-1 sm:col-span-3">
+                    <Label htmlFor={`${formId}-ct`}>Name</Label>
+                    <Input id={`${formId}-ct`} required maxLength={100} {...field("title")} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Day</Label>
+                    <Select value={form.weekday ?? "TUE"} onValueChange={(value) => setForm((current) => ({ ...current, weekday: value }))}>
+                      <SelectTrigger aria-label="Day of the week"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {CLINIC_WEEKDAYS.map((weekday) => (
+                          <SelectItem key={weekday} value={weekday}>
+                            {WEEKDAY_NAMES[weekday]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor={`${formId}-cs`}>Starts</Label>
+                    <Input id={`${formId}-cs`} type="time" required {...field("startTime")} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor={`${formId}-cm`}>Minutes</Label>
+                    <Input id={`${formId}-cm`} type="number" min={15} max={120} step={5} required {...field("minutes")} />
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label htmlFor={`${formId}-cu`}>Joining link</Label>
+                    <Input id={`${formId}-cu`} type="url" required placeholder="https://" maxLength={500} {...field("joinUrl")} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor={`${formId}-cl`}>Last day</Label>
+                    <Input id={`${formId}-cl`} type="date" required {...field("untilDate")} />
                   </div>
                 </div>
               )}

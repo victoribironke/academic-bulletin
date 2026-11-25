@@ -3,6 +3,7 @@ import { requireApiUser } from "@/lib/api-auth";
 import { readDeleteBody, requireDeleteConfirmation } from "@/lib/archive";
 import {
   CalendarEditError,
+  addClinic,
   addHoliday,
   addQuietPeriod,
   calendarForEditing,
@@ -38,7 +39,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
 /**
  * POST: one change to the calendar (task C4), logged, with the people a date
  * change affects told by email: { action: "phase" | "checkpoint" | "holiday"
- * | "quiet-period" | "quiet-hours" | "extension", ... }.
+ * | "quiet-period" | "quiet-hours" | "clinic" | "extension", ... }.
  */
 export async function POST(request: Request, { params }: RouteParams) {
   try {
@@ -67,6 +68,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       case "quiet-hours":
         result = await setQuietHours(id, body, actor);
         break;
+      case "clinic":
+        result = await addClinic(id, body, actor);
+        break;
       case "extension":
         result = await grantExtension(id, body, actor);
         break;
@@ -79,7 +83,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   }
 }
 
-/** DELETE: removes a holiday, quiet period or extension, after DELETE is typed (Q7). */
+/** DELETE: removes a holiday, quiet period, clinic or extension, after DELETE is typed (Q7). */
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
     const auth = await requireApiUser(["ADMIN", "SUPER_ADMIN"]);
