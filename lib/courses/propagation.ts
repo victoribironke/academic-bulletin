@@ -115,10 +115,33 @@ export async function propagateMasterCourseChanges(
 
     if (courseIds.length > 0) {
       if (Object.keys(updateData).length > 0) {
-        await prisma.course.updateMany({
-          where: { id: { in: courseIds } },
-          data: updateData,
+        // B14: a programme's own units, semester or level stay as they are.
+        const links = await prisma.programmeCourse.findMany({
+          where: {
+            courseId: update.id,
+            OR: [{ unitsOverride: { not: null } }, { semesterOverride: { not: null } }, { levelOverride: { not: null } }],
+          },
+          select: { programmeId: true, unitsOverride: true, semesterOverride: true, levelOverride: true },
         });
+        const ownValues = new Map(links.map((link) => [link.programmeId, link]));
+        const groups = new Map<string, { data: Record<string, unknown>; ids: string[] }>();
+        for (const course of draftCourses) {
+          const own = ownValues.get(course.submission.programme.id);
+          const data = { ...updateData };
+          if (own?.unitsOverride != null && "units" in data) data.units = own.unitsOverride;
+          if (own?.semesterOverride != null && "semester" in data) data.semester = own.semesterOverride;
+          if (own?.levelOverride != null && "level" in data) data.level = own.levelOverride;
+          const key = JSON.stringify(data);
+          const group = groups.get(key) ?? { data, ids: [] };
+          group.ids.push(course.id);
+          groups.set(key, group);
+        }
+        for (const group of groups.values()) {
+          await prisma.course.updateMany({
+            where: { id: { in: group.ids } },
+            data: group.data,
+          });
+        }
       }
 
       if (Object.keys(descriptionUpdate).length > 0) {

@@ -86,10 +86,27 @@ interface MasterCourse {
   programmeLinks?: {
     id: string;
     isCore: boolean;
+    unitsOverride?: number | null;
+    semesterOverride?: number | null;
+    levelOverride?: number | null;
     programme: { id: string; name: string; code: string };
   }[];
   prerequisites?: { id: string; code: string; title: string }[];
   _count?: { programmeLinks: number };
+}
+
+/** A programme's own units, semester and level for the course (B14), or null when it follows the Registry. */
+function programmeValuesText(link: {
+  unitsOverride?: number | null;
+  semesterOverride?: number | null;
+  levelOverride?: number | null;
+}): string | null {
+  const parts = [
+    link.unitsOverride != null ? `${link.unitsOverride} ${link.unitsOverride === 1 ? "unit" : "units"}` : null,
+    link.semesterOverride != null ? `semester ${link.semesterOverride}` : null,
+    link.levelOverride != null ? `${link.levelOverride} level` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(", ") : null;
 }
 
 interface Department {
@@ -1201,9 +1218,11 @@ export function MasterCourseManager({
             </DialogHeader>
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {programmes.map((prog) => {
-                const isLinked = selectedCourse?.programmeLinks?.some(
+                const link = selectedCourse?.programmeLinks?.find(
                   (l) => l.programme.id === prog.id,
                 );
+                const isLinked = Boolean(link);
+                const ownValues = link ? programmeValuesText(link) : null;
                 return (
                   <div
                     key={prog.id}
@@ -1211,6 +1230,9 @@ export function MasterCourseManager({
                   >
                     <span>
                       {prog.name} ({prog.code})
+                      {ownValues && (
+                        <span className="block text-xs text-muted-foreground">This programme: {ownValues}</span>
+                      )}
                     </span>
                     {isLinked ? (
                       <div className="flex items-center gap-2">

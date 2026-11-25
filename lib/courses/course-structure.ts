@@ -6,6 +6,9 @@
  * 2. its programme's courses from package file 02: level, semester, code,
  *    title, units, core or elective, with prerequisites from the Registry.
  *
+ * Where the programme has its own units, semester or level for a course
+ * (B14, package file 09), that value is used, General Education rows included.
+ *
  * Planning is pure, so it can be checked in tests and shown as a dry run;
  * applying only adds rows. A row already in the draft (by code) is never
  * changed, so running it again, or after a Head has started, is safe.
@@ -94,6 +97,8 @@ export function planCourseStructure(input: {
   rows: StructureRow[];
   registry: Map<string, RegistryCourse>;
   existing: { code: string; title: string }[];
+  /** The programme's own units, semester and level by code (B14), which win over the block's and the Registry's. */
+  programmeValues?: Map<string, { units: number | null; semester: number | null; level: number | null }>;
 }): StructurePlan {
   const existingCodes = new Set(input.existing.map((course) => course.code));
   const takenTitles = new Set(input.existing.map((course) => titleKey(course.title)));
@@ -108,15 +113,16 @@ export function planCourseStructure(input: {
   for (const entry of generalEducationBlockFor(input.levels)) {
     if (taken.has(entry.code)) continue;
     const master = input.registry.get(entry.code);
+    const own = input.programmeValues?.get(entry.code);
     const title = uniqueTitle(entry.title, entry.code, takenTitles);
     takenTitles.add(titleKey(title));
     taken.add(entry.code);
     courses.push({
       code: entry.code,
       title,
-      units: entry.units,
-      level: entry.level,
-      semester: entry.semester,
+      units: own?.units ?? entry.units,
+      level: own?.level ?? entry.level,
+      semester: own?.semester ?? entry.semester,
       status: "CORE",
       prerequisites: prerequisitesOf(master),
       masterCourseId: master?.id ?? null,
@@ -175,7 +181,7 @@ export function planCourseStructure(input: {
       continue;
     }
     const master = input.registry.get(code);
-    const units = row.units ?? master?.units ?? null;
+    const units = row.units ?? input.programmeValues?.get(code)?.units ?? master?.units ?? null;
     if (units === null || !Number.isInteger(units) || units < 0 || units > 12) {
       notes.push({
         kind: "NO_UNITS",

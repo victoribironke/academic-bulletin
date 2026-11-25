@@ -908,6 +908,7 @@ model ProgrammeCourse {
   unitsOverride            Int?
   typeOverride             CourseType?
   semesterOverride         Int?
+  levelOverride            Int? // B14: this programme's level when it differs from the Registry's
   learningOutcomesOverride Json?
   courseContentOverride    String?
   sourceProgrammeName      String?

@@ -173,7 +173,17 @@ async function main() {
       record("17", `${file} uploads with no code errors (planned only)`, codeErrors === 0,
         codeErrors ? `${codeErrors} rows to fix` : `${filePlan.courses.length} rows clean`);
     }
-    record("17", "Package file 09 uploads with no code errors", "NOT YET", "File 09 holds programme-specific values, loaded with B14 in R1.");
+    {
+      const { planProgrammeValuesFromDatabase } = await import("../lib/courses/programme-values");
+      const valuesPlan = await planProgrammeValuesFromDatabase(
+        prisma,
+        await parseSpreadsheetBuffer(readFileSync(join(packageDir, "09_Programme_specific_values_for_task_B14.xlsx"))),
+      );
+      record("17", "Package file 09 uploads with no code errors (planned only)", valuesPlan.counts.codeErrors === 0,
+        valuesPlan.counts.codeErrors
+          ? `${valuesPlan.counts.codeErrors} rows to fix`
+          : `${valuesPlan.counts.matched} rows matched; ${valuesPlan.changes.length} values to store, ${valuesPlan.alreadySet} already stored (B14)`);
+    }
   } finally {
     await prisma.$disconnect();
   }

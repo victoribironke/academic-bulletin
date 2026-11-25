@@ -37,6 +37,26 @@ const VALID_LEVELS = [100, 200, 300, 400, 500, 600];
 const OFFERED_COURSE: Prisma.MasterCourseWhereInput = {
   OR: [{ programmeLinks: { some: {} } }, { code: { startsWith: "BU-" } }],
 };
+/** The course as one programme runs it (B14): its own units, semester and level where it has them. */
+function withProgrammeValues<
+  T extends {
+    units: number;
+    semester: number | null;
+    level: number;
+    programmeLinks: { unitsOverride: number | null; semesterOverride: number | null; levelOverride: number | null; programme: { id: string } }[];
+  },
+>(course: T, programmeId: string | null): T & { programmeValues?: boolean } {
+  const own = programmeId ? course.programmeLinks.find((link) => link.programme.id === programmeId) : undefined;
+  if (!own || (own.unitsOverride === null && own.semesterOverride === null && own.levelOverride === null)) return course;
+  return {
+    ...course,
+    units: own.unitsOverride ?? course.units,
+    semester: own.semesterOverride ?? course.semester,
+    level: own.levelOverride ?? course.level,
+    programmeValues: true,
+  };
+}
+
 const isOffered = (course: { code: string; _count?: { programmeLinks: number } }) =>
   course.code.startsWith("BU-") || (course._count?.programmeLinks ?? 0) > 0;
 
@@ -63,6 +83,13 @@ export async function GET(request: Request) {
     // course with only the fields the course-code picker needs.
     const paginated = searchParams.has("page");
     const summaryOnly = searchParams.get("fields") === "summary";
+    // B14: with a draft, each course comes with that programme's own units,
+    // semester and level where they differ from the Registry's.
+    const forSubmission = searchParams.get("submissionId");
+    const forProgrammeId = forSubmission
+      ? ((await prisma.submission.findUnique({ where: { id: forSubmission }, select: { programmeId: true } }))
+          ?.programmeId ?? null)
+      : null;
 
     if (["HOD", "PROGRAMME_COORDINATOR"].includes(auth.user.role)) {
       if (!auth.user.departmentId) {
@@ -201,6 +228,9 @@ export async function GET(request: Request) {
           select: {
             id: true,
             isCore: true,
+            unitsOverride: true,
+            semesterOverride: true,
+            levelOverride: true,
             programme: {
               select: {
                 id: true,
@@ -230,10 +260,15 @@ export async function GET(request: Request) {
     if (paginated) {
       const total = await prisma.masterCourse.count({ where });
       return NextResponse.json(
-        pageResult(courses.map((course) => ({ ...course, offered: isOffered(course) })), total, page, pageSize),
+        pageResult(
+          courses.map((course) => ({ ...withProgrammeValues(course, forProgrammeId), offered: isOffered(course) })),
+          total,
+          page,
+          pageSize,
+        ),
       );
     }
-    return NextResponse.json(courses);
+    return NextResponse.json(courses.map((course) => withProgrammeValues(course, forProgrammeId)));
   } catch (error) {
     console.error("Failed to fetch master courses:", error);
     return NextResponse.json(

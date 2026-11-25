@@ -367,6 +367,7 @@ export function CourseTable({
     if (debouncedRegistrySearch) params.set("q", debouncedRegistrySearch);
     if (registryLevel !== "all") params.set("level", registryLevel);
     params.set("offered", includeNational ? "first" : "only");
+    params.set("submissionId", submissionId);
 
     fetch(`/api/master-courses?${params}`, { signal: controller.signal })
       .then((res) => (res.ok ? res.json() : null))
@@ -382,7 +383,7 @@ export function CourseTable({
         if (!controller.signal.aborted) setIsLoadingMasterCourses(false);
       });
     return () => controller.abort();
-  }, [importDialogOpen, departmentId, registryPage, debouncedRegistrySearch, registryLevel, includeNational]);
+  }, [importDialogOpen, departmentId, submissionId, registryPage, debouncedRegistrySearch, registryLevel, includeNational]);
 
   // Open import dialog and load courses
   const openImportDialog = () => {

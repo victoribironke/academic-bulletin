@@ -27,6 +27,7 @@
     "registry:upload": "tsx scripts/upload-registry.ts",
     "launch:check": "tsx scripts/launch-checks.ts",
     "courses:clean-codes": "tsx scripts/clean-course-codes.ts",
+    "courses:programme-values": "tsx scripts/load-programme-values.ts",
     "search:index": "tsx scripts/search-index.ts",
     "people:import-roster": "tsx scripts/import-roster.ts",
     "db:seed": "bun run prisma/seed.ts",

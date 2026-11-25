@@ -121,3 +121,5 @@ updates-2-feb-2026.md
 !prisma/migrations/20261124160000_search_documents/migration.sql
 !prisma/migrations/20261124170000_reminder_agent/
 !prisma/migrations/20261124170000_reminder_agent/migration.sql
+!prisma/migrations/20261125100000_programme_course_level/
+!prisma/migrations/20261125100000_programme_course_level/migration.sql

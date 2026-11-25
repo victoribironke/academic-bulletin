@@ -55,6 +55,7 @@ async function main() {
   const { applyCourseStructure, keepRegistryLinksOut, loadRegistryCourses, planCourseStructure, registryLinksOutside } =
     await import("../lib/courses/course-structure");
   const { GENERAL_EDUCATION_BLOCK, programmeLevels } = await import("../lib/courses/general-education");
+  const { loadProgrammeValues } = await import("../lib/courses/programme-values");
   const { loadCodeLookups } = await import("../lib/units/code-aliases");
   const { formatCourseCode } = await import("../lib/validation/name-format");
   type Plan = ReturnType<typeof planCourseStructure>;
@@ -135,7 +136,8 @@ async function main() {
       const existing = target.draftId
         ? await prisma.course.findMany({ where: { submissionId: target.draftId }, select: { code: true, title: true } })
         : [];
-      const plan = planCourseStructure({ levels, rows: programmeRows, registry, existing });
+      const programmeValues = await loadProgrammeValues(prisma, programme.id);
+      const plan = planCourseStructure({ levels, rows: programmeRows, registry, existing, programmeValues });
       const note = !editable
         ? `Draft is ${target.status}; left alone.`
         : programmeRows.length === 0

@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma";
 import { titleKey, uniqueTitle } from "@/lib/courses/unique-title";
+import { effectiveCourseValues, loadProgrammeValues } from "@/lib/courses/programme-values";
 import { generalEducationBlockFor, programmeLevels } from "@/lib/courses/general-education";
 import {
   applyCourseStructure,
@@ -63,6 +64,7 @@ export async function preloadRegistryCoursesForSubmission(
     rows: [],
     registry: blockRegistry,
     existing: before,
+    programmeValues: await loadProgrammeValues(prisma, submission.programmeId),
   });
   const blockAdded = await applyCourseStructure(prisma, submission, blockPlan);
   // Block rows already there are linked once their Registry record exists.
@@ -99,6 +101,7 @@ export async function preloadRegistryCoursesForSubmission(
           unitsOverride: true,
           typeOverride: true,
           semesterOverride: true,
+          levelOverride: true,
           learningOutcomesOverride: true,
           courseContentOverride: true,
         },
@@ -123,7 +126,7 @@ export async function preloadRegistryCoursesForSubmission(
 
   for (const master of wanted) {
     const programmeLink = master.programmeLinks[0];
-    const effectiveType = programmeLink?.typeOverride ?? master.type;
+    const values = effectiveCourseValues(master, programmeLink);
     const wasPresent = existingCodes.has(master.code);
     const title = wasPresent
       ? (programmeLink?.titleOverride || master.title)
@@ -138,13 +141,10 @@ export async function preloadRegistryCoursesForSubmission(
         masterCourseId: master.id,
         code: master.code,
         title,
-        units: programmeLink?.unitsOverride ?? master.units,
-        status:
-          effectiveType === "ELECTIVE" || programmeLink?.isCore === false
-            ? "ELECTIVE"
-            : "CORE",
-        semester: programmeLink?.semesterOverride ?? master.semester,
-        level: master.level,
+        units: values.units,
+        status: values.status,
+        semester: values.semester,
+        level: values.level,
         prerequisites:
           master.prerequisites.map((item) => item.code).join(", ") || null,
       },

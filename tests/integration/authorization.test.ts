@@ -6534,6 +6534,31 @@ describe("Babcock courses first in the picker (B5)", () => {
     expect(all.map((course) => course.code)).toEqual(["ZBF 101", "BU-ZBF 102", "ZBF 103"]);
     expect(all.map((course) => course.offered)).toEqual([true, true, false]);
   });
+
+  it("offers a course with the draft's own programme values (B14)", async () => {
+    await prisma.reviewCycle.create({ data: { id: "b14-cycle", name: "B14", createdById: ids.super } });
+    await prisma.submission.create({
+      data: { id: "b14-draft", title: "B14 Bulletin", programmeId: ids.programmeA, createdById: ids.hod, cycleId: "b14-cycle" },
+    });
+    await prisma.programmeCourse.update({
+      where: { programmeId_courseId: { programmeId: ids.programmeA, courseId: "b5-linked" } },
+      data: { unitsOverride: 3, levelOverride: 200 },
+    });
+    try {
+      authState.userId = ids.hod;
+      const read = async (query: string) => {
+        const response = await listMasterCourses(new Request(`http://localhost/api/master-courses?page=1&q=ZBF 101${query}`));
+        return ((await response.json()) as { items: { units: number; level: number; programmeValues?: boolean }[] }).items[0];
+      };
+      expect(await read("&submissionId=b14-draft")).toMatchObject({ units: 3, level: 200, programmeValues: true });
+      const plain = await read("");
+      expect(plain).toMatchObject({ units: 2, level: 100 });
+      expect(plain.programmeValues).toBeUndefined();
+    } finally {
+      await prisma.submission.deleteMany({ where: { id: "b14-draft" } });
+      await prisma.reviewCycle.deleteMany({ where: { id: "b14-cycle" } });
+    }
+  });
 });
 
 describe("Heads of Department confirm their course list (B10)", () => {

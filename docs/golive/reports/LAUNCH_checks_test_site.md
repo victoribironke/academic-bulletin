@@ -1,8 +1,8 @@
 # Launch checks (database side)
 
 - Database: roundhouse.proxy.rlwy.net
-- When: 2026-11-24T12:17:49.136Z
-- 16 passed, 1 failed, 2 not yet due (a later release)
+- When: 2026-11-25T10:04:36.813Z
+- 17 passed, 1 failed, 1 not yet due (a later release)
 
 | Result | Test | Check | Detail |
 |---|---|---|---|
@@ -24,4 +24,4 @@
 | PASS | 17 | 01A_Registry_Upload_Babcock-specific_courses_part1.xlsx uploads with no code errors (planned only) | 500 rows clean |
 | PASS | 17 | 01A_Registry_Upload_Babcock-specific_courses_part2.xlsx uploads with no code errors (planned only) | 313 rows clean |
 | PASS | 17 | 07_Retry_after_fixes_77_skipped_rows_v2_owners_filled.xlsx uploads with no code errors (planned only) | 77 rows clean |
-| NOT YET | 17 | Package file 09 uploads with no code errors | File 09 holds programme-specific values, loaded with B14 in R1. |
+| PASS | 17 | Package file 09 uploads with no code errors (planned only) | 83 rows matched; 0 values to store, 83 already stored (B14) |

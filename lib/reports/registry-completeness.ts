@@ -32,6 +32,7 @@ export type ReportLink = {
   };
   unitsOverride: number | null;
   semesterOverride: number | null;
+  levelOverride?: number | null;
 };
 
 export type ProgrammeSummary = {
@@ -91,9 +92,10 @@ export function buildCompletenessReport(input: {
     const groups = new Map<string, { level: number; semester: string; courses: number; credits: number }>();
     for (const link of links) {
       const semester = link.semesterOverride ?? link.course.semester;
-      const key = `${link.course.level}:${semester ?? "S"}`;
+      const level = link.levelOverride ?? link.course.level;
+      const key = `${level}:${semester ?? "S"}`;
       const group = groups.get(key) ?? {
-        level: link.course.level,
+        level,
         semester: semester === 1 || semester === 2 ? String(semester) : "Sessional",
         courses: 0,
         credits: 0,
@@ -177,6 +179,7 @@ export async function loadCompletenessReport(): Promise<CompletenessReport> {
       select: {
         unitsOverride: true,
         semesterOverride: true,
+        levelOverride: true,
         programme: { select: { id: true, code: true, name: true, isNew: true } },
         course: {
           select: {
