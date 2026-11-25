@@ -117,7 +117,13 @@ export type CodeStandardPlan = {
 
 const same = <T extends object>(a: T, b: T) => JSON.stringify(a) === JSON.stringify(b);
 
-export function planCodeStandard(standard: CodeStandard, platform: PlatformSnapshot): CodeStandardPlan {
+export function planCodeStandard(
+  standard: CodeStandard,
+  platform: PlatformSnapshot,
+  /** Department codes whose "(name to confirm)" DAP has confirmed: the standard's name is used. */
+  options: { confirmedNames?: string[] } = {},
+): CodeStandardPlan {
+  const confirmedNames = new Set((options.confirmedNames ?? []).map((code) => code.trim().toUpperCase()).filter(Boolean));
   const problems: string[] = [];
   const aliases: CodeStandardPlan["aliases"] = [];
 
@@ -162,8 +168,9 @@ export function planCodeStandard(standard: CodeStandard, platform: PlatformSnaps
       departments.push({ id: null, action: "create", before: null, after });
       continue;
     }
-    // A name still to confirm never replaces the name the platform has.
-    const keepName = Boolean(row.nameToConfirm) && existing.name !== row.name;
+    // A name still to confirm never replaces the name the platform has,
+    // unless DAP has confirmed it.
+    const keepName = Boolean(row.nameToConfirm) && existing.name !== row.name && !confirmedNames.has(row.code.toUpperCase());
     if (keepName) {
       problems.push(
         `Department ${row.code}: the platform calls it "${existing.name}"; the standard suggests "${row.name}" (to confirm). The platform name is kept until DAP decides.`,
@@ -179,6 +186,11 @@ export function planCodeStandard(standard: CodeStandard, platform: PlatformSnaps
     };
     departments.push({ id: existing.id, action: same(before, after) ? "unchanged" : "update", before, after });
     if (existing.code !== row.code) aliases.push({ kind: "DEPARTMENT", oldCode: existing.code, newCode: row.code, entityId: existing.id });
+  }
+  for (const code of confirmedNames) {
+    if (!standard.departments.some((row) => row.code.toUpperCase() === code && row.nameToConfirm)) {
+      problems.push(`${code} was given as a confirmed name, but the standard has no department name to confirm with that code.`);
+    }
   }
   for (const department of platform.departments) {
     if (!seenDepartmentIds.has(department.id)) {

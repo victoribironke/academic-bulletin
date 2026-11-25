@@ -26,7 +26,11 @@ import {
 import { readCodeStandard } from "../lib/units/read-code-standard";
 
 const args = process.argv.slice(2);
-const standardPath = args.find((arg) => !arg.startsWith("--") && args[args.indexOf(arg) - 1] !== "--report");
+const VALUE_FLAGS = ["--report", "--confirmed-names"];
+const standardPath = args.find((arg, index) => !arg.startsWith("--") && !VALUE_FLAGS.includes(args[index - 1]));
+// DAP's confirmed department names, e.g. --confirmed-names SBMS-MED,SSAT-AIT,SSAT-BAS
+const confirmedIndex = args.indexOf("--confirmed-names");
+const confirmedNames = confirmedIndex >= 0 ? (args[confirmedIndex + 1] ?? "").split(",") : [];
 const reportIndex = args.indexOf("--report");
 const reportPath = reportIndex >= 0 ? args[reportIndex + 1] : null;
 const confirm = args.includes("--confirm");
@@ -54,7 +58,7 @@ const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
 async function main() {
   const standard = await readCodeStandard(standardPath!);
-  const plan = planCodeStandard(standard, await readPlatformSnapshot(prisma));
+  const plan = planCodeStandard(standard, await readPlatformSnapshot(prisma), { confirmedNames });
   const when = new Intl.DateTimeFormat("en-US", {
     timeZone: "Africa/Lagos",
     dateStyle: "long",
@@ -96,7 +100,7 @@ async function main() {
   );
 
   // The after report shows the platform as it now stands: nothing left to change.
-  const after = planCodeStandard(standard, await readPlatformSnapshot(prisma));
+  const after = planCodeStandard(standard, await readPlatformSnapshot(prisma), { confirmedNames });
   const report = `${before}\n\n---\n\n${changed} records changed.\n\n${describeCodeStandardPlan(after, "After the run")}`;
   if (reportPath) writeFileSync(reportPath, report);
   console.log(report);

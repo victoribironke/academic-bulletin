@@ -66,6 +66,7 @@ export type StructureNoteKind =
   | "BAD_ROW"
   | "LISTED_TWICE"
   | "NEEDS_EXEMPTION"
+  | "EXEMPTED"
   | "NOT_IN_REGISTRY";
 
 export type StructureNote = {
@@ -99,6 +100,8 @@ export function planCourseStructure(input: {
   existing: { code: string; title: string }[];
   /** The programme's own units, semester and level by code (B14), which win over the block's and the Registry's. */
   programmeValues?: Map<string, { units: number | null; semester: number | null; level: number | null }>;
+  /** General Education courses outside the block that DAP has let this programme keep (codes), with the reason. */
+  exemptions?: Map<string, string>;
 }): StructurePlan {
   const existingCodes = new Set(input.existing.map((course) => course.code));
   const takenTitles = new Set(input.existing.map((course) => titleKey(course.title)));
@@ -144,7 +147,10 @@ export function planCourseStructure(input: {
       counts.coveredByBlock += 1;
       continue;
     }
-    if (isGeneralEducationFamily(code)) {
+    const exemption = input.exemptions?.get(code);
+    if (isGeneralEducationFamily(code) && exemption) {
+      notes.push({ kind: "EXEMPTED", code, rowNumber: row.rowNumber, message: `${code} ${row.title} is a General Education course outside the standard block, included by DAP's exemption: ${exemption}` });
+    } else if (isGeneralEducationFamily(code)) {
       notes.push({
         kind: "NEEDS_EXEMPTION",
         code,

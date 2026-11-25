@@ -25,9 +25,25 @@ const cycleArg = option("--cycle");
 const onlyProgramme = option("--programme")?.trim().toUpperCase();
 const reportPath = option("--report");
 const confirm = args.includes("--confirm");
+// DAP's General Education exemptions (E1): --exempt "<programme code>:<course code>",
+// repeatable, with one --exempt-reason for the report.
+const exemptReason = option("--exempt-reason")?.trim() || "approved by DAP";
+const exemptionsByProgramme = new Map<string, Map<string, string>>();
+args.forEach((arg, index) => {
+  if (arg !== "--exempt") return;
+  const [programmeCode, courseCode] = (args[index + 1] ?? "").split(":").map((part) => part.trim());
+  if (!programmeCode || !courseCode) {
+    console.error(`--exempt needs "<programme code>:<course code>", not "${args[index + 1] ?? ""}".`);
+    process.exit(1);
+  }
+  const key = programmeCode.toUpperCase();
+  const programmeExemptions = exemptionsByProgramme.get(key) ?? new Map<string, string>();
+  programmeExemptions.set(courseCode.toUpperCase().replace(/\s+/g, " "), exemptReason);
+  exemptionsByProgramme.set(key, programmeExemptions);
+});
 if (!file) {
   console.error(
-    'Usage: npx tsx scripts/prefill-course-structures.ts --file <02_...xlsx> [--cycle "<cycle name or id>"] [--programme <code>] [--report <file.md>] [--confirm]',
+    'Usage: npx tsx scripts/prefill-course-structures.ts --file <02_...xlsx> [--cycle "<cycle name or id>"] [--programme <code>] [--exempt "<programme>:<course>" ...] [--exempt-reason "<why>"] [--report <file.md>] [--confirm]',
   );
   process.exit(1);
 }
@@ -137,7 +153,8 @@ async function main() {
         ? await prisma.course.findMany({ where: { submissionId: target.draftId }, select: { code: true, title: true } })
         : [];
       const programmeValues = await loadProgrammeValues(prisma, programme.id);
-      const plan = planCourseStructure({ levels, rows: programmeRows, registry, existing, programmeValues });
+      const exemptions = exemptionsByProgramme.get(programme.code.toUpperCase());
+      const plan = planCourseStructure({ levels, rows: programmeRows, registry, existing, programmeValues, exemptions });
       const note = !editable
         ? `Draft is ${target.status}; left alone.`
         : programmeRows.length === 0
@@ -192,6 +209,12 @@ async function main() {
       "",
       `- Units missing (rows left out until DAP supplies them): ${notesOf("NO_UNITS").length}`,
       `- General Education courses outside the block (left out until DAP records an exemption): ${notesOf("NEEDS_EXEMPTION").length}`,
+      `- General Education courses outside the block included by DAP's exemption: ${notesOf("EXEMPTED").length}`,
+      ...[...exemptionsByProgramme].flatMap(([programmeCode, courses]) =>
+        [...courses.keys()]
+          .filter((code) => !notesOf("EXEMPTED").some(({ programme, note }) => programme.code.toUpperCase() === programmeCode && note.code === code))
+          .map((code) => `- Exemption not used: ${programmeCode} has no file 02 row for ${code}.`),
+      ),
       `- Codes listed twice for one programme (first kept): ${notesOf("LISTED_TWICE").length}`,
       `- Rows that aren't course codes or have no valid level or semester: ${notesOf("BAD_ROW").length}`,
       `- Courses not in the Registry yet (added from file 02; linked once the Registry has them): ${notesOf("NOT_IN_REGISTRY").length}`,
@@ -205,6 +228,7 @@ async function main() {
     for (const [kind, heading] of [
       ["NO_UNITS", "Units missing"],
       ["NEEDS_EXEMPTION", "General Education courses outside the block"],
+      ["EXEMPTED", "General Education courses included by DAP's exemption"],
       ["LISTED_TWICE", "Listed twice"],
       ["BAD_ROW", "Rows that can't be used"],
     ] as const) {

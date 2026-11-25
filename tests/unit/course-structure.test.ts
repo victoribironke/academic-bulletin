@@ -122,6 +122,20 @@ describe("planning a draft's Course Structure (E1)", () => {
     expect(plan.notes[0]).toMatchObject({ kind: "NEEDS_EXEMPTION", code: "ENT 322", rowNumber: 3 });
   });
 
+  it("includes a swap-in DAP has exempted, with the reason in the report (E1)", () => {
+    const plan = planCourseStructure({
+      levels: [100, 200, 300, 400],
+      rows: [row({ rowNumber: 3, code: "ENT 322", title: "Venture Creation", level: 300, semester: 2, units: 2 })],
+      registry: new Map(),
+      existing: [],
+      exemptions: new Map([["ENT 322", "approved by DAP on November 25, 2026"]]),
+    });
+    expect(plan.courses.find((course) => course.code === "ENT 322")).toMatchObject({ level: 300, semester: 2, units: 2, generalEducation: false });
+    expect(plan.notes.map((note) => note.kind)).toContain("EXEMPTED");
+    expect(plan.notes.find((note) => note.kind === "EXEMPTED")?.message).toContain("approved by DAP on November 25, 2026");
+    expect(plan.counts.skipped).toBe(0);
+  });
+
   it("reports missing units, repeated codes and unusable rows instead of guessing", () => {
     const plan = planCourseStructure({
       levels: [100, 200, 300, 400],

@@ -108,6 +108,15 @@ describe("planning the code standard (A5, B15, B18)", () => {
     expect(plan.problems.join(" ")).toMatch(/JSEH-REL.*to confirm/);
   });
 
+  it("uses the standard's name once DAP has confirmed it, and flags a code that isn't a name to confirm", () => {
+    const confirmed = planCodeStandard(standard, platform, { confirmedNames: ["jseh-rel", "SOCO-COS"] });
+    expect(confirmed.departments.find((d) => d.id === "d-rel")?.after.name).toBe("Department of Religious Studies");
+    expect(confirmed.problems.join(" ")).not.toMatch(/JSEH-REL.*to confirm/);
+    expect(confirmed.problems).toContain(
+      "SOCO-COS was given as a confirmed name, but the standard has no department name to confirm with that code.",
+    );
+  });
+
   it("adds new programmes labelled new, hidden ones unlabelled, and applies B15 lengths", () => {
     expect(programme("SOCO-COS-AIN")).toMatchObject({ action: "create", after: { isNew: true, isHidden: false, duration: 4 } });
     expect(programme("JSEH-REL-CRS")).toMatchObject({ action: "create", after: { isNew: false, isHidden: true } });
