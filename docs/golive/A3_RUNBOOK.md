@@ -17,6 +17,15 @@ Rehearsed on the test site on Monday, November 23, 2026 (reports in `docs/golive
      --report docs/golive/reports/B2_registry_upload_dry_run_live.md
    ```
    Read the dry-run report, then run it again with `--report docs/golive/reports/B2_registry_upload_applied_live.md --confirm`. It writes nothing unless every file is clean, and a second run changes nothing. Expect 813 + 36 + 107 new courses and 41 + 12 updates; 16 held-back courses wait for DAP (14 with no units, PATH 304 and PHAR 305 with no title). BU-GEG 403 and 404 get the work order's default owner, the School of Engineering (B6).
+
+   Then load package file 09 (B14), so the pre-fill uses each programme's own units, semester and level. The 18 new programmes (B18) go on live first: 8 of the file's rows belong to Cybersecurity.
+
+   ```
+   DATABASE_URL_FILE=<file> npm run courses:programme-values -- --by <admin email> \
+     --file "$P/09_Programme_specific_values_for_task_B14.xlsx" \
+     --report docs/golive/reports/B14_programme_values_dry_run_live.md
+   ```
+   Expect 83 of 83 rows matched and 0 code errors; 16 values were already stored on November 25 (`docs/golive/reports/B14_programme_values_applied_live.md`). Then run it again with `--report docs/golive/reports/B14_programme_values_applied_live.md --confirm`. It stores only what is missing.
 3. DAP has signed off the Registry (B9), and answered the E1 questions (units, the two General Education swap-ins, AGX 503). Anything still open is left out of the drafts and listed in the report.
 4. A fresh manual backup of the live database (Railway, Postgres, Backups, New backup).
 5. The test cycle is archived (A2, done November 23).

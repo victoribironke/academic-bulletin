@@ -147,8 +147,8 @@ footer { font-size: 0.86rem; color: var(--muted); display: grid; gap: 0.4rem; bo
     <p class="lede">Every task in the work order, release by release: what is live on academicplanning.app, what is built and waiting to run, and what each remaining task is waiting on.</p>
     <div class="meta">
       <span class="deadline">R0 launch due Wednesday, November 25, 6:00 pm WAT <strong id="countdown"></strong></span>
-      <span>Updated Wednesday, November 25, 2026, 11:05 am WAT</span>
-      <span>Live code: <span class="mono">4efdd0c</span></span>
+      <span>Updated Wednesday, November 25, 2026, 1:45 pm WAT</span>
+      <span>Live code: <span class="mono">44c910e</span></span>
     </div>
     <div class="legend" aria-label="What the statuses mean">
       <span><b class="pill s-live">Live</b> built and working on the live site</span>
@@ -253,7 +253,7 @@ footer { font-size: 0.86rem; color: var(--muted); display: grid; gap: 0.4rem; bo
   </section>
 
   <footer>
-    <p>Sources: the work order (package file 06, version 2.1), <span class="mono">docs/golive/IMPLEMENTATION_PLAN.md</span>, and the commits on main up to <span class="mono">4efdd0c</span>.</p>
+    <p>Sources: the work order (package file 06, version 2.1), <span class="mono">docs/golive/IMPLEMENTATION_PLAN.md</span>, and the commits on main up to <span class="mono">44c910e</span>.</p>
     <p>This page is the single list of what is done. It is updated after each change, so chat reports can point here instead of repeating it.</p>
   </footer>
 </div>
@@ -322,7 +322,7 @@ const GROUPS = [
     ["B1", "Programmes matched to the national curriculum", "CODE+DAP", "todo", "", "DAP approves the list"],
     ["B6", "Who owns each course", "CODE+DAP", "todo", "The defaults for the 23 unowned courses are already filled in file 07 v2.", ""],
     ["B10", "Heads of Department confirm their course list", "CODE", "live", "On Course Structure the Head confirms the list (who and when are shown, and a later change asks for a new confirmation) or asks DAP for a change; DAP answers in Administration, Course Requests, and the Head sees the answer on the draft. Database update run on the test site and on live (November 24, after a backup).", "Trying it on screen on the test site waits for its Google sign-in address"],
-    ["B14", "Programme-specific course settings", "CODE", "ready", "Built and tested. Each programme's own units, semester and level sit on the link between the course and the programme, so one Registry record serves every programme (core or elective already did). File 09 loaded on the test site on November 25: 83 of 83 values matched, no code errors, 51 values in running drafts brought in line (docs/golive/reports/B14_programme_values_applied_test_site.md). The draft pre-fill, the Head's course picker and the completeness report use the programme's values, and a Registry edit no longer overwrites them.", "Your yes to back up live and add one empty column, then the push and the file 09 load on live"],
+    ["B14", "Programme-specific course settings", "CODE", "partly", "Live since November 25. Each programme's own units, semester and level sit on the link between the course and the programme, so one Registry record serves every programme; the draft pre-fill, the Head's course picker and the completeness report use them, and a Registry edit no longer overwrites them. On the test site all 83 values of file 09 matched. On live (after a backup, 13:35 WAT) the 16 rows whose programmes and courses are already there are stored; no draft changed, since live's only cycle is archived (docs/golive/reports/B14_programme_values_applied_live.md). Code cleanup (B3) now keeps a programme's level when it merges duplicates.", "The other 67 rows name BU- courses and Cybersecurity, which reach live with the registry uploads and B18; the A3 runbook re-runs file 09 after them"],
     ["B18", "Course lists for the 18 new programmes", "CODE+DAP", "todo", "", "DAP's curriculum documents, by Friday, November 27"],
     ["C4", "Calendar settings screen", "CODE", "live", "Review Cycles, Calendar: DAP changes phase dates and checkpoints (a reason is required; the people affected are emailed, and moving Submissions open moves when Submit switches on), adds and removes holidays and quiet periods (removing asks for DELETE), sets quiet hours, and grants or removes extensions for a department or programme with a reason (its Head and coordinators are emailed). Every change is in the activity log.", ""],
     ["C6", "What happens at a deadline", "CODE", "partly", "Nothing locks at a deadline (DEC10): the desk shows Overdue (T2) and DAP can grant an extension on the calendar screen (C4).", "The reminder agent's messages at the deadline come with T3"],

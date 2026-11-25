@@ -41,7 +41,10 @@ Written Monday, November 23, 2026. Everything lives in the Railway project `acad
 | Backup before switching on Ask DAP (H6 table) | Done November 24, 2026, 14:26 WAT, 910 MB. The H6 table is only an addition |
 | Backup before switching on search (K1: pg_trgm, unaccent, search table) | Done November 24, 2026, 16:18 WAT, 910 MB. The extensions and the table are only additions |
 | Backup before adding the reminder agent's tables (T3) | Done November 24, 2026, 16:59 WAT, 971 MB. The two tables are only additions; sending stays off |
+| Backup before B14 (programme-specific values: one empty column, then 12 link values from file 09) | Done November 25, 2026, 13:35 WAT, 986 MB. The column is only an addition. Restoring this backup undoes the 12 values; re-running file 09 also puts them back |
 | Code rollback to the previous deployment, on the test site | Done November 23, 2026, 21:14 WAT: **Rollback** to the H1 build served it 26 seconds after confirming, then **Rollback** to the T1 build 45 seconds after; the sign-in page answered throughout |
 | Backup, change, restore and check, on the test site | Done November 23, 2026, 21:08 to 21:12 WAT: backup (921 MB); a marker log entry written after it; **Restore** and **Deploy**; Postgres back about 30 seconds after Deploy. Afterwards every count matched the backup (114 drafts, 6,858 course rows, 12 users, 55 log entries, 2 cycles, same last entry) and the marker was gone |
+
+Railway keeps at most 10 backups per volume, daily ones included. To make room on November 25 the manual backups of November 23 at 14:04, 14:33 and 16:00 were deleted (later backups cover them; each deletion asks for the account's authenticator code). Keep the 13:31 baseline and the 13:34 backup of November 24 (the only undo for B4's titles).
 
 Point-in-time recovery (continuous backups, restore to any minute) is off. Switching it on restarts Postgres once; worth doing at a quiet hour.
