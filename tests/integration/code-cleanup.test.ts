@@ -52,7 +52,7 @@ describe("course code clean-up (B3)", () => {
 
     await prisma.programmeCourse.createMany({
       data: [
-        { programmeId: ids.programmeA, courseId: ids.oldForm, titleOverride: "Code tests for A" },
+        { programmeId: ids.programmeA, courseId: ids.oldForm, titleOverride: "Code tests for A", levelOverride: 300 },
         { programmeId: ids.programmeB, courseId: ids.oldForm },
         { programmeId: ids.programmeA, courseId: ids.standard },
       ],
@@ -126,7 +126,7 @@ describe("course code clean-up (B3)", () => {
       select: {
         code: true,
         courseContent: true,
-        programmeLinks: { select: { programmeId: true, titleOverride: true }, orderBy: { programmeId: "asc" } },
+        programmeLinks: { select: { programmeId: true, titleOverride: true, levelOverride: true }, orderBy: { programmeId: "asc" } },
         prerequisiteOf: { select: { id: true } },
         submissionCourses: { select: { id: true, code: true } },
       },
@@ -135,8 +135,8 @@ describe("course code clean-up (B3)", () => {
       code: "ZCC 101",
       courseContent: "Only the old record has content",
       programmeLinks: [
-        { programmeId: ids.programmeA, titleOverride: "Code tests for A" },
-        { programmeId: ids.programmeB, titleOverride: null },
+        { programmeId: ids.programmeA, titleOverride: "Code tests for A", levelOverride: 300 },
+        { programmeId: ids.programmeB, titleOverride: null, levelOverride: null },
       ],
       prerequisiteOf: [{ id: ids.needsIt }],
       submissionCourses: [{ id: "zcc-row", code: "ZCC 101" }],

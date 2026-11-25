@@ -234,6 +234,7 @@ const LINK_OVERRIDES = [
   "unitsOverride",
   "typeOverride",
   "semesterOverride",
+  "levelOverride",
   "learningOutcomesOverride",
   "courseContentOverride",
   "sourceProgrammeName",
