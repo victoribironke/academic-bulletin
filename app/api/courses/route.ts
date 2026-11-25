@@ -8,9 +8,18 @@ import {
 import {
   canReadSubmission,
   getApiUser,
+  isAdministrator,
   requireApiUser,
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
+import {
+  COURSE_OWNER_SELECT,
+  PROGRAMME_PLACE_SELECT,
+  descriptionAccess,
+  ownerName,
+  programmePlace,
+  startDescriptionFromRegistry,
+} from "@/lib/courses/shared-courses";
 import { isGeneralEducationCourse } from "@/lib/courses/general-education";
 import { recordActivity } from "@/lib/activity-log";
 import { currentCourseGraceState } from "@/lib/courses/grace-compliance";
@@ -70,13 +79,19 @@ export async function GET(request: Request) {
             id: true,
             code: true,
             title: true,
-            type: true,
-            ownership: true,
+            ...COURSE_OWNER_SELECT,
+            _count: { select: { programmeLinks: true } },
           },
         },
       },
       orderBy: [{ level: "asc" }, { semester: "asc" }, { code: "asc" }],
     });
+    const draft = await prisma.submission.findUnique({
+      where: { id: submissionId },
+      select: { programme: { select: PROGRAMME_PLACE_SELECT } },
+    });
+    const place = draft ? programmePlace(draft.programme) : null;
+    const administrator = isAdministrator(auth.user);
 
     // Reading the list never queues or runs a GRACE check: a description whose
     // text changed since its last check is shown as waiting, not rewritten.
@@ -84,7 +99,18 @@ export async function GET(request: Request) {
       courses.map((course) => {
         // W1: the General Education block is locked for departments.
         const locked = isGeneralEducationCourse(course);
-        const withFlags = { ...course, isGeneralEducation: locked, isMandatory: locked };
+        // W16: who writes the description of a course several programmes share.
+        const access = place
+          ? descriptionAccess(course, place, { isAdministrator: administrator })
+          : "LOCAL";
+        const withFlags = {
+          ...course,
+          isGeneralEducation: locked,
+          isMandatory: locked,
+          descriptionAccess: access,
+          sharedOwner: ownerName(course.masterCourse),
+          sharedWithProgrammes: course.masterCourse?._count.programmeLinks ?? 0,
+        };
         return course.description
           ? { ...withFlags, description: currentCourseGraceState(course.title, course.description) }
           : withFlags;
@@ -241,6 +267,19 @@ export async function POST(request: Request) {
       },
     });
 
+    // W16: a Registry course starts with the text every programme shares.
+    if (course.masterCourseId) {
+      await startDescriptionFromRegistry(prisma, {
+        id: course.id,
+        title: course.title,
+        submissionId,
+        masterCourseId: course.masterCourseId,
+      });
+    }
+    const description = course.masterCourseId
+      ? await prisma.courseDescription.findUnique({ where: { courseId: course.id } })
+      : null;
+
     await recordActivity({
       actorId: user!.id,
       action: "COURSE_CREATED",
@@ -250,7 +289,7 @@ export async function POST(request: Request) {
       metadata: { courseId: course.id, code: course.code },
     });
 
-    return NextResponse.json(course, { status: 201 });
+    return NextResponse.json({ ...course, description }, { status: 201 });
   } catch (error) {
     console.error("Failed to create course:", error);
     return NextResponse.json(

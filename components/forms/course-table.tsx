@@ -670,7 +670,8 @@ export function CourseTable({
               createdMap.set(course.code, { id: created.id, code: course.code, level });
               currentCourseIds.add(created.id);
 
-              if (course.importedDescription) {
+              // W16: a Registry course already starts with its shared text.
+              if (course.importedDescription && !created.description) {
                 const descriptionRes = await fetch(
                   `/api/courses/${created.id}/description`,
                   {
@@ -687,7 +688,11 @@ export function CourseTable({
                     }),
                   },
                 );
-                if (!descriptionRes.ok) {
+                // Another department writes this course's text (W16): not an error.
+                const refusal = descriptionRes.ok
+                  ? null
+                  : await descriptionRes.json().catch(() => ({}));
+                if (refusal && refusal.code !== "SHARED_COURSE_LOCKED") {
                   errors.push(
                     `Created ${course.code} but failed to import its details`,
                   );

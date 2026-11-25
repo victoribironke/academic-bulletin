@@ -38,6 +38,8 @@ interface SubmissionProgressContent {
 interface CourseProgressData {
   /** A General Education row (rule W1): never the Head of Department's progress. */
   isGeneralEducation?: boolean;
+  /** A shared course another department writes (rule W16): not this department's progress. */
+  ownedElsewhere?: boolean;
   description?: {
     courseContent?: string | null;
     learningOutcomes?: unknown;
@@ -89,8 +91,9 @@ export function calculateSubmissionProgress({
   courseListConfirmed?: boolean;
 }): SubmissionProgress {
   const programmeInfo = content?.programmeInfo;
-  // W1: the General Education block is the General Education desk's work.
-  const courses = allCourses.filter((course) => !course.isGeneralEducation);
+  // W1: the General Education block is the General Education desk's work;
+  // W16: a shared course is the work of the department that owns it.
+  const courses = allCourses.filter((course) => !course.isGeneralEducation && !course.ownedElsewhere);
   const completeCourseDescriptions = courses.filter((course) => {
     const description = course.description;
     return (

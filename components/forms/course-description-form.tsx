@@ -18,6 +18,8 @@ import {
   AlertTriangle,
   CheckCircle,
   Pencil,
+  Lock,
+  Share2,
 } from "lucide-react";
 import {
   Dialog,
@@ -188,6 +190,29 @@ interface Course {
   units: number;
   level: number;
   semester: number;
+  isGeneralEducation?: boolean;
+  /** W16: OWNER saves for every programme, LOCKED is another department's, LOCAL is this draft's. */
+  descriptionAccess?: "OWNER" | "LOCAL" | "LOCKED";
+  sharedOwner?: string | null;
+  sharedWithProgrammes?: number;
+}
+
+/** W16: who writes a course's description, in a sentence. */
+function sharingNote(course: Course): { locked: boolean; text: string } | null {
+  if (course.descriptionAccess === "LOCKED") {
+    const owner = course.sharedOwner ?? (course.isGeneralEducation ? "the General Education desk" : "another department");
+    return {
+      locked: true,
+      text: `Taught by ${owner}, which writes its learning outcomes and content for every programme that uses it. Their changes appear here automatically; ask them, or DAP, if something should change.`,
+    };
+  }
+  if (course.descriptionAccess === "OWNER" && (course.sharedWithProgrammes ?? 0) > 1) {
+    return {
+      locked: false,
+      text: `Your department teaches this course and ${course.sharedWithProgrammes} programmes use it: what you save here becomes its description in all of them.`,
+    };
+  }
+  return null;
 }
 
 interface GraceResult {
@@ -859,6 +884,9 @@ export function CourseDescriptionForm({
 
                     const hasGraceResult = graceResults[course.id];
                     const isPassed = hasGraceResult?.passed;
+                    // W16: a course another department teaches is read-only here.
+                    const sharing = sharingNote(course);
+                    const readOnly = disabled || sharing?.locked === true;
 
                     return (
                       <div
@@ -937,6 +965,18 @@ export function CourseDescriptionForm({
                                 </Badge>
                               ) : null}
                             </div>
+                            {sharing && (
+                              <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                                {sharing.locked ? (
+                                  <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                ) : (
+                                  <Share2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                )}
+                                {sharing.locked
+                                  ? `Taught by ${course.sharedOwner ?? (course.isGeneralEducation ? "the General Education desk" : "another department")}`
+                                  : `Shared: ${course.sharedWithProgrammes} programmes use this description`}
+                              </p>
+                            )}
                           </div>
                         </div>
 
@@ -948,12 +988,12 @@ export function CourseDescriptionForm({
                         >
                           <DialogTrigger asChild>
                             <Button variant="outline" size="sm">
-                              {disabled ? (
+                              {readOnly ? (
                                 <FileText className="h-4 w-4 mr-2" />
                               ) : (
                                 <Pencil className="h-4 w-4 mr-2" />
                               )}
-                              {disabled ? "View Details" : "Edit Details"}
+                              {readOnly ? "View Details" : "Edit Details"}
                             </Button>
                           </DialogTrigger>
                           <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
@@ -963,6 +1003,17 @@ export function CourseDescriptionForm({
                                 {course.title}
                               </DialogTitle>
                             </DialogHeader>
+
+                            {sharing && (
+                              <p className="flex items-start gap-2 rounded-md border bg-muted/50 p-3 text-sm text-muted-foreground">
+                                {sharing.locked ? (
+                                  <Lock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                                ) : (
+                                  <Share2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                                )}
+                                {sharing.text}
+                              </p>
+                            )}
 
                             <div className="space-y-6 pt-2">
                               {/* Learning Outcomes */}
@@ -992,10 +1043,10 @@ export function CourseDescriptionForm({
                                         )
                                       }
                                       placeholder="Enter learning outcome..."
-                                      disabled={disabled}
+                                      disabled={readOnly}
                                       className="flex-1"
                                     />
-                                    {!disabled && (
+                                    {!readOnly && (
                                       <Button
                                         variant="ghost"
                                         size="icon"
@@ -1012,7 +1063,7 @@ export function CourseDescriptionForm({
                                     )}
                                   </div>
                                 ))}
-                                {!disabled && (
+                                {!readOnly && (
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -1041,7 +1092,7 @@ export function CourseDescriptionForm({
                                       (clear, concise, and outcome-focused).
                                     </p>
                                   </div>
-                                  {!disabled && (
+                                  {!readOnly && (
                                     <Button
                                       variant="outline"
                                       size="sm"
@@ -1096,7 +1147,7 @@ export function CourseDescriptionForm({
                                     }
                                   }}
                                   placeholder="Describe the course content, topics covered, and key learning areas. Keep the description GRACE compliant: clear, structured, and focused on student outcomes."
-                                  disabled={disabled}
+                                  disabled={readOnly}
                                   rows={5}
                                 />
 
@@ -1106,7 +1157,7 @@ export function CourseDescriptionForm({
                                     <GraceResultDisplay
                                       result={graceResults[course.id]}
                                       onApplySuggestion={
-                                        disabled
+                                        readOnly
                                           ? undefined
                                           : (content) =>
                                               applyGraceSuggestion(
@@ -1142,7 +1193,7 @@ export function CourseDescriptionForm({
                                     )
                                   }
                                   placeholder="Describe practical/lab work requirements..."
-                                  disabled={disabled}
+                                  disabled={readOnly}
                                   rows={2}
                                 />
                               </div>
@@ -1170,7 +1221,7 @@ export function CourseDescriptionForm({
                                     )
                                   }
                                   placeholder="Describe entrepreneurial applications, practical industry use cases, or commercial opportunities related to this course..."
-                                  disabled={disabled}
+                                  disabled={readOnly}
                                   rows={3}
                                 />
                               </div>
@@ -1181,9 +1232,9 @@ export function CourseDescriptionForm({
                                 variant="outline"
                                 onClick={() => setActiveDialogCourseId(null)}
                               >
-                                {disabled ? "Close" : "Cancel"}
+                                {readOnly ? "Close" : "Cancel"}
                               </Button>
-                              {!disabled && (
+                              {!readOnly && (
                                 <Button
                                   onClick={() => saveDescription(course.id)}
                                   disabled={savingCourseId === course.id}

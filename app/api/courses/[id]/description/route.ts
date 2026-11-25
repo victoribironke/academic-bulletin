@@ -3,9 +3,19 @@ import prisma from "@/lib/prisma";
 import {
   canReadSubmission,
   getApiUser,
+  isAdministrator,
   requireApiUser,
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
+import {
+  COURSE_OWNER_SELECT,
+  PROGRAMME_PLACE_SELECT,
+  SHARED_COURSE_LOCKED_CODE,
+  descriptionAccess,
+  programmePlace,
+  shareTeachingText,
+  sharedCourseLockedMessage,
+} from "@/lib/courses/shared-courses";
 import { AUTOSAVE_COALESCE_MINUTES, recordActivity } from "@/lib/activity-log";
 import {
   normalizeLearningOutcomes,
@@ -72,7 +82,15 @@ export async function PUT(
     // Check if course exists
     const course = await prisma.course.findUnique({
       where: { id },
-      select: { id: true, title: true, submissionId: true },
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        submissionId: true,
+        masterCourseId: true,
+        masterCourse: { select: COURSE_OWNER_SELECT },
+        submission: { select: { programme: { select: PROGRAMME_PLACE_SELECT } } },
+      },
     });
 
     if (!course) {
@@ -88,8 +106,23 @@ export async function PUT(
       );
     }
 
+    // W16: a shared course's description is written by the department that
+    // owns it; W1: General Education by the General Education desk.
+    const access = descriptionAccess(course, programmePlace(course.submission.programme), {
+      isAdministrator: isAdministrator(user!),
+    });
+    if (access === "LOCKED") {
+      return NextResponse.json(
+        { error: sharedCourseLockedMessage(course.masterCourse, course.code), code: SHARED_COURSE_LOCKED_CODE },
+        { status: 403 },
+      );
+    }
+
     const outcomes = normalizeLearningOutcomes(learningOutcomes);
     const content = typeof courseContent === "string" ? courseContent.trim() : "";
+    const lab = typeof labWork === "string" ? labWork.trim() || null : null;
+    const entrepreneurial =
+      typeof entrepreneurialAspect === "string" ? entrepreneurialAspect.trim() || null : null;
     const description = await prisma.$transaction(async (tx) => {
       const graceState = await prepareCourseGraceState(tx, {
         title: course.title,
@@ -101,11 +134,8 @@ export async function PUT(
         update: {
           learningOutcomes: outcomes,
           courseContent: content || null,
-          labWork: typeof labWork === "string" ? labWork.trim() || null : null,
-          entrepreneurialAspect:
-            typeof entrepreneurialAspect === "string"
-              ? entrepreneurialAspect.trim() || null
-              : null,
+          labWork: lab,
+          entrepreneurialAspect: entrepreneurial,
           ...graceState,
         },
         create: {
@@ -113,11 +143,8 @@ export async function PUT(
           submissionId: course.submissionId,
           learningOutcomes: outcomes,
           courseContent: content || null,
-          labWork: typeof labWork === "string" ? labWork.trim() || null : null,
-          entrepreneurialAspect:
-            typeof entrepreneurialAspect === "string"
-              ? entrepreneurialAspect.trim() || null
-              : null,
+          labWork: lab,
+          entrepreneurialAspect: entrepreneurial,
           ...graceState,
         },
         include: {
@@ -126,6 +153,21 @@ export async function PUT(
           },
         },
       });
+      // W16: the owner's text is the course's text for every programme.
+      const shared =
+        access === "OWNER" && course.masterCourseId
+          ? await shareTeachingText(tx, {
+              masterCourseId: course.masterCourseId,
+              sourceCourseId: id,
+              actorId: user!.id,
+              text: {
+                learningOutcomes: outcomes,
+                courseContent: content || null,
+                labWork: lab,
+                entrepreneurialAspect: entrepreneurial,
+              },
+            })
+          : null;
       await recordActivity(
         {
           actorId: user!.id,
@@ -133,13 +175,17 @@ export async function PUT(
           entityType: "SUBMISSION",
           entityId: course.submissionId,
           description: `Updated the learning outcomes and course content for ${saved.course.code}.`,
-          metadata: { courseId: id, graceStatus: saved.graceStatus },
+          metadata: {
+            courseId: id,
+            graceStatus: saved.graceStatus,
+            ...(shared && { sharedWithDraftRows: shared.draftRowsUpdated }),
+          },
           coalesceWithinMinutes: AUTOSAVE_COALESCE_MINUTES,
         },
         tx,
       );
-      return saved;
-    });
+      return { ...saved, sharedWith: shared?.programmes ?? [] };
+    }, { timeout: 30_000 });
 
     return NextResponse.json(description);
   } catch (error) {

@@ -8,6 +8,7 @@ import { recordActivity } from "@/lib/activity-log";
 import { TOTAL_PHASES } from "@/lib/submissions/phases";
 import { NOT_IN_ARCHIVED_CYCLE } from "@/lib/cycles/archive";
 import { isGeneralEducationCourse } from "@/lib/courses/general-education";
+import { isOwnedElsewhere } from "@/lib/courses/shared-courses";
 
 const SUBMISSION_STATUSES = [
   "DRAFT",
@@ -178,7 +179,7 @@ export async function GET(request: NextRequest) {
             semester: true,
             level: true,
             status: true,
-            masterCourse: { select: { type: true, ownership: true } },
+            masterCourse: { select: { type: true, ownership: true, ownerDeptId: true, ownerSchoolId: true } },
             description: { select: { courseContent: true, learningOutcomes: true, graceStatus: true } },
           },
         },
@@ -205,6 +206,10 @@ export async function GET(request: NextRequest) {
             activeStaffCount: departmentCount.staff,
             courses: courses.map((course) => ({
               isGeneralEducation: isGeneralEducationCourse(course),
+              ownedElsewhere: isOwnedElsewhere(course, {
+                departmentId: submission.programme.department.id,
+                schoolId: submission.programme.department.school.id,
+              }),
               description: course.description,
             })),
             courseListConfirmed: confirmedLists.has(submission.id),

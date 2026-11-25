@@ -27,6 +27,14 @@ import { synchronizeCourseGraceAssessment } from "@/lib/courses/grace-compliance
 import { readDeleteBody, requireDeleteConfirmation, requireDeleteReason } from "@/lib/archive";
 import { applyCourseRowDelete, planCourseRowDelete } from "@/lib/courses/delete-course-rows";
 import { cleanDeleteReason } from "@/lib/delete-reason";
+import {
+  COURSE_OWNER_SELECT,
+  PROGRAMME_PLACE_SELECT,
+  SHARED_COURSE_LOCKED_CODE,
+  descriptionAccess,
+  programmePlace,
+  sharedCourseLockedMessage,
+} from "@/lib/courses/shared-courses";
 
 // GET /api/courses/[id] - Get single course with description
 export async function GET(
@@ -101,7 +109,10 @@ export async function PATCH(
     // Check if course exists
     const existing = await prisma.course.findUnique({
       where: { id },
-      include: { masterCourse: { select: { type: true, ownership: true } } },
+      include: {
+        masterCourse: { select: COURSE_OWNER_SELECT },
+        submission: { select: { programme: { select: PROGRAMME_PLACE_SELECT } } },
+      },
     });
     if (!existing) {
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
@@ -147,6 +158,24 @@ export async function PATCH(
         );
       }
       return NextResponse.json(existing);
+    }
+
+    // W16: a shared course's code and title belong to the department that
+    // owns it (and the Registry). The table sends every row on save, so only
+    // a real change is refused.
+    if (
+      !isAdministrator(user!) &&
+      descriptionAccess(existing, programmePlace(existing.submission.programme)) === "LOCKED"
+    ) {
+      const renamed =
+        (code !== undefined && formatCourseCode(String(code)) !== existing.code) ||
+        (title !== undefined && formatCourseTitle(String(title)) !== formatCourseTitle(existing.title));
+      if (renamed) {
+        return NextResponse.json(
+          { error: sharedCourseLockedMessage(existing.masterCourse, existing.code), code: SHARED_COURSE_LOCKED_CODE },
+          { status: 403 },
+        );
+      }
     }
 
     // Validate course code if provided

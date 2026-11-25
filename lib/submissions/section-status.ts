@@ -12,6 +12,7 @@
  */
 import prisma from "@/lib/prisma";
 import { isGeneralEducationCourse } from "@/lib/courses/general-education";
+import { isOwnedElsewhere, programmePlace } from "@/lib/courses/shared-courses";
 import { confirmedCourseLists } from "@/lib/courses/course-list";
 import { calculateSubmissionProgress, type SubmissionProgress } from "@/lib/submissions/progress";
 import { getSubmitReadinessIssues, type SubmitReadinessIssue } from "@/lib/submissions/submit-readiness";
@@ -79,7 +80,12 @@ export function sectionMarks(
 
 const progressSelect = {
   id: true,
-  programme: { select: { department: { select: { _count: { select: { staff: { where: { isActive: true } } } } } } } },
+  programme: {
+    select: {
+      departmentId: true,
+      department: { select: { schoolId: true, _count: { select: { staff: { where: { isActive: true } } } } } },
+    },
+  },
   content: {
     select: {
       programmeInfo: true,
@@ -107,7 +113,7 @@ const progressSelect = {
       semester: true,
       level: true,
       status: true,
-      masterCourse: { select: { type: true, ownership: true } },
+      masterCourse: { select: { type: true, ownership: true, ownerDeptId: true, ownerSchoolId: true } },
       description: { select: { courseContent: true, learningOutcomes: true, graceStatus: true } },
     },
   },
@@ -126,6 +132,7 @@ export async function progressForDrafts(submissionIds: string[]): Promise<Map<st
         activeStaffCount: draft.programme.department._count.staff,
         courses: draft.courses.map((course) => ({
           isGeneralEducation: isGeneralEducationCourse(course),
+          ownedElsewhere: isOwnedElsewhere(course, programmePlace(draft.programme)),
           description: course.description,
         })),
         courseListConfirmed: confirmed.has(draft.id),

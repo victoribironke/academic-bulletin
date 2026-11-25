@@ -8,6 +8,9 @@
 import prisma from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { prepareCourseGraceState } from "@/lib/courses/grace-compliance";
+import { NOT_IN_ARCHIVED_CYCLE } from "@/lib/cycles/archive";
+
+type Database = typeof prisma | Prisma.TransactionClient;
 
 // Types for propagation
 interface PropagationResult {
@@ -37,14 +40,26 @@ interface MasterCourseUpdate {
  */
 export async function propagateMasterCourseChanges(
   update: MasterCourseUpdate,
+  options: {
+    /** Run inside the caller's transaction; an error is then thrown, not reported. */
+    db?: Database;
+    /** A draft row that already holds the change (W16: the owner's own row). */
+    exceptCourseId?: string;
+  } = {},
 ): Promise<PropagationResult> {
+  const db = options.db ?? prisma;
   const errors: string[] = [];
   const affectedProgrammes: string[] = [];
 
   try {
     // Find all courses linked to this master course
-    const linkedCourses = await prisma.course.findMany({
-      where: { masterCourseId: update.id },
+    // Drafts in archived cycles stay exactly as they were.
+    const linkedCourses = await db.course.findMany({
+      where: {
+        masterCourseId: update.id,
+        submission: NOT_IN_ARCHIVED_CYCLE,
+        ...(options.exceptCourseId && { id: { not: options.exceptCourseId } }),
+      },
       include: {
         submission: {
           select: {
@@ -116,7 +131,7 @@ export async function propagateMasterCourseChanges(
     if (courseIds.length > 0) {
       if (Object.keys(updateData).length > 0) {
         // B14: a programme's own units, semester or level stay as they are.
-        const links = await prisma.programmeCourse.findMany({
+        const links = await db.programmeCourse.findMany({
           where: {
             courseId: update.id,
             OR: [{ unitsOverride: { not: null } }, { semesterOverride: { not: null } }, { levelOverride: { not: null } }],
@@ -137,7 +152,7 @@ export async function propagateMasterCourseChanges(
           groups.set(key, group);
         }
         for (const group of groups.values()) {
-          await prisma.course.updateMany({
+          await db.course.updateMany({
             where: { id: { in: group.ids } },
             data: group.data,
           });
@@ -146,7 +161,7 @@ export async function propagateMasterCourseChanges(
 
       if (Object.keys(descriptionUpdate).length > 0) {
         for (const course of draftCourses) {
-          const currentDescription = await prisma.courseDescription.findUnique({
+          const currentDescription = await db.courseDescription.findUnique({
             where: { courseId: course.id },
             select: { learningOutcomes: true, courseContent: true },
           });
@@ -156,12 +171,12 @@ export async function propagateMasterCourseChanges(
             update.courseContent !== undefined
               ? update.courseContent
               : currentDescription?.courseContent;
-          const graceState = await prepareCourseGraceState(prisma, {
+          const graceState = await prepareCourseGraceState(db, {
             title: update.title ?? course.title,
             learningOutcomes: nextLearningOutcomes,
             courseContent: nextCourseContent,
           });
-          await prisma.courseDescription.upsert({
+          await db.courseDescription.upsert({
             where: { courseId: course.id },
             create: {
               courseId: course.id,
@@ -193,6 +208,7 @@ export async function propagateMasterCourseChanges(
       errors,
     };
   } catch (error) {
+    if (options.db) throw error;
     console.error("Course propagation error:", error);
     return {
       success: false,

@@ -10,6 +10,7 @@ import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import type { ApiUser } from "@/lib/api-auth";
 import { isGeneralEducationCourse } from "@/lib/courses/general-education";
+import { isOwnedElsewhere, programmePlace } from "@/lib/courses/shared-courses";
 import { calculateSubmissionProgress } from "@/lib/submissions/progress";
 import { confirmedCourseLists } from "@/lib/courses/course-list";
 import { PHASE_NAMES } from "@/lib/submissions/phases";
@@ -84,7 +85,11 @@ export async function waitingWorkFor(user: ApiUser, nowArg?: Date): Promise<Wait
         status: true,
         createdAt: true,
         programme: {
-          select: { name: true, department: { select: { _count: { select: { staff: { where: { isActive: true } } } } } } },
+          select: {
+            name: true,
+            departmentId: true,
+            department: { select: { schoolId: true, _count: { select: { staff: { where: { isActive: true } } } } } },
+          },
         },
         content: true,
         courses: {
@@ -94,7 +99,7 @@ export async function waitingWorkFor(user: ApiUser, nowArg?: Date): Promise<Wait
             semester: true,
             level: true,
             status: true,
-            masterCourse: { select: { type: true, ownership: true } },
+            masterCourse: { select: { type: true, ownership: true, ownerDeptId: true, ownerSchoolId: true } },
             description: { select: { courseContent: true, learningOutcomes: true, graceStatus: true } },
           },
         },
@@ -139,6 +144,7 @@ export async function waitingWorkFor(user: ApiUser, nowArg?: Date): Promise<Wait
         activeStaffCount: draft.programme.department._count.staff,
         courses: draft.courses.map((course) => ({
           isGeneralEducation: isGeneralEducationCourse(course),
+          ownedElsewhere: isOwnedElsewhere(course, programmePlace(draft.programme)),
           description: course.description,
         })),
         courseListConfirmed: confirmedLists.has(draft.id),
