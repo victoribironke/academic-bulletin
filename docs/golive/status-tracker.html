@@ -147,8 +147,8 @@ footer { font-size: 0.86rem; color: var(--muted); display: grid; gap: 0.4rem; bo
     <p class="lede">Every task in the work order, release by release: what is live on academicplanning.app, what is built and waiting to run, and what each remaining task is waiting on.</p>
     <div class="meta">
       <span class="deadline">R0 launch due Wednesday, November 25, 6:00 pm WAT <strong id="countdown"></strong></span>
-      <span>Updated Wednesday, November 25, 2026, 2:25 pm WAT</span>
-      <span>Live code: <span class="mono">908f729</span></span>
+      <span>Updated Wednesday, November 25, 2026, 3:05 pm WAT</span>
+      <span>Live code: <span class="mono">7033f7e</span></span>
     </div>
     <div class="legend" aria-label="What the statuses mean">
       <span><b class="pill s-live">Live</b> built and working on the live site</span>
@@ -253,7 +253,7 @@ footer { font-size: 0.86rem; color: var(--muted); display: grid; gap: 0.4rem; bo
   </section>
 
   <footer>
-    <p>Sources: the work order (package file 06, version 2.1), <span class="mono">docs/golive/IMPLEMENTATION_PLAN.md</span>, and the commits on main up to <span class="mono">908f729</span>.</p>
+    <p>Sources: the work order (package file 06, version 2.1), <span class="mono">docs/golive/IMPLEMENTATION_PLAN.md</span>, and the commits on main up to <span class="mono">7033f7e</span>.</p>
     <p>This page is the single list of what is done. It is updated after each change, so chat reports can point here instead of repeating it.</p>
   </footer>
 </div>
@@ -320,7 +320,7 @@ const GROUPS = [
   ]},
   { key: "r1", code: "R1", short: "Wed, Dec 2", name: "Head of Department support", date: "Wednesday, December 2, 2026", sub: "Needed for checkpoint CP1 on December 11.", items: [
     ["B1", "Programmes matched to the national curriculum", "CODE+DAP", "todo", "", "DAP approves the list"],
-    ["B6", "Who owns each course", "CODE+DAP", "todo", "The defaults for the 23 unowned courses are already filled in file 07 v2. Ownership now decides who writes a shared course's description (W16).", "The \"Courses we own\" list, where owners also edit courses that aren't in any of their drafts"],
+    ["B6", "Who owns each course", "CODE+DAP", "partly", "Live since November 25. Courses We Own (Records) shows each Head of Department their department's courses, and their school's, with the programmes that use each one; they write the learning outcomes and content once for all of them (W16). Deans read their school's list; DAP's Course Owners page picks any owner, the General Education desk (GST, BU-GST, ENT; DEC8) or the courses with no owner yet. Owners are filled in by script (npm run courses:owners), never changed: the work order's defaults, then the owner of the same prefix, then the one department whose programmes use the course. On the test site 101 of 108 unowned courses got an owner; 7 where the prefix and the programmes disagree (MCM 221 Drug Design is Mass Communication's prefix but serves Basic Sciences) wait for DAP (docs/golive/reports/B6_course_owners_applied_test_site.md). The Registry Report now counts national courses with no department or school as unowned.", "Live: the owner fill runs after A5 and the registry uploads (A3 runbook); DAP decides the courses the rules can't settle and can change any owner in Master Courses"],
     ["B10", "Heads of Department confirm their course list", "CODE", "live", "On Course Structure the Head confirms the list (who and when are shown, and a later change asks for a new confirmation) or asks DAP for a change; DAP answers in Administration, Course Requests, and the Head sees the answer on the draft. Database update run on the test site and on live (November 24, after a backup).", "Trying it on screen on the test site waits for its Google sign-in address"],
     ["B14", "Programme-specific course settings", "CODE", "partly", "Live since November 25. Each programme's own units, semester and level sit on the link between the course and the programme, so one Registry record serves every programme; the draft pre-fill, the Head's course picker and the completeness report use them, and a Registry edit no longer overwrites them. On the test site all 83 values of file 09 matched. On live (after a backup, 13:35 WAT) the 16 rows whose programmes and courses are already there are stored; no draft changed, since live's only cycle is archived (docs/golive/reports/B14_programme_values_applied_live.md). Code cleanup (B3) now keeps a programme's level when it merges duplicates.", "The other 67 rows name BU- courses and Cybersecurity, which reach live with the registry uploads and B18; the A3 runbook re-runs file 09 after them"],
     ["B18", "Course lists for the 18 new programmes", "CODE+DAP", "todo", "", "DAP's curriculum documents, by Friday, November 27"],
@@ -355,7 +355,7 @@ const GROUPS = [
     ["U8", "Test with real people", "DAP+CODE", "dap", "", "Sessions Monday, November 30 to Tuesday, December 1 (and December 8 to 9 before R2)"],
     ["W13", "Rule: university-wide admission wording", "CODE", "todo", "", "With E2"],
     ["W14", "Rule: same page order for every programme", "CODE", "todo", "", ""],
-    ["W16", "Rule: shared courses", "CODE", "live", "Live since November 25. The department (or school) that owns a Registry course writes its learning outcomes and content: saving them in its draft puts the text on the Registry course and into every open draft that uses it (drafts under review or approved, and archived cycles, stay as they are; the activity log records each change). Other departments see the course read-only, marked \"Taught by\" its owner, can't rename it, and it doesn't count in their progress; a programme keeps its own units, semester, level and status (B14). General Education descriptions are locked the same way (W1). A Registry course added to a draft starts with the shared text. On the test site 230 courses are shared across departments (586 draft rows); for 57 of them the owner has no draft with the course, so until B6's \"Courses we own\" list only DAP can edit those in the Registry.", ""],
+    ["W16", "Rule: shared courses", "CODE", "live", "Live since November 25. The department (or school) that owns a Registry course writes its learning outcomes and content: saving them in its draft puts the text on the Registry course and into every open draft that uses it (drafts under review or approved, and archived cycles, stay as they are; the activity log records each change). Other departments see the course read-only, marked \"Taught by\" its owner, can't rename it, and it doesn't count in their progress; a programme keeps its own units, semester, level and status (B14). General Education descriptions are locked the same way (W1). A Registry course added to a draft starts with the shared text. On the test site 230 courses are shared across departments (586 draft rows); for 57 of them the owner has no draft with the course and writes it on Courses We Own (B6).", ""],
     ["W18", "Rule: programmes with options", "CODE", "todo", "", ""],
   ]},
   { key: "r2", code: "R2", short: "Fri, Dec 11", name: "Quality checks", date: "Friday, December 11, 2026", sub: "Submissions open on Monday, December 14.", items: [

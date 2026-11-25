@@ -26,6 +26,14 @@ Rehearsed on the test site on Monday, November 23, 2026 (reports in `docs/golive
      --report docs/golive/reports/B14_programme_values_dry_run_live.md
    ```
    Expect 83 of 83 rows matched and 0 code errors; 16 values were already stored on November 25 (`docs/golive/reports/B14_programme_values_applied_live.md`). Then run it again with `--report docs/golive/reports/B14_programme_values_applied_live.md --confirm`. It stores only what is missing.
+
+   Then give every offered course an owner (B6), so each shared course's description has one department writing it (W16):
+
+   ```
+   DATABASE_URL_FILE=<file> npm run courses:owners -- --by <admin email> \
+     --report docs/golive/reports/B6_course_owners_dry_run_live.md
+   ```
+   It fills in owners only where none is set: the work order's defaults, then the owner of the same course prefix, then the one department whose programmes use the course. Courses where those disagree are listed for DAP (7 on the test site, November 25: `docs/golive/reports/B6_course_owners_applied_test_site.md`). Then run it again with `--report docs/golive/reports/B6_course_owners_applied_live.md --confirm`.
 3. DAP has signed off the Registry (B9), and answered the E1 questions (units, the two General Education swap-ins, AGX 503). Anything still open is left out of the drafts and listed in the report.
 4. A fresh manual backup of the live database (Railway, Postgres, Backups, New backup).
 5. The test cycle is archived (A2, done November 23).
