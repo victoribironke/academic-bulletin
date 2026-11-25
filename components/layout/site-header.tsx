@@ -34,18 +34,25 @@ const SEGMENT_LABELS: Record<string, string> = {
   policy: "Academic Policy",
   reports: "Reports",
   registry: "Registry Completeness",
+  "courses-we-own": "Courses We Own",
+  "course-requests": "Course Requests",
+  "dap-questions": "DAP Questions",
+  agent: "Reminder Agent",
 };
+
+/** DAP sees every owner's list there, under another name (B6). */
+const ADMINISTRATOR_LABELS: Record<string, string> = { "courses-we-own": "Course Owners" };
 
 type Crumb = { label: string; href: string };
 
-function buildCrumbs(pathname: string, isHod: boolean): Crumb[] {
+function buildCrumbs(pathname: string, isHod: boolean, isAdministrator = false): Crumb[] {
   const segments = pathname.split("/").filter(Boolean);
   const crumbs: Crumb[] = [];
   let href = "";
 
   segments.forEach((segment, index) => {
     href += `/${segment}`;
-    const known = SEGMENT_LABELS[segment];
+    const known = (isAdministrator ? ADMINISTRATOR_LABELS[segment] : undefined) ?? SEGMENT_LABELS[segment];
     // An unknown segment after /submissions is a submission id.
     const label =
       known ?? (segments[index - 1] === "submissions" ? "Submission" : segment);
@@ -67,7 +74,11 @@ function buildCrumbs(pathname: string, isHod: boolean): Crumb[] {
 export function SiteHeader() {
   const pathname = usePathname();
   const { currentUser } = useUser();
-  const crumbs = buildCrumbs(pathname, currentUser?.role === "HOD");
+  const crumbs = buildCrumbs(
+    pathname,
+    currentUser?.role === "HOD",
+    currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN",
+  );
 
   return (
     <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:rounded-t-xl">
