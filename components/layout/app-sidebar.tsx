@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Archive,
+  FlaskConical,
   Inbox,
   BellRing,
   MessageCircleQuestion,
@@ -95,6 +96,13 @@ const NAV_GROUPS: NavGroup[] = [
         title: "Academic Policy",
         href: "/policy",
         icon: BookOpenText,
+      },
+      // U6: a programme to try every action on; nothing is recorded.
+      {
+        title: "Practice Programme",
+        href: "/practice",
+        icon: FlaskConical,
+        roles: ["HOD", "PROGRAMME_COORDINATOR", "DEAN", "ADMIN", "SUPER_ADMIN"],
       },
     ],
   },

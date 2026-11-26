@@ -33,6 +33,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   "activity-log": "Activity Log",
   archive: "Archive",
   policy: "Academic Policy",
+  practice: "Practice Programme",
   reports: "Reports",
   registry: "Registry Completeness",
   "courses-we-own": "Courses We Own",

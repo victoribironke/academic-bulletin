@@ -5,6 +5,7 @@
  * browser only, the last draft and section the person opened; the home page
  * offers to go straight back there.
  */
+import { isPracticeId } from "@/lib/practice/ids";
 import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
@@ -22,6 +23,8 @@ const keyFor = (userId: string) => `abrs-last-place:${userId}`;
 
 /** Called by the draft page whenever a section is opened. */
 export function rememberLastPlace(userId: string, place: LastPlace) {
+  // U6: the practice programme is never the place to continue from.
+  if (isPracticeId(place.submissionId)) return;
   try {
     window.localStorage.setItem(keyFor(userId), JSON.stringify(place));
   } catch {
@@ -50,7 +53,7 @@ export function ContinueWhereStopped({ userId }: { userId: string }) {
   } catch {
     place = null;
   }
-  if (!place?.submissionId || !place.section) return null;
+  if (!place?.submissionId || !place.section || isPracticeId(place.submissionId)) return null;
   return (
     <Button asChild variant="outline" className="h-auto justify-start whitespace-normal py-2 text-left">
       <Link href={`/submissions/${place.submissionId}?section=${encodeURIComponent(place.section)}`}>

@@ -7,7 +7,7 @@ export type TourStep = { title: string; body: string };
 const HELP_STEP: TourStep = {
   title: "Help is on every screen",
   body:
-    "Help (top right) has the quick start for your role. Under each field you'll see what good looks like. Ask DAP sends a question about any section to your school's DAP officer, and the clinics on your home page are open twice a week.",
+    "Help (top right) has the quick start for your role. Under each field you'll see what good looks like. Ask DAP sends a question about any section to your school's DAP officer, and the clinics on your home page are open twice a week. To try anything first, open Practice Programme in the side menu: nothing there is recorded.",
 };
 
 export function welcomeTourFor(role: string | null | undefined): TourStep[] | null {
