@@ -14,6 +14,7 @@ import {
 } from "./document-utils";
 import { validateBulletinData } from "./validation";
 import { DEPARTMENT_STATEMENTS, UNIVERSITY_HEADING, sectionTitle, universityStatementsFor } from "@/lib/bulletin/page-order";
+import { UNIVERSITY_ADMISSION, type AdmissionRoute } from "@/lib/bulletin/admission-wording";
 import { loadPhoto } from "@/lib/storage";
 import { formatDate } from "@/lib/dates/format";
 
@@ -362,15 +363,16 @@ function drawProgrammeOverview(doc: PdfDoc, programme: BulletinProgramme) {
 function drawAdmission(doc: PdfDoc, programme: BulletinProgramme) {
   sectionHeading(doc, sectionTitle("Admission and Graduation Requirements"));
   const content = programme.content;
-  const fields: Array<[string, string | undefined]> = [
-    ["UTME Entry Requirements", content?.utmeRequirements],
-    ["Direct Entry Requirements", content?.directEntryRequirements],
-    ["Inter-University Transfer Requirements", content?.transferRequirements],
+  // W13: the university-wide wording first, then the programme's own.
+  const fields: Array<[string, AdmissionRoute, string | undefined]> = [
+    ["UTME Entry Requirements", "utme", content?.utmeRequirements],
+    ["Direct Entry Requirements", "directEntry", content?.directEntryRequirements],
+    ["Inter-University Transfer Requirements", "transfer", content?.transferRequirements],
   ];
-  fields.forEach(([label, value]) => {
-    if (!value) return;
+  fields.forEach(([label, route, value]) => {
     subHeading(doc, label);
-    drawStructuredText(doc, value);
+    bodyText(doc, UNIVERSITY_ADMISSION[route].text);
+    if (value) drawStructuredText(doc, value);
   });
   if (content?.minimumDuration) {
     subHeading(doc, "Programme Duration");

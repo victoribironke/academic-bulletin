@@ -85,6 +85,7 @@ import type { SubmissionWorkflow } from "@/lib/submissions/phase-owners";
 import { COORDINATOR_SUBMIT_NOTE } from "@/lib/submissions/workflow";
 import { UNIVERSITY_STATEMENTS } from "@/lib/bulletin/page-order";
 import { FieldHelp } from "@/components/forms/field-help";
+import { UNIVERSITY_ADMISSION, admissionWordingProblems } from "@/lib/bulletin/admission-wording";
 import { PageHeader } from "@/components/shared/page-header";
 import { formatDate, formatTime } from "@/lib/dates/format";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -2212,8 +2213,13 @@ export default function SubmissionDetailPage({
                 {/* Admission Requirements Section */}
                 {activeSection === "admission" && (
                   <div className="space-y-6">
+                    {/* W13: the university-wide wording opens the section, locked; the Head adds the programme's own. */}
                     <div className="space-y-2">
-                      <Label>UTME Requirements *</Label>
+                      <Label>UTME: this programme&apos;s subjects *</Label>
+                      <p className="rounded-md border bg-muted/40 p-2 text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">University rule, the same for every programme:</span>{" "}
+                        {UNIVERSITY_ADMISSION.utme.text}
+                      </p>
                       <FieldHelp field="utmeRequirements" value={utmeRequirements} />
                       {canEdit ? (
                         <Textarea
@@ -2222,7 +2228,7 @@ export default function SubmissionDetailPage({
                             setUtmeRequirements(e.target.value);
                             setHasChanges(true);
                           }}
-                          placeholder="In addition to appropriate UTME score, a candidate must possess..."
+                          placeholder="e.g. credits in Physics, Chemistry and Biology; UTME subjects: Use of English, Physics, Chemistry, Biology"
                           rows={3}
                         />
                       ) : (
@@ -2233,7 +2239,11 @@ export default function SubmissionDetailPage({
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Direct Entry Requirements</Label>
+                      <Label>Direct Entry: this programme&apos;s requirements</Label>
+                      <p className="rounded-md border bg-muted/40 p-2 text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">University rule, the same for every programme:</span>{" "}
+                        {UNIVERSITY_ADMISSION.directEntry.text}
+                      </p>
                       <FieldHelp field="directEntryRequirements" value={directEntryRequirements} />
                       {canEdit ? (
                         <Textarea
@@ -2253,7 +2263,11 @@ export default function SubmissionDetailPage({
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Inter-University Transfer Mode</Label>
+                      <Label>Transfer: this programme&apos;s requirements</Label>
+                      <p className="rounded-md border bg-muted/40 p-2 text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">University rule, the same for every programme:</span>{" "}
+                        {UNIVERSITY_ADMISSION.transfer.text}
+                      </p>
                       <FieldHelp field="transferRequirements" value={transferRequirements} />
                       {canEdit ? (
                         <Textarea
@@ -2271,6 +2285,9 @@ export default function SubmissionDetailPage({
                         </p>
                       )}
                     </div>
+                    {admissionWordingProblems({ utmeRequirements, directEntryRequirements, transferRequirements }).map((problem) => (
+                      <p key={problem} className="text-xs text-amber-700 dark:text-amber-400">{problem}</p>
+                    ))}
 
                     <div className="space-y-2">
                       <Label>Programme Duration *</Label>

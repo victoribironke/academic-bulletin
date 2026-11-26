@@ -34,6 +34,7 @@ import {
 } from "./document-utils";
 import { validateBulletinData } from "./validation";
 import { DEPARTMENT_STATEMENTS, UNIVERSITY_HEADING, sectionTitle, universityStatementsFor } from "@/lib/bulletin/page-order";
+import { UNIVERSITY_ADMISSION, type AdmissionRoute } from "@/lib/bulletin/admission-wording";
 import { loadPhoto } from "@/lib/storage";
 import { formatDate } from "@/lib/dates/format";
 
@@ -378,13 +379,15 @@ function overviewSection(programme: BulletinProgramme, pageBreak: boolean): DocE
 function admissionSection(programme: BulletinProgramme): DocElement[] {
   const content = programme.content;
   const elements: DocElement[] = [heading(sectionTitle("Admission and Graduation Requirements"), 1, true)];
-  const fields: Array<[string, string | undefined]> = [
-    ["UTME Entry Requirements", content?.utmeRequirements],
-    ["Direct Entry Requirements", content?.directEntryRequirements],
-    ["Inter-University Transfer Requirements", content?.transferRequirements],
+  // W13: the university-wide wording first, then the programme's own.
+  const fields: Array<[string, AdmissionRoute, string | undefined]> = [
+    ["UTME Entry Requirements", "utme", content?.utmeRequirements],
+    ["Direct Entry Requirements", "directEntry", content?.directEntryRequirements],
+    ["Inter-University Transfer Requirements", "transfer", content?.transferRequirements],
   ];
-  fields.forEach(([label, value]) => {
-    if (value) elements.push(heading(label, 2), ...structuredElements(value));
+  fields.forEach(([label, route, value]) => {
+    elements.push(heading(label, 2), paragraph(UNIVERSITY_ADMISSION[route].text));
+    if (value) elements.push(...structuredElements(value));
   });
   if (content?.minimumDuration) {
     elements.push(heading("Programme Duration", 2), paragraph(`Minimum Duration: ${durationLabel(content.minimumDuration)}`));
