@@ -83,6 +83,7 @@ import {
 } from "@/lib/submissions/phases";
 import type { SubmissionWorkflow } from "@/lib/submissions/phase-owners";
 import { COORDINATOR_SUBMIT_NOTE } from "@/lib/submissions/workflow";
+import { UNIVERSITY_STATEMENTS } from "@/lib/bulletin/page-order";
 import { PageHeader } from "@/components/shared/page-header";
 import { formatDate, formatTime } from "@/lib/dates/format";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -1900,6 +1901,67 @@ export default function SubmissionDetailPage({
                 {/* Programme Overview Section */}
                 {activeSection === "overview" && (
                   <div className="space-y-6">
+                    {/* W14: the university's vision and mission, the same on every programme page. */}
+                    <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                      <p className="font-medium">Babcock University: vision and mission</p>
+                      {UNIVERSITY_STATEMENTS.vision || UNIVERSITY_STATEMENTS.mission ? (
+                        <div className="mt-1 space-y-1 text-muted-foreground">
+                          {UNIVERSITY_STATEMENTS.vision && <p><span className="font-medium text-foreground">Vision:</span> {UNIVERSITY_STATEMENTS.vision}</p>}
+                          {UNIVERSITY_STATEMENTS.mission && <p><span className="font-medium text-foreground">Mission:</span> {UNIVERSITY_STATEMENTS.mission}</p>}
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-muted-foreground">DAP adds the university&apos;s wording; it opens every programme page in the bulletin and isn&apos;t edited here.</p>
+                      )}
+                    </div>
+
+                    {/* Vision */}
+                    <div className="space-y-2">
+                      <Label>Programme Vision</Label>
+                      <p className="text-xs text-muted-foreground">
+                        A forward-looking statement describing the
+                        programme&apos;s aspirations.
+                      </p>
+                      {canEdit ? (
+                        <Textarea
+                          value={vision}
+                          onChange={(e) => {
+                            setVision(e.target.value);
+                            setHasChanges(true);
+                          }}
+                          placeholder="e.g., To be a leading programme recognized for excellence in teaching, research, and community impact..."
+                          rows={3}
+                        />
+                      ) : (
+                        <p className="text-sm bg-muted p-3 rounded-md">
+                          {vision || "Not provided"}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Mission */}
+                    <div className="space-y-2">
+                      <Label>Programme Mission</Label>
+                      <p className="text-xs text-muted-foreground">
+                        A concise statement defining the programme&apos;s
+                        purpose and core commitment.
+                      </p>
+                      {canEdit ? (
+                        <Textarea
+                          value={mission}
+                          onChange={(e) => {
+                            setMission(e.target.value);
+                            setHasChanges(true);
+                          }}
+                          placeholder="e.g., Our mission is to produce graduates who are competent, ethical, and innovative..."
+                          rows={3}
+                        />
+                      ) : (
+                        <p className="text-sm bg-muted p-3 rounded-md">
+                          {mission || "Not provided"}
+                        </p>
+                      )}
+                    </div>
+
                     {/* Philosophy */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
@@ -1993,54 +2055,6 @@ export default function SubmissionDetailPage({
                             GRACE service error: {gracePhilosophyError}
                           </AlertDescription>
                         </Alert>
-                      )}
-                    </div>
-
-                    {/* Mission */}
-                    <div className="space-y-2">
-                      <Label>Programme Mission</Label>
-                      <p className="text-xs text-muted-foreground">
-                        A concise statement defining the programme&apos;s
-                        purpose and core commitment.
-                      </p>
-                      {canEdit ? (
-                        <Textarea
-                          value={mission}
-                          onChange={(e) => {
-                            setMission(e.target.value);
-                            setHasChanges(true);
-                          }}
-                          placeholder="e.g., Our mission is to produce graduates who are competent, ethical, and innovative..."
-                          rows={3}
-                        />
-                      ) : (
-                        <p className="text-sm bg-muted p-3 rounded-md">
-                          {mission || "Not provided"}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Vision */}
-                    <div className="space-y-2">
-                      <Label>Programme Vision</Label>
-                      <p className="text-xs text-muted-foreground">
-                        A forward-looking statement describing the
-                        programme&apos;s aspirations.
-                      </p>
-                      {canEdit ? (
-                        <Textarea
-                          value={vision}
-                          onChange={(e) => {
-                            setVision(e.target.value);
-                            setHasChanges(true);
-                          }}
-                          placeholder="e.g., To be a leading programme recognized for excellence in teaching, research, and community impact..."
-                          rows={3}
-                        />
-                      ) : (
-                        <p className="text-sm bg-muted p-3 rounded-md">
-                          {vision || "Not provided"}
-                        </p>
                       )}
                     </div>
 

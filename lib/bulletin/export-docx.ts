@@ -33,6 +33,7 @@ import {
   parseStructuredText,
 } from "./document-utils";
 import { validateBulletinData } from "./validation";
+import { DEPARTMENT_STATEMENTS, UNIVERSITY_HEADING, sectionTitle, universityStatementsFor } from "@/lib/bulletin/page-order";
 import { loadPhoto } from "@/lib/storage";
 import { formatDate } from "@/lib/dates/format";
 
@@ -307,7 +308,7 @@ function staffTable(members: BulletinStaff[], photos: Map<string, EmbeddedImage>
 }
 
 function staffSection(programme: BulletinProgramme, photos: Map<string, EmbeddedImage>): DocElement[] {
-  const elements: DocElement[] = [heading("1. Staff Directory", 1)];
+  const elements: DocElement[] = [heading(sectionTitle("Staff Directory"), 1, true)];
   const groups = [
     ["Academic Staff", "ACADEMIC"],
     ["Adjunct Academic Staff", "ADJUNCT"],
@@ -342,15 +343,22 @@ function structuredElements(value?: string): DocElement[] {
   });
 }
 
-function overviewSection(programme: BulletinProgramme): DocElement[] {
+/** W14: the university's vision and mission open every programme page. */
+function universitySection(data: BulletinData): DocElement[] {
+  const statements = universityStatementsFor(data.university);
+  if (!statements) return [];
+  const elements: DocElement[] = [heading(UNIVERSITY_HEADING, 1, false)];
+  if (statements.vision) elements.push(heading("Vision", 2), paragraph(statements.vision));
+  if (statements.mission) elements.push(heading("Mission", 2), paragraph(statements.mission));
+  return elements;
+}
+
+function overviewSection(programme: BulletinProgramme, pageBreak: boolean): DocElement[] {
   const content = programme.content;
-  const elements: DocElement[] = [heading("2. Programme Philosophy and Objectives", 1, true)];
-  const fields: Array<[string, string | undefined]> = [
-    ["Philosophy", content?.philosophy],
-    ["Mission", content?.mission],
-    ["Vision", content?.vision],
-  ];
-  fields.forEach(([label, value]) => {
+  const elements: DocElement[] = [heading(sectionTitle("Programme Vision, Mission, Philosophy and Objectives"), 1, pageBreak)];
+  // W14: the department's vision, mission and philosophy, in that order.
+  DEPARTMENT_STATEMENTS.forEach(([label, key]) => {
+    const value = content?.[key];
     if (value) elements.push(heading(label, 2), paragraph(value));
   });
   const lists: Array<[string, string[] | undefined]> = [
@@ -369,7 +377,7 @@ function overviewSection(programme: BulletinProgramme): DocElement[] {
 
 function admissionSection(programme: BulletinProgramme): DocElement[] {
   const content = programme.content;
-  const elements: DocElement[] = [heading("3. Admission and Graduation Requirements", 1, true)];
+  const elements: DocElement[] = [heading(sectionTitle("Admission and Graduation Requirements"), 1, true)];
   const fields: Array<[string, string | undefined]> = [
     ["UTME Entry Requirements", content?.utmeRequirements],
     ["Direct Entry Requirements", content?.directEntryRequirements],
@@ -415,7 +423,7 @@ function groupCourses(courses: BulletinCourse[]) {
 }
 
 function courseStructureSection(programme: BulletinProgramme): DocElement[] {
-  const elements: DocElement[] = [heading("4. Programme Course Structure", 1, true)];
+  const elements: DocElement[] = [heading(sectionTitle("Programme Course Structure"), 1, true)];
   const grouped = groupCourses(programme.courses);
   if (grouped.size === 0) return [...elements, paragraph("No course structure has been provided.", { italic: true })];
   [...grouped.entries()].sort(([a], [b]) => a - b).forEach(([level, semesters]) => {
@@ -438,7 +446,7 @@ function courseStructureSection(programme: BulletinProgramme): DocElement[] {
 }
 
 function courseDescriptionsSection(programme: BulletinProgramme): DocElement[] {
-  const elements: DocElement[] = [heading("5. Course Descriptions", 1, true)];
+  const elements: DocElement[] = [heading(sectionTitle("Course Descriptions"), 1, true)];
   const courses = programme.courses.filter((course) => course.description);
   if (!courses.length) return [...elements, paragraph("No course descriptions are available.", { italic: true })];
   courses.forEach((course) => {
@@ -458,7 +466,7 @@ function courseDescriptionsSection(programme: BulletinProgramme): DocElement[] {
 
 function regulationsSection(programme: BulletinProgramme): DocElement[] {
   if (!programme.content?.sectionF?.content && !programme.content?.sectionG?.content) return [];
-  const elements: DocElement[] = [heading("6. Regulations and Summary of Changes", 1, true)];
+  const elements: DocElement[] = [heading(sectionTitle("Regulations and Summary of Changes"), 1, true)];
   if (programme.content.sectionF?.content) elements.push(heading("Programme Regulations", 2), ...structuredElements(programme.content.sectionF.content));
   if (programme.content.sectionG?.content) elements.push(heading("Summary of Changes", 2), ...structuredElements(programme.content.sectionG.content));
   return elements;
@@ -476,12 +484,15 @@ export async function generateBulletinDocx(data: BulletinData): Promise<Buffer> 
     const draft = programme.submissionStatus !== "APPROVED" || programmeIssues.length > 0;
     children.push(...coverPage(programme, draft));
     if (programmeIssues.length > 0) children.push(...completenessNotice(programmeIssues.map((item) => item.message)));
+    // W14: the same order on every programme page.
+    const university = universitySection(data);
     children.push(
-      ...staffSection(programme, photos),
-      ...overviewSection(programme),
+      ...university,
+      ...overviewSection(programme, university.length > 0),
       ...admissionSection(programme),
       ...courseStructureSection(programme),
       ...courseDescriptionsSection(programme),
+      ...staffSection(programme, photos),
       ...regulationsSection(programme),
     );
   });

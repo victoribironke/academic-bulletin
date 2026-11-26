@@ -73,6 +73,35 @@ describe("bulletin exports", () => {
     expect(zip.file("word/footer1.xml")).toBeTruthy();
   });
 
+  it("follows the same page order on every programme (W14)", async () => {
+    const order = (xml: string, labels: string[]) => labels.map((label) => xml.indexOf(label));
+    const plain = await JSZip.loadAsync(await generateBulletinDocx(bulletin)).then((zip) => zip.file("word/document.xml")!.async("string"));
+    // No university wording yet: nothing is printed for it.
+    expect(plain).not.toContain("Babcock University: Vision and Mission");
+    const positions = order(plain, [
+      "1. Programme Vision, Mission, Philosophy and Objectives",
+      "A complete programme vision.",
+      "A complete programme mission.",
+      "A complete programme philosophy.",
+      "2. Admission and Graduation Requirements",
+      "Credit Requirements Summary",
+      "3. Programme Course Structure",
+      "4. Course Descriptions",
+      "5. Staff Directory",
+    ]);
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+
+    const withUniversity = await JSZip.loadAsync(
+      await generateBulletinDocx({ ...bulletin, university: { vision: "The university vision.", mission: "The university mission." } }),
+    ).then((zip) => zip.file("word/document.xml")!.async("string"));
+    const first = order(withUniversity, ["Babcock University: Vision and Mission", "The university vision.", "The university mission.", "1. Programme Vision"]);
+    expect(first.every((position) => position >= 0)).toBe(true);
+    expect([...first].sort((a, b) => a - b)).toEqual(first);
+    const pdf = await generateBulletinPdf({ ...bulletin, university: { vision: "The university vision.", mission: null } });
+    expect(pdf.subarray(0, 4).toString()).toBe("%PDF");
+  });
+
   it("generates a valid PDF document", async () => {
     const output = await generateBulletinPdf(bulletin);
     expect(output.subarray(0, 4).toString()).toBe("%PDF");

@@ -95,6 +95,8 @@ export interface BulletinData {
     totalCourses: number;
     totalStaff: number;
   };
+  /** W14: the university's vision and mission (DAP's wording), printed first on every programme page. */
+  university?: { vision: string | null; mission: string | null } | null;
 }
 
 /**

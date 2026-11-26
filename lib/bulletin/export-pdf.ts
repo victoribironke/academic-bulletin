@@ -13,6 +13,7 @@ import {
   pdfSafeText,
 } from "./document-utils";
 import { validateBulletinData } from "./validation";
+import { DEPARTMENT_STATEMENTS, UNIVERSITY_HEADING, sectionTitle, universityStatementsFor } from "@/lib/bulletin/page-order";
 import { loadPhoto } from "@/lib/storage";
 import { formatDate } from "@/lib/dates/format";
 
@@ -306,7 +307,7 @@ function drawStaffSection(
   programme: BulletinProgramme,
   photos: Map<string, Buffer>,
 ) {
-  sectionHeading(doc, "1. Staff Directory", false);
+  sectionHeading(doc, sectionTitle("Staff Directory"));
   const groups = [
     ["Academic Staff", "ACADEMIC"],
     ["Adjunct Academic Staff", "ADJUNCT"],
@@ -320,15 +321,27 @@ function drawStaffSection(
   }
 }
 
+/** W14: the university's vision and mission open every programme page. */
+function drawUniversity(doc: PdfDoc, data: BulletinData) {
+  const statements = universityStatementsFor(data.university);
+  if (!statements) return;
+  sectionHeading(doc, UNIVERSITY_HEADING);
+  if (statements.vision) {
+    subHeading(doc, "Vision");
+    bodyText(doc, statements.vision);
+  }
+  if (statements.mission) {
+    subHeading(doc, "Mission");
+    bodyText(doc, statements.mission);
+  }
+}
+
 function drawProgrammeOverview(doc: PdfDoc, programme: BulletinProgramme) {
-  sectionHeading(doc, "2. Programme Philosophy and Objectives");
+  sectionHeading(doc, sectionTitle("Programme Vision, Mission, Philosophy and Objectives"));
   const content = programme.content;
-  const sections: Array<[string, string | undefined]> = [
-    ["Philosophy", content?.philosophy],
-    ["Mission", content?.mission],
-    ["Vision", content?.vision],
-  ];
-  sections.forEach(([label, value]) => {
+  // W14: the department's vision, mission and philosophy, in that order.
+  DEPARTMENT_STATEMENTS.forEach(([label, key]) => {
+    const value = content?.[key];
     if (!value) return;
     subHeading(doc, label);
     bodyText(doc, value);
@@ -347,7 +360,7 @@ function drawProgrammeOverview(doc: PdfDoc, programme: BulletinProgramme) {
 }
 
 function drawAdmission(doc: PdfDoc, programme: BulletinProgramme) {
-  sectionHeading(doc, "3. Admission and Graduation Requirements");
+  sectionHeading(doc, sectionTitle("Admission and Graduation Requirements"));
   const content = programme.content;
   const fields: Array<[string, string | undefined]> = [
     ["UTME Entry Requirements", content?.utmeRequirements],
@@ -397,7 +410,7 @@ function groupCourses(courses: BulletinCourse[]) {
 }
 
 function drawCourseStructure(doc: PdfDoc, programme: BulletinProgramme) {
-  sectionHeading(doc, "4. Programme Course Structure");
+  sectionHeading(doc, sectionTitle("Programme Course Structure"));
   const grouped = groupCourses(programme.courses);
   if (grouped.size === 0) {
     bodyText(doc, "No course structure has been provided.", { italic: true });
@@ -421,7 +434,7 @@ function drawCourseStructure(doc: PdfDoc, programme: BulletinProgramme) {
 }
 
 function drawCourseDescriptions(doc: PdfDoc, programme: BulletinProgramme) {
-  sectionHeading(doc, "5. Course Descriptions");
+  sectionHeading(doc, sectionTitle("Course Descriptions"));
   const courses = programme.courses.filter((course) => course.description);
   if (courses.length === 0) {
     bodyText(doc, "No course descriptions are available.", { italic: true });
@@ -453,7 +466,7 @@ function drawCourseDescriptions(doc: PdfDoc, programme: BulletinProgramme) {
 
 function drawRegulations(doc: PdfDoc, programme: BulletinProgramme) {
   if (!programme.content?.sectionF?.content && !programme.content?.sectionG?.content) return;
-  sectionHeading(doc, "6. Regulations and Summary of Changes");
+  sectionHeading(doc, sectionTitle("Regulations and Summary of Changes"));
   if (programme.content.sectionF?.content) {
     subHeading(doc, "Programme Regulations");
     drawStructuredText(doc, programme.content.sectionF.content);
@@ -522,11 +535,13 @@ export async function generateBulletinPdf(data: BulletinData): Promise<Buffer> {
       programmeIssues.forEach((item) => bodyText(doc, `- ${item.message}`));
       doc.addPage();
     }
-    drawStaffSection(doc, programme, photos);
+    // W14: the same order on every programme page.
+    drawUniversity(doc, data);
     drawProgrammeOverview(doc, programme);
     drawAdmission(doc, programme);
     drawCourseStructure(doc, programme);
     drawCourseDescriptions(doc, programme);
+    drawStaffSection(doc, programme, photos);
     drawRegulations(doc, programme);
   });
 

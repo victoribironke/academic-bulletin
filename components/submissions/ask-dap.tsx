@@ -29,7 +29,7 @@ import { formatDateTime } from "@/lib/dates/format";
 export const SECTION_FIELDS: Record<string, string[]> = {
   deans_hods: ["Dean's photo and profile", "Head of Department's photo and profile"],
   staff: ["Academic staff", "Adjunct staff", "Non-academic staff", "Ranks and qualifications"],
-  overview: ["Philosophy", "Mission", "Vision", "Objectives", "Unique features", "Employability"],
+  overview: ["Vision", "Mission", "Philosophy", "Objectives", "Unique features", "Employability"],
   admission: ["UTME requirements", "Direct entry", "Transfer", "Minimum duration"],
   graduation: ["Graduation requirements", "Minimum CGPA", "Total credit units"],
   courses: ["Course list", "Units", "Semesters", "General Education block"],
