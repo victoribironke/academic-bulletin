@@ -147,8 +147,8 @@ footer { font-size: 0.86rem; color: var(--muted); display: grid; gap: 0.4rem; bo
     <p class="lede">Every task in the work order, release by release: what is live on academicplanning.app, what is built and waiting to run, and what each remaining task is waiting on.</p>
     <div class="meta">
       <span class="deadline">R0 launch due Wednesday, November 25, 6:00 pm WAT <strong id="countdown"></strong></span>
-      <span>Updated Wednesday, November 25, 2026, 6:34 pm WAT</span>
-      <span>Live code: <span class="mono">02730ee</span></span>
+      <span>Updated Thursday, November 26, 2026, 1:32 pm WAT</span>
+      <span>Live code: <span class="mono">560b91b</span></span>
     </div>
     <div class="legend" aria-label="What the statuses mean">
       <span><b class="pill s-live">Live</b> built and working on the live site</span>
@@ -253,7 +253,7 @@ footer { font-size: 0.86rem; color: var(--muted); display: grid; gap: 0.4rem; bo
   </section>
 
   <footer>
-    <p>Sources: the work order (package file 06, version 2.1), <span class="mono">docs/golive/IMPLEMENTATION_PLAN.md</span>, and the commits on main up to <span class="mono">02730ee</span>.</p>
+    <p>Sources: the work order (package file 06, version 2.1), <span class="mono">docs/golive/IMPLEMENTATION_PLAN.md</span>, and the commits on main up to <span class="mono">560b91b</span>.</p>
     <p>This page is the single list of what is done. It is updated after each change, so chat reports can point here instead of repeating it.</p>
   </footer>
 </div>
@@ -270,7 +270,7 @@ const STATUS = {
 // [id, name, owner, status, what is true now, waiting on, needs you]
 const GROUPS = [
   { key: "r0", code: "R0", short: "Wed, Nov 25", name: "Launch: must have", date: "Wednesday, November 25, 2026, 6:00 pm WAT", sub: "No launch without these. Heads of Department start Thursday, November 26.", items: [
-    ["A1", "Test site", "CODE", "partly", "Live at academic-bulletin-staging.up.railway.app with its own database and storage, a TEST SITE banner, a pretend clock for the launch tests and an email guard. The live records and photos are copied in. The five Gmail test accounts on live (4 Heads, 1 Dean, none ever signed in) were deactivated on November 25.", "Google sign-in address for the test site (you); a DAP test inbox (you)", true],
+    ["A1", "Test site", "CODE", "partly", "Live at academic-bulletin-staging.up.railway.app with its own database and storage, a TEST SITE banner, a pretend clock for the launch tests and an email guard. The live records and photos are copied in. The five Gmail test accounts on live were deactivated on November 25.", "Google sign-in address for the test site (you); a DAP test inbox (you)", true],
     ["A2", "Archive the test cycle", "CODE", "live", "The 2026/2027 test cycle was archived on November 23 and tagged TEST. The live dashboard shows 0 drafts. Restore was tried on the test site.", ""],
     ["A5", "Apply the code and name standard", "CODE+DAP", "live", "Live since November 25, 6:22 pm WAT: 8 schools and 30 departments changed, Dental Surgery added, 47 programmes changed and 20 added (18 new, 2 hidden), 78 old codes kept as aliases until February 4, 2027, 72 courses moved to their new department. DAP confirmed the three names: Medicine and Surgery, Agriculture, Basic and Applied Sciences. Reports A5_code_standard_*_live.md.", ""],
     ["A3", "Open the real cycle", "CODE", "live", "Opened on live November 25, 6:27 pm WAT: 2027-2031 Bulletin Development Cycle, active, with 66 drafts (48 existing programmes, 18 new; the 2 hidden programmes get none), the calendar loaded and the course lists pre-filled. Launch checks on live: 17 pass, 1 not yet due, 1 fails (17 course codes in two forms, which B3 fixes). Report LAUNCH_checks_live.md.", ""],
@@ -284,9 +284,9 @@ const GROUPS = [
     ["C1", "Calendar data", "CODE", "live", "Loaded on live November 25 for section 4.6: 10 phases, 17 checkpoints, 6 holidays, the Christmas quiet period (December 24 to January 3), and Submit to School opening Monday, December 14, 2026.", ""],
     ["C2", "The countdown", "CODE", "live", "Counts in Lagos time; tested at 11:58 pm, midnight and over Christmas. Shows once the cycle's calendar is loaded.", ""],
     ["C3", "Where countdowns appear", "CODE", "live", "Slim bar on every page, the home panel for each role, and the programme header.", ""],
-    ["D1", "Roster", "DAP", "dap", "The template is in the project folder (ABRS_Roster_Template_D1.xlsx): 76 rows (11 Deans, 35 Heads, 18 coordinators, 11 DAP officers, the General Education desk), all still empty on the evening of November 25.", "DAP fills in the names, babcock.edu.ng emails and WhatsApp numbers. Until it is imported no Dean, Head or DAP officer has an account on live", true],
-    ["D2", "Import users in bulk", "CODE", "ready", "Import built: dry run first, babcock.edu.ng only, problems listed by sheet and row, no email sent. The daily job sends the invitations once people are imported.", "The filled roster (D1), then the import on live", true],
-    ["D3", "Invitations and sign-in tracking", "CODE", "live", "Invitation email, resend, and a \"Not signed in yet\" filter. The live daily job runs at 8:00 am WAT, so Thursday's invitations send by themselves.", "Reply-to, launch session and help contact settings (you)", true],
+    ["D1", "Roster", "DAP", "partly", "DAP's list of Provosts, Deans and Heads arrived on November 26 and was put on the roster: all 11 Deans and all 35 Heads. DAP's choices where the platform's departments differ: Ekundayo for Law, Abaribe for Nursing, the College Provost (Fowotade) for Medicine and Surgery (MBBS), the Dean of Dentistry (Oyedele) for Dental Surgery; the Dean of Law is Odunaike. The roster file and its import report stay in the project folder, outside the code.", "DAP: the 11 DAP officers (Ask DAP and the help line in invitations use them), the General Education desk, and any programme coordinators (Heads can also name them)", true],
+    ["D2", "Import users in bulk", "CODE", "live", "Imported on live November 26, 11:27 am WAT: 46 accounts (11 Deans, 35 Heads), 0 problems, no email sent. Three DAP test accounts posing as Heads (Microbiology, Accounting, Nursing) are still active until DAP removes them.", ""],
+    ["D3", "Invitations and sign-in tracking", "CODE", "live", "Invitation email, resend, and a \"Not signed in yet\" filter; the daily job sends waiting invitations at 7:00 and 8:00 am WAT. Since November 26 DAP can hold them: on hold on live at DAP's request (no invitations until all the phase updates are in), with 49 people waiting. Users shows \"Invitations on hold\" with Release the hold, or Release and send now.", "DAP releases the hold when the phase updates are in; reply-to, launch session and help contact settings (you)", true],
     ["D4", "Lock each phase to its owner, on the server", "CODE", "live", "Acting on a phase you do not own is an override with a 20-character reason, flagged in the log and on the programme.", ""],
     ["D11", "Make the authenticator step painless", "CODE+DAP", "live", "Codes for every role, \"Remember this device for 30 days\", and DAP resets.", "The set-up screenshots belong in DAP's launch pack (H2)"],
     ["E1", "Course structures in all 66 drafts", "CODE+DAP", "live", "Pre-filled on live November 25: 4,704 rows in 66 drafts (2,792 from file 02, 1,912 General Education block), 3,674 starting from Registry details. ENT 322 (French) and BU-GST 420 (Peace Studies) included by DAP's exemption; AGX 503 listed twice, first kept. Report E1_course_structures_applied_live.md.", "DAP: units for the 14 rows left out (13 MBBS, BU-PUL 120); they join their drafts once supplied", true],
