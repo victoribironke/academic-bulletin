@@ -147,7 +147,7 @@ footer { font-size: 0.86rem; color: var(--muted); display: grid; gap: 0.4rem; bo
     <p class="lede">Every task in the work order, release by release: what is live on academicplanning.app, what is built and waiting to run, and what each remaining task is waiting on.</p>
     <div class="meta">
       <span class="deadline">R0 launch due Wednesday, November 25, 6:00 pm WAT <strong id="countdown"></strong></span>
-      <span>Updated Thursday, November 26, 2026, 5:32 pm WAT</span>
+      <span>Updated Thursday, November 26, 2026, 6:50 pm WAT</span>
       <span>Live code: <span class="mono">6bfce2f</span></span>
     </div>
     <div class="legend" aria-label="What the statuses mean">
@@ -253,7 +253,7 @@ footer { font-size: 0.86rem; color: var(--muted); display: grid; gap: 0.4rem; bo
   </section>
 
   <footer>
-    <p>Sources: the work order (package file 06, version 2.1), <span class="mono">docs/golive/IMPLEMENTATION_PLAN.md</span>, and the commits on main up to <span class="mono">6bfce2f</span>.</p>
+    <p>Sources: the work order (package file 06, version 2.1), <span class="mono">docs/golive/IMPLEMENTATION_PLAN.md</span>, and the commits on main up to <span class="mono">e0b1bc3</span>.</p>
     <p>This page is the single list of what is done. It is updated after each change, so chat reports can point here instead of repeating it.</p>
   </footer>
 </div>
@@ -350,7 +350,7 @@ const GROUPS = [
     ["T5", "DAP stays in charge of the agent", "CODE", "ready", "Administration, Reminder Agent: a dry run for any date (who, why, who is copied, the message), 20 AI-written samples to read, the day's prepared messages to edit or hold, pause for one desk or everyone, the sending switch (Super Administrators), and every message sent; each is in the activity log with the facts it used.", "Switched on with T3"],
     ["T6", "Agent safe by design", "CODE", "ready", "The agent only reads drafts and writes its own messages and the log (a test scans its code); the template goes out if the AI takes over 10 seconds or adds a number or link that isn't in the facts; nothing is sent in quiet hours (6:00 pm to 8:00 am), on the Sabbath (Friday 6:00 pm to Saturday 7:00 pm) or from December 24 to January 3.", "Switched on with T3"],
     ["U1", "Plain words on every screen", "CODE+DAP", "live", "Live since November 26 (f0215e2). Course Registry (not Master Courses), Show in course search, National General Studies, Babcock General Education, University-wide, Revision requested; comment types and statuses in words. The registry upload template uses the plain words and still reads the old codes. A page that breaks says \"Something went wrong on our side. Your saved work is safe. Please try again in a minute.\" A test reads every screen's text and fails on any old word.", "DAP to tell us any other word that reads as jargon"],
-    ["U6", "Welcome tour and practice programme", "CODE", "todo", "", ""],
+    ["U6", "Welcome tour and practice programme", "CODE", "live", "Live since November 26, checked on live. A three-step welcome on first sign-in for Heads, coordinators and Deans, skippable, and again from Help (09d9a01). Practice Programme in the side menu (e0b1bc3) opens the real draft screen on a made-up programme kept in the person's browser: write sections, change courses and staff, comment, ask DAP, confirm the course list and submit, with the real rules; nothing reaches the server, the activity log, email or anyone's queue, and Start again resets it. Heads start at drafting, Deans at School Board Harmonisation, DAP at vetting. GRACE checks, uploads and Word or PDF files stay with real programmes.", "The U8 testing sessions (November 30 to December 1) use it"],
     ["U7", "Helpful messages and empty screens", "CODE", "live", "Live since November 26 (3957dcb). About 72 server messages now say what happened and what to do (sign in again, ask DAP, try again in a minute) instead of Forbidden or Failed to; every empty screen says what to do next. A test fails if the old wording comes back.", ""],
     ["U8", "Test with real people", "DAP+CODE", "dap", "", "Sessions Monday, November 30 to Tuesday, December 1 (and December 8 to 9 before R2)"],
     ["W13", "Rule: university-wide admission wording", "CODE", "live", "Live since November 26 (7a50611). Admission opens with the university's UTME, Direct Entry and Transfer wording, locked; the Head adds only the programme's own subjects. Exports print the university wording first. Check V7 warns when Direct Entry or Transfer repeats the UTME text.", "The wording checked against the 2023-2027 bulletin with E2"],
