@@ -29,7 +29,7 @@ export default function MasterCoursesPage() {
       <EmptyState
         icon={ShieldAlert}
         title="You don't have access to this page"
-        description="Master Courses is Academic Planning's. To change a course in your programme, use Course Structure in your draft, or Courses We Own; for anything else, use Ask DAP."
+        description="The Course Registry is Academic Planning's. To change a course in your programme, use Course Structure in your draft, or Courses We Own; for anything else, use Ask DAP."
         className="mt-8"
       />
     );
@@ -38,7 +38,7 @@ export default function MasterCoursesPage() {
   return (
     <div>
       <PageHeader
-        title="Master Courses"
+        title="Course Registry"
         description="The central course registry. University-wide GST courses are automatically preloaded into programme submissions, and their hosting departments can maintain the shared learning details."
       />
       <MasterCourseManager departmentId={currentUser?.departmentId || undefined} />

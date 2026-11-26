@@ -1,3 +1,4 @@
+import { COURSE_TYPE_LABELS, GENERAL_STUDIES_OWNERSHIP_RULE, OWNERSHIP_LABELS, SHOW_IN_SEARCH, courseTypeFromSheet, ownershipFromSheet } from "@/lib/plain-words";
 import {
   formatCourseCode,
   cleanCourseTitle,
@@ -110,8 +111,8 @@ export const MASTER_COURSE_TEMPLATE_COLUMNS: TemplateColumn[] = [
   { key: "code", label: "Course Code", required: true },
   { key: "title", label: "Course Title", required: true },
   { key: "units", label: "Units", required: true, options: UNIT_OPTIONS, guidance: `A whole number from ${MIN_COURSE_UNITS} to ${MAX_COURSE_UNITS}.` },
-  { key: "type", label: "Course Type", required: true, options: ["GENERAL", "CORE", "ELECTIVE", "REQUIRED", "GST_NUC", "GST_BU"] },
-  { key: "ownership", label: "Ownership", required: true, options: ["DEPARTMENT", "SCHOOL", "INSTITUTIONAL"] },
+  { key: "type", label: "Course Type", required: true, options: Object.values(COURSE_TYPE_LABELS) },
+  { key: "ownership", label: "Ownership", required: true, options: Object.values(OWNERSHIP_LABELS) },
   { key: "level", label: "Level", required: true, options: ["100", "200", "300", "400", "500", "600"] },
   { key: "semester", label: "Semester", options: ["1", "2", "Sessional"], guidance: "1 or 2; leave empty or write Sessional for a course that runs the whole year (for example MBBS)." },
   { key: "description", label: "Description" },
@@ -125,15 +126,15 @@ export const MASTER_COURSE_TEMPLATE_COLUMNS: TemplateColumn[] = [
   { key: "curriculumSource", label: "Curriculum Source", guidance: "For official NUC courses, use CCMAS 2023." },
   { key: "sourceReference", label: "Source Reference", guidance: "Official discipline document or source URL." },
   { key: "sourceProgrammes", label: "Source Programmes", guidance: "Official programme names from the source, separated with |." },
-  { key: "discoverable", label: "Discoverable" },
+  { key: "discoverable", label: SHOW_IN_SEARCH, guidance: "YES or NO. YES lets every department find the course when it builds a programme." },
 ];
 
 export const MASTER_COURSE_TEMPLATE_EXAMPLES = [[
   "GST 101",
   "Use of English",
   2,
-  "GST_NUC",
-  "INSTITUTIONAL",
+  COURSE_TYPE_LABELS.GST_NUC,
+  OWNERSHIP_LABELS.INSTITUTIONAL,
   100,
   1,
   "University-wide communication course.",
@@ -285,8 +286,8 @@ export function validateMasterCourseImportRows(
     const code = formatCourseCode(rawCode);
     const title = cleanCourseTitle(rawTitle, rawCode);
     const units = numberValue(getImportValue(raw, ["Units", "Credit Units"]));
-    const type = normalizedEnum(getImportValue(raw, ["Course Type", "Type"]) || "CORE");
-    const ownership = normalizedEnum(getImportValue(raw, ["Ownership"]) || "DEPARTMENT");
+    const type = courseTypeFromSheet(normalizedEnum(getImportValue(raw, ["Course Type", "Type"]) || "CORE"));
+    const ownership = ownershipFromSheet(normalizedEnum(getImportValue(raw, ["Ownership"]) || "DEPARTMENT"));
     const level = numberValue(getImportValue(raw, ["Level"]));
     const semester = readSemester(raw, errors, warnings);
     const ownerDepartmentCode = importText(getImportValue(raw, ["Owner Department Code", "Department Code"])).toUpperCase();
@@ -295,13 +296,13 @@ export function validateMasterCourseImportRows(
     if (!isValidCourseCode(rawCode)) errors.push("Invalid course code; use a format such as GST 101 or BU-GST 112.");
     if (!title) errors.push("Course Title is required.");
     if (!isValidCourseUnits(units)) errors.push(UNITS_RULE_MESSAGE);
-    if (!types.includes(type)) errors.push("Invalid Course Type.");
-    if (!ownerships.includes(ownership)) errors.push("Invalid Ownership.");
+    if (!types.includes(type)) errors.push(`Course Type must be one of: ${Object.values(COURSE_TYPE_LABELS).join(", ")}.`);
+    if (!ownerships.includes(ownership)) errors.push(`Ownership must be one of: ${Object.values(OWNERSHIP_LABELS).join(", ")}.`);
     if (![100, 200, 300, 400, 500, 600].includes(level)) errors.push("Level must be 100, 200, 300, 400, 500, or 600.");
     if (ownership === "DEPARTMENT" && !ownerDepartmentCode) errors.push("Owner Department Code is required.");
     if (ownership === "SCHOOL" && !ownerSchoolCode) errors.push("Owner School Code is required.");
     if (["GST_NUC", "GST_BU"].includes(type) && ownership !== "INSTITUTIONAL") {
-      errors.push("GST courses must use INSTITUTIONAL ownership.");
+      errors.push(GENERAL_STUDIES_OWNERSHIP_RULE);
     }
 
     const duplicate = courseDuplicateKeys({ code, title });
@@ -355,7 +356,7 @@ export function validateMasterCourseImportRows(
         .split(/\r?\n|\s*\|\s*|\s*;\s*/)
         .map((value) => value.trim())
         .filter(Boolean),
-      discoverable: importBoolean(getImportValue(raw, ["Discoverable"]), true),
+      discoverable: importBoolean(getImportValue(raw, [SHOW_IN_SEARCH, "Discoverable"]), true),
     };
     return { rowNumber: index + 2, raw, data, errors, warnings, skipped: repeat.skipped };
   });

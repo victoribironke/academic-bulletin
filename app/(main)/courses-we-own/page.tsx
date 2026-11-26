@@ -178,7 +178,7 @@ function CoursesWeOwn() {
         title={isAdministrator ? "Course owners" : "Courses we own"}
         description={
           isAdministrator
-            ? "Every course Babcock offers has an owner, a department or a school, that writes its learning outcomes and content for every programme that uses it. General Education courses belong to the General Education desk. Change an owner in Master Courses."
+            ? "Every course Babcock offers has an owner, a department or a school, that writes its learning outcomes and content for every programme that uses it. General Education courses belong to the General Education desk. Change an owner in the Course Registry."
             : "The courses your department teaches for the university. Their learning outcomes and content are the same in every programme that uses them: what you save here reaches every programme's open draft at once."
         }
       />

@@ -1,4 +1,5 @@
 "use client";
+import { COURSE_TYPE_LABELS, OWNERSHIP_LABELS, REGISTRY_NAME, SHOW_IN_SEARCH, courseTypeLabel } from "@/lib/plain-words";
 
 import { UrlSearchTerm } from "@/components/shared/url-search-term";
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
@@ -126,18 +127,11 @@ interface MasterCourseManagerProps {
 }
 
 const COURSE_TYPES = [
-  { value: "CORE", label: "Core" },
-  { value: "GENERAL", label: "General" },
-  { value: "ELECTIVE", label: "Elective" },
-  { value: "REQUIRED", label: "Required" },
-  { value: "GST_NUC", label: "GST (NUC)" },
-  { value: "GST_BU", label: "GST (BU)" },
+  ...Object.entries(COURSE_TYPE_LABELS).map(([value, label]) => ({ value, label })),
 ];
 
 const OWNERSHIP_TYPES = [
-  { value: "DEPARTMENT", label: "Department" },
-  { value: "SCHOOL", label: "School" },
-  { value: "INSTITUTIONAL", label: "University-wide" },
+  ...Object.entries(OWNERSHIP_LABELS).map(([value, label]) => ({ value, label })),
 ];
 
 const LEVELS = [100, 200, 300, 400, 500, 600];
@@ -588,7 +582,7 @@ export function MasterCourseManager({
       GST_NUC: "bg-red-100 text-red-800",
       GST_BU: "bg-pink-100 text-pink-800",
     };
-    return <Badge className={colors[type] || ""}>{type}</Badge>;
+    return <Badge className={colors[type] || ""}>{courseTypeLabel(type)}</Badge>;
   };
 
   const getOwnershipBadge = (course: MasterCourse) => {
@@ -649,7 +643,7 @@ export function MasterCourseManager({
           <TableHead>Level</TableHead>
           <TableHead>Sem</TableHead>
           <TableHead>Programmes</TableHead>
-          <TableHead className="text-center">Discoverable</TableHead>
+          <TableHead className="text-center">{SHOW_IN_SEARCH}</TableHead>
           {hasCourseActions && <TableHead>Actions</TableHead>}
         </TableRow>
       </TableHeader>
@@ -671,7 +665,7 @@ export function MasterCourseManager({
               </TableCell>
               <TableCell className="text-center">
                 <Checkbox
-                  aria-label={`${course.code} discoverable`}
+                  aria-label={`Show ${course.code} in course search`}
                   checked={course.discoverable}
                   onCheckedChange={() => handleToggleDiscoverable(course)}
                   disabled={!canManageRegistry || isTogglingCourseId === course.id}
@@ -812,7 +806,7 @@ export function MasterCourseManager({
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Create Master Course</DialogTitle>
+              <DialogTitle>Add a course to the {REGISTRY_NAME}</DialogTitle>
             </DialogHeader>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>

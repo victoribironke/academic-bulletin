@@ -1,4 +1,6 @@
 "use client";
+import { STATUS_LABELS } from "@/lib/submissions/phases";
+import type { SubmissionStatus } from "@prisma/client";
 
 /**
  * Countdowns (work order tasks C2 and C3, and the basic "My desk" of T1).
@@ -194,7 +196,7 @@ export function DeadlinesPanel() {
                 </span>
                 <span className="flex flex-wrap items-center gap-2 text-muted-foreground">
                   <span>
-                    Phase {item.phase} · {item.status}
+                    Phase {item.phase} · {STATUS_LABELS[item.status as SubmissionStatus] ?? item.status}
                   </span>
                   {item.countdown && (
                     <>

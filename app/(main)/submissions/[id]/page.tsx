@@ -1,4 +1,6 @@
 "use client";
+import { COMMENT_TYPE_LABELS } from "@/lib/plain-words";
+import type { CommentType } from "@prisma/client";
 
 import { AskDap } from "@/components/submissions/ask-dap";
 import { rememberLastPlace } from "@/components/desk/continue-where-stopped";
@@ -1609,7 +1611,7 @@ export default function SubmissionDetailPage({
                                   className={`text-xs ${commentTypeColors[comment.type]
                                     }`}
                                 >
-                                  {comment.type}
+                                  {COMMENT_TYPE_LABELS[comment.type as CommentType] ?? comment.type}
                                 </Badge>
                               </div>
                               <Button

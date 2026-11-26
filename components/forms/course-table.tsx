@@ -1,4 +1,7 @@
 "use client";
+import { COURSE_STATUS_LABELS, courseTypeLabel } from "@/lib/plain-words";
+import { STATUS_LABELS } from "@/lib/submissions/phases";
+import type { CourseStatus, SubmissionStatus } from "@prisma/client";
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { DynamicTable, Column } from "./dynamic-table";
@@ -1047,11 +1050,11 @@ export function CourseTable({
               <div className="text-center py-8 text-muted-foreground">
                 {registrySearch || registryLevel !== "all"
                   ? "No Registry courses match this search."
-                  : "No discoverable courses found in the registry."}
+                  : "No Registry courses are shown in course search yet."}
                 <br />
                 <span className="text-sm">
                   {includeNational
-                    ? "Courses must be marked as discoverable to appear here."
+                    ? "A course appears here once the Course Registry has \u201cShow in course search\u201d on for it."
                     : "Only courses Babcock offers are shown. Turn on \u201cInclude the national curriculum\u201d to search it too."}
                 </span>
               </div>
@@ -1114,7 +1117,7 @@ export function CourseTable({
                                       : ""
                               }
                             >
-                              {mc.type}
+                              {courseTypeLabel(mc.type)}
                             </Badge>
                           </TableCell>
                           <TableCell className="whitespace-nowrap p-2 text-xs text-muted-foreground">
@@ -1240,7 +1243,7 @@ export function CourseTable({
               <SelectContent>
                 {previousSubmissions.map((sub) => (
                   <SelectItem key={sub.id} value={sub.id}>
-                    {sub.cycle?.name || sub.title} ({sub._count.courses} courses) — {sub.status}
+                    {sub.cycle?.name || sub.title} ({sub._count.courses} courses) — {STATUS_LABELS[sub.status as SubmissionStatus] ?? sub.status}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1314,7 +1317,7 @@ export function CourseTable({
                           <TableCell className="p-2">{pc.level}</TableCell>
                           <TableCell className="p-2">{courseSemesterShortLabel(pc.semester)}</TableCell>
                           <TableCell className="p-2">
-                            <Badge variant="outline">{pc.status}</Badge>
+                            <Badge variant="outline">{COURSE_STATUS_LABELS[pc.status as CourseStatus] ?? pc.status}</Badge>
                           </TableCell>
                         </TableRow>
                       );

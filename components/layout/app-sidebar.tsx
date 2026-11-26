@@ -108,7 +108,7 @@ const NAV_GROUPS: NavGroup[] = [
         permission: "view:schools",
       },
       {
-        title: "Master Courses",
+        title: "Course Registry",
         href: "/master-courses",
         icon: BookOpen,
         permission: "view:schools",

@@ -591,7 +591,7 @@ export default function DashboardPage() {
                 className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50"
               >
                 <BookOpen className="size-5 text-primary" />
-                <span className="text-sm font-medium">Master courses</span>
+                <span className="text-sm font-medium">Course Registry</span>
               </Link>
               <Link
                 href="/bulletins"

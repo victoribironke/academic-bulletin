@@ -26,7 +26,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   new: "New Submission",
   bulletins: "Bulletins",
   "academic-units": "Academic Units",
-  "master-courses": "Master Courses",
+  "master-courses": "Course Registry",
   staff: "Staff",
   "review-cycles": "Review Cycles",
   users: "Users",

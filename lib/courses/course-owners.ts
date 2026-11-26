@@ -250,7 +250,7 @@ export function courseOwnersReport(plan: OwnerPlan, heading: string): string {
     `- Owners to fill in: ${plan.counts.toFill}`,
     `- Left for DAP: ${plan.counts.gaps}`,
     "",
-    "An owner is only ever filled in, never changed. DAP can change any owner in Master Courses.",
+    "An owner is only ever filled in, never changed. DAP can change any owner in the Course Registry.",
   ];
   if (plan.changes.length) {
     lines.push("", "## Owners to fill in", "", "| Course | Owner | Rule | Why |", "| --- | --- | --- | --- |");

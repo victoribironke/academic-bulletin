@@ -4,7 +4,7 @@ import { getSessionAccess } from "@/auth";
 import { MFA_REQUIRED_RESPONSE } from "@/lib/api-auth";
 import { currentVerification, mfaRequiredFor } from "@/lib/mfa/policy";
 import { serverTimer } from "@/lib/server-timing";
-import { NOT_SIGNED_IN } from "@/lib/messages";
+import { NOT_SIGNED_IN, couldNot } from "@/lib/messages";
 
 export async function GET() {
   try {
@@ -84,7 +84,7 @@ export async function GET() {
   } catch (error) {
     console.error("Failed to fetch current user session:", error);
     return NextResponse.json(
-      { error: "Internal Server Error" },
+      { error: couldNot("load your account") },
       { status: 500 },
     );
   }

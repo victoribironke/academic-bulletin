@@ -298,7 +298,7 @@ describe("Registry bulk import validation", () => {
     ]);
 
     expect(row.errors).toContain(
-      "GST courses must use INSTITUTIONAL ownership.",
+      "National General Studies and Babcock General Education courses must be University-wide.",
     );
   });
 
