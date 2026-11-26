@@ -450,6 +450,17 @@ export default function SubmissionDetailPage({
 
   // These sections have their own Save button inside the section.
   const sectionSavesSeparately = ["staff", "courses", "descriptions"].includes(activeSection);
+  // S2: once the programme is open, load the staff directory and the course
+  // structure in the background, so a first visit to them is instant too.
+  // (Course Details loads on its first visit: opening it starts GRACE checks.)
+  const programmeLoaded = Boolean(submission);
+  useEffect(() => {
+    if (!programmeLoaded) return;
+    const timer = window.setTimeout(() => {
+      setVisitedSections((prev) => (prev.has("staff") && prev.has("courses") ? prev : new Set([...prev, "staff", "courses"])));
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [programmeLoaded]);
   const [hasChanges, setHasChanges] = useState(false);
   // Q7: one DELETE box for removing photos and written items on this page.
   const { confirmDelete, dialog: deleteDialog } = useConfirmDelete();
