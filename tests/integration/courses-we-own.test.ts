@@ -27,6 +27,7 @@ import prisma from "@/lib/prisma";
 import { GET as listOwned } from "@/app/api/courses-we-own/route";
 import { PUT as saveOwned } from "@/app/api/courses-we-own/[id]/route";
 import { applyCourseOwners, planCourseOwnersFromDatabase } from "@/lib/courses/course-owners";
+import { GET as graceResult, POST as runGrace } from "@/app/api/courses-we-own/[id]/grace/route";
 
 const ids = {
   school: "zow-school",
@@ -118,6 +119,7 @@ describe("Courses we own (B6)", () => {
     await prisma.masterCourse.deleteMany({ where: { id: { startsWith: "zow-" } } });
     await prisma.programme.deleteMany({ where: { id: { in: [ids.programmeOwners, ids.programmeOthers] } } });
     await prisma.activityLog.deleteMany({ where: { actorId: { in: users } } });
+    await prisma.apiRateLimit.deleteMany({ where: { key: { contains: "zow-" } } }).catch(() => undefined);
     await prisma.mfaVerification.deleteMany({ where: { userId: { in: users } } });
     await prisma.user.deleteMany({ where: { id: { in: users } } });
     await prisma.department.deleteMany({ where: { id: { in: [ids.owners, ids.others] } } });
@@ -181,6 +183,21 @@ describe("Courses we own (B6)", () => {
     expect((await save("zow-150", { learningOutcomes: "Explain it", courseContent: "Shared by the school." })).status).toBe(200);
     as(ids.admin);
     expect((await save("zow-gst", { learningOutcomes: "Explain it", courseContent: "The desk's text." })).status).toBe(200);
+  });
+
+  it("runs GRACE on the shared text for the owner or DAP, and keeps one result for it (D9)", async () => {
+    const at = (id: string) => ({ params: Promise.resolve({ id }) });
+    as(ids.hodOwners);
+    expect(await (await graceResult(new Request("http://localhost"), at("zow-102"))).json()).toEqual({ status: "NO_TEXT" });
+    as(ids.hodOthers);
+    expect((await runGrace(new Request("http://localhost", { method: "POST" }), at("zow-101"))).status).toBe(403);
+    as(ids.admin);
+    const run = await runGrace(new Request("http://localhost", { method: "POST" }), at("zow-gst"));
+    expect(run.status).toBe(200);
+    // No AI service in tests: the check records an error result, which the desk can retry.
+    const body = await run.json();
+    expect(["COMPLIANT", "NEEDS_REVISION", "ERROR"]).toContain(body.status);
+    expect((await (await graceResult(new Request("http://localhost"), at("zow-gst"))).json()).status).toBe(body.status);
   });
 
   it("fills in a missing owner from the course's prefix, once", async () => {

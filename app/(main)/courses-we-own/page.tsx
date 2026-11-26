@@ -32,6 +32,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { TRY_AGAIN } from "@/lib/messages";
 import { FieldHelp } from "@/components/forms/field-help";
+import { RegistryGrace } from "@/components/courses/registry-grace";
 
 const MINIMUM_OUTCOMES = 3;
 const ALLOWED = ["HOD", "PROGRAMME_COORDINATOR", "DEAN", "ADMIN", "SUPER_ADMIN"];
@@ -363,6 +364,15 @@ export default function CoursesWeOwnPage() {
                   />
                 </div>
               </div>
+              {/* D9: GRACE on the shared text, for the desk and the owning department. */}
+              <RegistryGrace
+                courseId={editing.id}
+                canRun={!readOnly}
+                dirty={
+                  draft.learningOutcomes.trim() !== editing.learningOutcomes.join("\n").trim() ||
+                  draft.courseContent.trim() !== editing.courseContent.trim()
+                }
+              />
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setEditing(null)} disabled={saving}>
                   {readOnly ? "Close" : "Cancel"}
