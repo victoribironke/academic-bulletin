@@ -1,0 +1,745 @@
+{
+  "about": "Task B1: the national curriculum (NUC CCMAS 2023) each Babcock programme follows. SAME_NAME rows match a national programme by name. PROPOSED rows are this list's suggestion for DAP; DISCIPLINE_ONLY rows know the NUC document but not the national programme. wholeDocument means the document lists its programmes together, so its courses are not linked to the programme automatically. Nothing PROPOSED is used until DAP approves the list.",
+  "approvedBy": null,
+  "approvedOn": null,
+  "programmes": [
+    {
+      "code": "SAHS-NUT-NUT",
+      "name": "B.Sc. (Hons.) Human Nutrition and Dietetics",
+      "national": [],
+      "discipline": "Allied Health Sciences",
+      "status": "DISCIPLINE_ONLY",
+      "wholeDocument": false,
+      "note": "The Allied Health Sciences document's programme list was not split in the extracted catalogue; DAP to name the national programme (Human Nutrition and Dietetics)."
+    },
+    {
+      "code": "SAHS-MLS-MLS",
+      "name": "B.MLS. (Hons.) Medical Laboratory Science",
+      "national": [
+        "Medical Laboratory Science"
+      ],
+      "discipline": "Allied Health Sciences",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SAHS-PBH-PBH",
+      "name": "B.Sc. (Hons.) Public Health",
+      "national": [
+        "Public Health"
+      ],
+      "discipline": "Allied Health Sciences",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SBMS-ANA-ANA",
+      "name": "B.Sc. (Hons.) Anatomy",
+      "national": [
+        "Human Anatomy"
+      ],
+      "discipline": "Basic Medical Sciences",
+      "status": "PROPOSED",
+      "wholeDocument": false,
+      "note": "National name is Human Anatomy."
+    },
+    {
+      "code": "SBMS-BCH-BCH",
+      "name": "B.Sc. (Hons.) Biochemistry",
+      "national": [
+        "Biochemistry"
+      ],
+      "discipline": "Sciences",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SBMS-BCH-TEM",
+      "name": "B.Sc. (Hons.) Toxicology and Environmental Management",
+      "national": [
+        "Environmental Management and Toxicology"
+      ],
+      "discipline": "Sciences",
+      "status": "PROPOSED",
+      "wholeDocument": false,
+      "note": "Same subject, words in the other order."
+    },
+    {
+      "code": "SBMS-PIO-PIO",
+      "name": "B.Sc. (Hons.) Physiology",
+      "national": [
+        "Physiology"
+      ],
+      "discipline": "Basic Medical Sciences",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SBMS-MED-MBS",
+      "name": "MBBS Medicine and Surgery",
+      "national": [
+        "medicine and dentistry"
+      ],
+      "discipline": "Medicine and Dentistry",
+      "status": "PROPOSED",
+      "wholeDocument": true,
+      "note": "The Medicine and Dentistry document covers MBBS and BDS together."
+    },
+    {
+      "code": "SBMS-DEN-BDS",
+      "name": "BDS Dental Surgery",
+      "national": [
+        "medicine and dentistry"
+      ],
+      "discipline": "Medicine and Dentistry",
+      "status": "PROPOSED",
+      "wholeDocument": true,
+      "note": "The Medicine and Dentistry document covers MBBS and BDS together."
+    },
+    {
+      "code": "JSEH-EDU-BED",
+      "name": "B.Sc.Ed. (Hons.) Business Education",
+      "national": [
+        "education"
+      ],
+      "discipline": "Education",
+      "status": "PROPOSED",
+      "wholeDocument": true,
+      "note": "The Education document covers all the education programmes together."
+    },
+    {
+      "code": "JSEH-EDU-ECE",
+      "name": "B.Sc.Ed. (Hons.) Economics Education",
+      "national": [
+        "education"
+      ],
+      "discipline": "Education",
+      "status": "PROPOSED",
+      "wholeDocument": true,
+      "note": "The Education document covers all the education programmes together."
+    },
+    {
+      "code": "JSEH-EDU-EMG",
+      "name": "B.Ed. (Hons.) Educational Management",
+      "national": [
+        "education"
+      ],
+      "discipline": "Education",
+      "status": "PROPOSED",
+      "wholeDocument": true,
+      "note": "The Education document covers all the education programmes together."
+    },
+    {
+      "code": "JSEH-EDU-ENE",
+      "name": "B.A.Ed. (Hons.) English Education",
+      "national": [
+        "education"
+      ],
+      "discipline": "Education",
+      "status": "PROPOSED",
+      "wholeDocument": true,
+      "note": "The Education document covers all the education programmes together."
+    },
+    {
+      "code": "JSEH-EDU-GNC",
+      "name": "B.Sc.Ed. (Hons.) Guidance and Counselling",
+      "national": [
+        "education"
+      ],
+      "discipline": "Education",
+      "status": "PROPOSED",
+      "wholeDocument": true,
+      "note": "The Education document covers all the education programmes together."
+    },
+    {
+      "code": "JSEH-EDU-CSE",
+      "name": "B.Sc.Ed. (Hons.) Computer Science Education",
+      "national": [
+        "education"
+      ],
+      "discipline": "Education",
+      "status": "PROPOSED",
+      "wholeDocument": true,
+      "note": "The Education document covers all the education programmes together."
+    },
+    {
+      "code": "JSEH-EDU-HED",
+      "name": "B.Sc.Ed. (Hons.) Health Education",
+      "national": [
+        "education"
+      ],
+      "discipline": "Education",
+      "status": "PROPOSED",
+      "wholeDocument": true,
+      "note": "The Education document covers all the education programmes together."
+    },
+    {
+      "code": "JSEH-HIS-HIS",
+      "name": "B.A. (Hons.) History and International Studies",
+      "national": [
+        "History/History and Diplomatic Studies"
+      ],
+      "discipline": "Arts",
+      "status": "PROPOSED",
+      "wholeDocument": false,
+      "note": "Closest national programme; Babcock adds International Studies."
+    },
+    {
+      "code": "JSEH-LLS-ENG",
+      "name": "B.A. (Hons.) English Studies",
+      "national": [
+        "English Language and Literature"
+      ],
+      "discipline": "Arts",
+      "status": "PROPOSED",
+      "wholeDocument": false,
+      "note": "Closest national programme."
+    },
+    {
+      "code": "JSEH-LLS-FFS",
+      "name": "B.A. (Hons.) French and Foreign Studies",
+      "national": [
+        "Modern European Languages B.A"
+      ],
+      "discipline": "Arts",
+      "status": "PROPOSED",
+      "wholeDocument": false,
+      "note": "French sits under Modern European Languages nationally."
+    },
+    {
+      "code": "JSEH-MCA-MUS",
+      "name": "B.A. (Hons.) Music",
+      "national": [
+        "Music"
+      ],
+      "discipline": "Arts",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "JSEH-REL-CTH",
+      "name": "B.A. (Hons.) Christian Theology",
+      "national": [
+        "Christian Theology"
+      ],
+      "discipline": "Arts",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "JSEH-REL-CRS",
+      "name": "B.A. (Hons.) Christian Religious Studies",
+      "national": [
+        "Christian Religious Studies"
+      ],
+      "discipline": "Arts",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": "Programme hidden until DAP confirms it (code standard)."
+    },
+    {
+      "code": "SESC-ARC-ARC",
+      "name": "B.Sc. (Hons.) Architecture",
+      "national": [
+        "Tech. Architecture"
+      ],
+      "discipline": "Architecture",
+      "status": "PROPOSED",
+      "wholeDocument": false,
+      "note": "The Architecture document's programme is listed as Tech. Architecture in the extracted catalogue; DAP to confirm."
+    },
+    {
+      "code": "SESC-ESM-ESM",
+      "name": "B.Sc. (Hons.) Estate Management",
+      "national": [
+        "environmental sciences"
+      ],
+      "discipline": "Environmental Sciences",
+      "status": "PROPOSED",
+      "wholeDocument": true,
+      "note": "The Environmental Sciences document covers Estate Management with the other environmental programmes."
+    },
+    {
+      "code": "SLSS-LAW-LAW",
+      "name": "LL.B. (Hons.) Law",
+      "national": [
+        "law"
+      ],
+      "discipline": "Law",
+      "status": "SAME_NAME",
+      "wholeDocument": true,
+      "note": "The Law document covers the LL.B. as one programme."
+    },
+    {
+      "code": "SMSC-ACC-ACC",
+      "name": "B.Sc. (Hons.) Accounting",
+      "national": [
+        "Accounting"
+      ],
+      "discipline": "Administration and Management",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SMSC-BAM-BUA",
+      "name": "B.Sc. (Hons.) Business Administration",
+      "national": [
+        "Business Administration"
+      ],
+      "discipline": "Administration and Management",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SMSC-BAM-MKT",
+      "name": "B.Sc. (Hons.) Marketing",
+      "national": [
+        "Marketing"
+      ],
+      "discipline": "Administration and Management",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SMSC-BAM-ENP",
+      "name": "B.Sc. (Hons.) Entrepreneurship",
+      "national": [
+        "Entrepreneurship"
+      ],
+      "discipline": "Administration and Management",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SMSC-FIN-FIN",
+      "name": "B.Sc. (Hons.) Finance",
+      "national": [
+        "Finance/Banking and Finance"
+      ],
+      "discipline": "Administration and Management",
+      "status": "PROPOSED",
+      "wholeDocument": false,
+      "note": "National name is Finance/Banking and Finance."
+    },
+    {
+      "code": "SMSC-FIN-SIM",
+      "name": "B.Sc. (Hons.) Security and Investment Management",
+      "national": [
+        "Securities and Investments Management"
+      ],
+      "discipline": "Administration and Management",
+      "status": "PROPOSED",
+      "wholeDocument": false,
+      "note": "National name is Securities and Investments Management; confirms the spelling question in the code standard."
+    },
+    {
+      "code": "SMSC-IRM-IRM",
+      "name": "B.Sc. (Hons.) Information Resources Management",
+      "national": [
+        "Information Resources Management"
+      ],
+      "discipline": "Administration and Management",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SMSC-IRM-BIT",
+      "name": "B.Sc. (Hons.) Business Information Technology",
+      "national": [
+        "Business Information Technology"
+      ],
+      "discipline": "Administration and Management",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SNSC-NRS-NRS",
+      "name": "B.NSc. (Hons.) Nursing Science",
+      "national": [],
+      "discipline": "Allied Health Sciences",
+      "status": "DISCIPLINE_ONLY",
+      "wholeDocument": false,
+      "note": "Nursing Science is not among the extracted national programmes; DAP to name the national curriculum it follows."
+    },
+    {
+      "code": "SOCO-COS-COS",
+      "name": "B.Sc. (Hons.) Computer Science",
+      "national": [
+        "Computer Science"
+      ],
+      "discipline": "Computing",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SOCO-COS-IFS",
+      "name": "B.Sc. (Hons.) Information Systems",
+      "national": [
+        "Information Systems"
+      ],
+      "discipline": "Computing",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SOCO-COS-AIN",
+      "name": "B.Sc. (Hons.) Artificial Intelligence",
+      "national": [],
+      "discipline": "Computing",
+      "status": "DISCIPLINE_ONLY",
+      "wholeDocument": false,
+      "note": "Artificial Intelligence is not among the extracted Computing programmes; DAP to confirm whether it has a national curriculum."
+    },
+    {
+      "code": "SOCO-IFT-CYS",
+      "name": "B.Sc. (Hons.) Cybersecurity",
+      "national": [
+        "Cybersecurity"
+      ],
+      "discipline": "Computing",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SOCO-IFT-IFT",
+      "name": "B.Sc. (Hons.) Information Technology",
+      "national": [
+        "Information Technology"
+      ],
+      "discipline": "Computing",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SOCO-SEN-SEN",
+      "name": "B.Sc. (Hons.) Software Engineering",
+      "national": [
+        "Software Engineering"
+      ],
+      "discipline": "Computing",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SOCO-SEN-DTS",
+      "name": "B.Sc. (Hons.) Data Science",
+      "national": [
+        "Data Science"
+      ],
+      "discipline": "Computing",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SOEN-CVE-CVE",
+      "name": "B.Eng. (Hons.) Civil Engineering",
+      "national": [
+        "Civil Engineering"
+      ],
+      "discipline": "Engineering and Technology",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SOEN-COE-COE",
+      "name": "B.Eng. (Hons.) Computer Engineering",
+      "national": [
+        "Computer Engineering"
+      ],
+      "discipline": "Engineering and Technology",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SOEN-EEE-EEE",
+      "name": "B.Eng. (Hons.) Electrical and Electronics Engineering",
+      "national": [
+        "Electrical and Electronic Engineering"
+      ],
+      "discipline": "Engineering and Technology",
+      "status": "PROPOSED",
+      "wholeDocument": false,
+      "note": "National name is Electrical and Electronic Engineering."
+    },
+    {
+      "code": "SOEN-MEE-MEE",
+      "name": "B.Eng. (Hons.) Mechanical Engineering",
+      "national": [
+        "Mechanical Engineering"
+      ],
+      "discipline": "Engineering and Technology",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SSAT-AIT-AGE",
+      "name": "B.Agric. (Hons.) Agricultural Economics and Extension",
+      "national": [
+        "Agricultural Economics",
+        "Agricultural Extension"
+      ],
+      "discipline": "Agriculture",
+      "status": "PROPOSED",
+      "wholeDocument": false,
+      "note": "Babcock's one programme follows two national programmes (rule W18)."
+    },
+    {
+      "code": "SSAT-AIT-ANS",
+      "name": "B.Agric. (Hons.) Animal Science",
+      "national": [
+        "Animal Science"
+      ],
+      "discipline": "Agriculture",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SSAT-AIT-CSS",
+      "name": "B.Agric. (Hons.) Crop Science and Soil Science",
+      "national": [
+        "Crop Science",
+        "Soil Science"
+      ],
+      "discipline": "Agriculture",
+      "status": "PROPOSED",
+      "wholeDocument": false,
+      "note": "Babcock's one programme follows two national programmes (rule W18)."
+    },
+    {
+      "code": "SSAT-AIT-FST",
+      "name": "B.Sc. (Hons.) Food Science and Technology",
+      "national": [
+        "Food Science and Technology"
+      ],
+      "discipline": "Engineering and Technology",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SSAT-BAS-BIO",
+      "name": "B.Sc. (Hons.) Biology",
+      "national": [
+        "Biology"
+      ],
+      "discipline": "Sciences",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SSAT-BAS-CHM",
+      "name": "B.Sc. (Hons.) Chemistry",
+      "national": [],
+      "discipline": "Sciences",
+      "status": "DISCIPLINE_ONLY",
+      "wholeDocument": false,
+      "note": "Chemistry is not among the extracted Sciences programmes (only Industrial and Petroleum Chemistry); DAP to confirm."
+    },
+    {
+      "code": "SSAT-BAS-MAT",
+      "name": "B.Sc. (Hons.) Mathematics",
+      "national": [
+        "Mathematics"
+      ],
+      "discipline": "Sciences",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SSAT-BAS-ICH",
+      "name": "B.Sc. (Hons.) Industrial Chemistry",
+      "national": [
+        "Industrial Chemistry"
+      ],
+      "discipline": "Sciences",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SSAT-BAS-IMT",
+      "name": "B.Sc. (Hons.) Industrial Mathematics",
+      "national": [
+        "Industrial Mathematics"
+      ],
+      "discipline": "Sciences",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SSAT-BAS-IPH",
+      "name": "B.Sc. (Hons.) Industrial Physics",
+      "national": [
+        "Physics"
+      ],
+      "discipline": "Sciences",
+      "status": "PROPOSED",
+      "wholeDocument": false,
+      "note": "Closest national programme; DAP to confirm Industrial Physics."
+    },
+    {
+      "code": "SSAT-BAS-MDC",
+      "name": "B.Sc. (Hons.) Medicinal Chemistry",
+      "national": [],
+      "discipline": "Sciences",
+      "status": "DISCIPLINE_ONLY",
+      "wholeDocument": false,
+      "note": "Medicinal Chemistry is not among the extracted national programmes; DAP to confirm."
+    },
+    {
+      "code": "SSAT-BAS-MPY",
+      "name": "B.Sc. (Hons.) Medical Physics",
+      "national": [
+        "Physics"
+      ],
+      "discipline": "Sciences",
+      "status": "PROPOSED",
+      "wholeDocument": false,
+      "note": "Closest national programme; DAP to confirm Medical Physics."
+    },
+    {
+      "code": "SSAT-MCB-MCB",
+      "name": "B.Sc. (Hons.) Microbiology",
+      "national": [
+        "Microbiology"
+      ],
+      "discipline": "Sciences",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "SSAT-MCB-BTG",
+      "name": "B.Sc. (Hons.) Biotechnology",
+      "national": [
+        "Biotechnology"
+      ],
+      "discipline": "Sciences",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "VSSS-ECO-ECO",
+      "name": "B.Sc. (Hons.) Economics",
+      "national": [
+        "Economics"
+      ],
+      "discipline": "Social Sciences",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "VSSS-MCM-MCM",
+      "name": "B.Sc. (Hons.) Mass Communication",
+      "national": [
+        "communication and media studies"
+      ],
+      "discipline": "Communication and Media Studies",
+      "status": "PROPOSED",
+      "wholeDocument": true,
+      "note": "The Communication and Media Studies document covers Mass Communication, Advertising and Broadcasting."
+    },
+    {
+      "code": "VSSS-MCM-ADV",
+      "name": "B.Sc. (Hons.) Advertising",
+      "national": [
+        "communication and media studies"
+      ],
+      "discipline": "Communication and Media Studies",
+      "status": "PROPOSED",
+      "wholeDocument": true,
+      "note": "The Communication and Media Studies document covers Mass Communication, Advertising and Broadcasting."
+    },
+    {
+      "code": "VSSS-MCM-BRD",
+      "name": "B.Sc. (Hons.) Broadcasting",
+      "national": [
+        "communication and media studies"
+      ],
+      "discipline": "Communication and Media Studies",
+      "status": "PROPOSED",
+      "wholeDocument": true,
+      "note": "The Communication and Media Studies document covers Mass Communication, Advertising and Broadcasting."
+    },
+    {
+      "code": "VSSS-PSP-PAD",
+      "name": "B.Sc. (Hons.) Public Administration",
+      "national": [
+        "Public Administration"
+      ],
+      "discipline": "Administration and Management",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "VSSS-PSP-PCR",
+      "name": "B.Sc. (Hons.) Peace Studies and Conflict Resolution",
+      "national": [
+        "Peace Studies and Conflict Resolution"
+      ],
+      "discipline": "Social Sciences",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "VSSS-PSP-POL",
+      "name": "B.Sc. (Hons.) Political Science",
+      "national": [
+        "Political Science"
+      ],
+      "discipline": "Social Sciences",
+      "status": "SAME_NAME",
+      "wholeDocument": false,
+      "note": null
+    },
+    {
+      "code": "VSSS-PSP-ILD",
+      "name": "B.Sc. (Hons.) International Law and Diplomacy",
+      "national": [
+        "International Relations"
+      ],
+      "discipline": "Social Sciences",
+      "status": "PROPOSED",
+      "wholeDocument": false,
+      "note": "Closest national programme. Programme hidden until DAP confirms it (code standard)."
+    },
+    {
+      "code": "VSSS-SOW-SOW",
+      "name": "B.Sc. (Hons.) Social Work",
+      "national": [],
+      "discipline": "Social Sciences",
+      "status": "DISCIPLINE_ONLY",
+      "wholeDocument": false,
+      "note": "Social Work is not among the extracted Social Sciences programmes; DAP to confirm."
+    }
+  ]
+}

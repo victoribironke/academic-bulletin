@@ -37,6 +37,7 @@ import {
 import { useDeleteRecord } from "@/components/shared/delete-record-dialog";
 import { RowActionsMenu } from "@/components/shared/row-actions-menu";
 import { toast } from "sonner";
+import { nationalMatchFor, nationalMatchText, nationalMatchesApproved } from "@/lib/courses/national-match";
 
 // Types
 type Programme = {
@@ -471,9 +472,13 @@ export default function AcademicUnitsPage() {
                                     >
                                       <span className="flex min-w-0 items-center gap-2">
                                         <GraduationCap className="size-4 shrink-0 text-brand-gold" />
-                                        <span className="truncate text-sm">
-                                          {prog.name}{" "}
-                                          <span className="text-muted-foreground">({prog.code})</span>
+                                        <span className="min-w-0 text-sm">
+                                          <span className="block truncate">
+                                            {prog.name}{" "}
+                                            <span className="text-muted-foreground">({prog.code})</span>
+                                          </span>
+                                          {/* B1: the national curriculum it follows. */}
+                                          <NationalMatchLine code={prog.code} />
                                         </span>
                                         {prog.duration && (
                                           <span className="shrink-0 rounded border px-1.5 py-0.5 text-[11px] text-muted-foreground">
@@ -804,5 +809,26 @@ export default function AcademicUnitsPage() {
       </Dialog>
       {deleteDialog}
     </div>
+  );
+}
+
+/** B1: "National curriculum: Animal Science (Agriculture)", and whether DAP has approved it. */
+function NationalMatchLine({ code }: { code: string }) {
+  const match = nationalMatchFor(code);
+  if (!match) return null;
+  const approved = nationalMatchesApproved();
+  const state =
+    match.status === "SAME_NAME"
+      ? ""
+      : match.status === "DISCIPLINE_ONLY"
+        ? " · for DAP to name"
+        : approved
+          ? ""
+          : " · proposed, waiting for DAP";
+  return (
+    <span className="block truncate text-xs text-muted-foreground" title={match.note ?? undefined}>
+      National curriculum: {nationalMatchText(match)}
+      {state}
+    </span>
   );
 }

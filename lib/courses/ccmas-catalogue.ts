@@ -4,6 +4,7 @@ import reviewJson from "@/data/ccmas/catalogue-review.json";
 import prisma from "@/lib/prisma";
 import { recordActivity } from "@/lib/activity-log";
 import { matchProgrammeNames } from "@/lib/courses/programme-matching";
+import { approvedNationalLinks } from "@/lib/courses/national-match";
 
 type CcmasVariant = {
   sourceProgramme: string;
@@ -242,6 +243,10 @@ export async function syncCcmasCatalogue(actorId?: string | null) {
 
   // Programme-name matching is the same for every course, so do it once per name.
   const matchCache = new Map<string, ReturnType<typeof matchProgrammeNames>>();
+  // B1: once DAP approves the match list, a national programme also links to
+  // the Babcock programmes matched to it under another name.
+  const approvedLinks = approvedNationalLinks();
+  const programmeIdByCode = new Map(programmes.map((programme) => [programme.code, programme.id]));
   const unmatchedProgrammeNames = new Set<string>();
   const ambiguousProgrammeNames = new Set<string>();
   const reviewProgrammeNames = new Set<string>();
@@ -262,6 +267,16 @@ export async function syncCcmasCatalogue(actorId?: string | null) {
       let match = matchCache.get(name);
       if (!match) {
         match = matchProgrammeNames([name], programmes);
+        const approvedIds = (approvedLinks.get(name) ?? [])
+          .map((code) => programmeIdByCode.get(code))
+          .filter((id): id is string => Boolean(id));
+        if (approvedIds.length) {
+          match = {
+            matchedIds: [...new Set([...match.matchedIds, ...approvedIds])],
+            unmatchedNames: [],
+            ambiguousNames: match.ambiguousNames,
+          };
+        }
         matchCache.set(name, match);
       }
       match.unmatchedNames.forEach((n) => unmatchedProgrammeNames.add(n));
