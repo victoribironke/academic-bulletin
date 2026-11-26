@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { GRACE_SUBMISSION_REQUIRED } from "@/lib/grace-config";
 import { useConfirmDelete } from "@/components/shared/typed-delete-dialog";
+import { FieldHelp } from "@/components/forms/field-help";
 
 const GRACE_PILLAR_LABELS: Record<string, string> = {
   G: "Global Relevance",
@@ -1021,6 +1022,7 @@ export function CourseDescriptionForm({
                                 <label className="text-sm font-semibold">
                                   Learning Outcomes
                                 </label>
+                                <FieldHelp field="learningOutcomes" value={desc.learningOutcomes} />
                                 <p className="text-xs text-muted-foreground">
                                   At the end of this course, students should be
                                   able to:
@@ -1087,6 +1089,7 @@ export function CourseDescriptionForm({
                                     <label className="text-sm font-semibold">
                                       Course Description
                                     </label>
+                                    <FieldHelp field="courseContent" value={desc.courseContent} />
                                     <p className="text-xs text-muted-foreground">
                                       Ensure this description is GRACE compliant
                                       (clear, concise, and outcome-focused).

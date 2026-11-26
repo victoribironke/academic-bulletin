@@ -31,6 +31,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { TRY_AGAIN } from "@/lib/messages";
+import { FieldHelp } from "@/components/forms/field-help";
 
 const MINIMUM_OUTCOMES = 3;
 const ALLOWED = ["HOD", "PROGRAMME_COORDINATOR", "DEAN", "ADMIN", "SUPER_ADMIN"];
@@ -311,6 +312,7 @@ export default function CoursesWeOwnPage() {
               </DialogHeader>
               <div className="space-y-2">
                 <Label htmlFor={outcomesId}>Learning outcomes</Label>
+                <FieldHelp field="learningOutcomes" value={draft.learningOutcomes} />
                 <p className="text-xs text-muted-foreground">
                   At the end of this course, students should be able to: (one per line, starting with an action word; at
                   least {MINIMUM_OUTCOMES})
@@ -330,6 +332,7 @@ export default function CoursesWeOwnPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor={contentId}>Course content</Label>
+                <FieldHelp field="courseContent" value={draft.courseContent} />
                 <Textarea
                   id={contentId}
                   value={draft.courseContent}

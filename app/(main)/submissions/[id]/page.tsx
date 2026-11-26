@@ -84,6 +84,7 @@ import {
 import type { SubmissionWorkflow } from "@/lib/submissions/phase-owners";
 import { COORDINATOR_SUBMIT_NOTE } from "@/lib/submissions/workflow";
 import { UNIVERSITY_STATEMENTS } from "@/lib/bulletin/page-order";
+import { FieldHelp } from "@/components/forms/field-help";
 import { PageHeader } from "@/components/shared/page-header";
 import { formatDate, formatTime } from "@/lib/dates/format";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -1917,10 +1918,7 @@ export default function SubmissionDetailPage({
                     {/* Vision */}
                     <div className="space-y-2">
                       <Label>Programme Vision</Label>
-                      <p className="text-xs text-muted-foreground">
-                        A forward-looking statement describing the
-                        programme&apos;s aspirations.
-                      </p>
+                      <FieldHelp field="vision" value={vision} />
                       {canEdit ? (
                         <Textarea
                           value={vision}
@@ -1941,10 +1939,7 @@ export default function SubmissionDetailPage({
                     {/* Mission */}
                     <div className="space-y-2">
                       <Label>Programme Mission</Label>
-                      <p className="text-xs text-muted-foreground">
-                        A concise statement defining the programme&apos;s
-                        purpose and core commitment.
-                      </p>
+                      <FieldHelp field="mission" value={mission} />
                       {canEdit ? (
                         <Textarea
                           value={mission}
@@ -1967,6 +1962,7 @@ export default function SubmissionDetailPage({
                       <div className="flex items-center justify-between">
                         <div>
                           <Label>Programme Philosophy *</Label>
+                          <FieldHelp field="philosophy" value={philosophy} />
                           <p className="text-xs text-muted-foreground mt-0.5">
                             {GRACE_SUBMISSION_REQUIRED ? (
                               <>
@@ -2061,6 +2057,7 @@ export default function SubmissionDetailPage({
                     {/* Objectives */}
                     <div className="space-y-2">
                       <Label>Programme Objectives *</Label>
+                      <FieldHelp field="objectives" value={objectives} />
                       <p className="text-xs text-muted-foreground">
                         The specific objectives are to:
                       </p>
@@ -2113,6 +2110,7 @@ export default function SubmissionDetailPage({
                     {/* Unique Features */}
                     <div className="space-y-2">
                       <Label>Unique Features</Label>
+                      <FieldHelp field="uniqueFeatures" value={uniqueFeatures} />
                       {uniqueFeatures.map((feature, index) => (
                         <div key={index} className="flex items-start gap-2">
                           <span className="mt-2 text-sm text-muted-foreground w-6">
@@ -2162,6 +2160,7 @@ export default function SubmissionDetailPage({
                     {/* Employability */}
                     <div className="space-y-2">
                       <Label>Employability Skills</Label>
+                      <FieldHelp field="employability" value={employability} />
                       {employability.map((skill, index) => (
                         <div key={index} className="flex items-start gap-2">
                           <span className="mt-2 text-sm text-muted-foreground w-6">
@@ -2215,6 +2214,7 @@ export default function SubmissionDetailPage({
                   <div className="space-y-6">
                     <div className="space-y-2">
                       <Label>UTME Requirements *</Label>
+                      <FieldHelp field="utmeRequirements" value={utmeRequirements} />
                       {canEdit ? (
                         <Textarea
                           value={utmeRequirements}
@@ -2234,6 +2234,7 @@ export default function SubmissionDetailPage({
 
                     <div className="space-y-2">
                       <Label>Direct Entry Requirements</Label>
+                      <FieldHelp field="directEntryRequirements" value={directEntryRequirements} />
                       {canEdit ? (
                         <Textarea
                           value={directEntryRequirements}
@@ -2253,6 +2254,7 @@ export default function SubmissionDetailPage({
 
                     <div className="space-y-2">
                       <Label>Inter-University Transfer Mode</Label>
+                      <FieldHelp field="transferRequirements" value={transferRequirements} />
                       {canEdit ? (
                         <Textarea
                           value={transferRequirements}
@@ -2311,6 +2313,7 @@ export default function SubmissionDetailPage({
                   <div className="space-y-6">
                     <div className="space-y-2">
                       <Label>Graduation Requirements *</Label>
+                      <FieldHelp field="graduationRequirements" value={graduationRequirements} />
                       {canEdit ? (
                         <Textarea
                           value={graduationRequirements}
@@ -2418,6 +2421,7 @@ export default function SubmissionDetailPage({
                   <div className="space-y-6">
                     <div className="space-y-2">
                       <Label>Programme Regulations</Label>
+                      <FieldHelp field="regulations" value={regulations} />
                       {canEdit ? (
                         <RichTextEditor
                           content={regulations}
@@ -2436,9 +2440,7 @@ export default function SubmissionDetailPage({
 
                     <div className="space-y-2">
                       <Label>Summary of Changes</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Document any changes from the previous bulletin
-                      </p>
+                      <FieldHelp field="summaryOfChanges" value={summaryOfChanges} />
                       {canEdit ? (
                         <RichTextEditor
                           content={summaryOfChanges}
