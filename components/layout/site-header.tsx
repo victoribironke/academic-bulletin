@@ -16,6 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useUser } from "@/contexts/user-context";
 import { HelpButton } from "@/components/layout/help-button";
+import { WelcomeTour } from "@/components/help/welcome-tour";
 
 const SEGMENT_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
@@ -111,6 +112,7 @@ export function SiteHeader() {
           {/* K4: search everything, or press Ctrl or Cmd + K. */}
           <SearchCommand />
           <HelpButton />
+          <WelcomeTour />
         </div>
       </div>
     </header>

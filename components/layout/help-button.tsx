@@ -22,6 +22,8 @@ import { useUser } from "@/contexts/user-context";
 import { PolicyInline } from "@/components/policy/policy-text";
 import { parseInline } from "@/lib/policy/markdown";
 import { SIGN_IN_STEP, quickStartFor } from "@/lib/help/quick-start";
+import { welcomeTourFor } from "@/lib/help/welcome-tour";
+import { openWelcomeTour } from "@/components/help/welcome-tour";
 
 type Officer = { name: string; email: string; whatsapp: string | null };
 type HelpDetails = { officer: Officer | null; generalHelp: string | null; cycle: string | null; submitOpens: string | null };
@@ -157,6 +159,19 @@ export function HelpButton() {
               <span className="block text-muted-foreground">Contents and search, for example &quot;Academic Load&quot;.</span>
             </span>
           </Link>
+          {/* U6: the welcome tour again, on request. */}
+          {welcomeTourFor(role) && (
+            <Button
+              variant="link"
+              className="h-auto px-0"
+              onClick={() => {
+                setOpen(false);
+                openWelcomeTour();
+              }}
+            >
+              Take the welcome tour again
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>
