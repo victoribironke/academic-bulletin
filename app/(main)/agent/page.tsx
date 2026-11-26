@@ -30,6 +30,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDateTime } from "@/lib/dates/format";
+import { TRY_AGAIN } from "@/lib/messages";
 
 type Written = { subject: string; body: string; writtenBy: string };
 type Planned = {
@@ -131,7 +132,7 @@ export default function AgentPage() {
       const res = await fetch("/api/agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error("Couldn't do that", { description: data.error ?? "Please try again." });
+        toast.error("Couldn't do that", { description: data.error ?? TRY_AGAIN });
         return null;
       }
       toast.success(done);
@@ -326,7 +327,7 @@ export default function AgentPage() {
           <CardDescription>The last 100; each is also in the activity log with the facts it used.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
-          {view.history.length === 0 && <p className="text-sm text-muted-foreground">No messages sent yet.</p>}
+          {view.history.length === 0 && <p className="text-sm text-muted-foreground">No messages sent yet. They appear here once sending is switched on.</p>}
           {view.history.map((message) => (
             <details key={message.id} className="rounded-md border p-3 text-sm">
               <summary className="cursor-pointer">

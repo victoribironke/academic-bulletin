@@ -76,7 +76,7 @@ export function BulletinPreview({ submission }: BulletinPreviewProps) {
       setData(result);
     } catch (error) {
       console.error("Failed to fetch preview data:", error);
-      setError("Failed to load preview. Please try again.");
+      setError("The preview couldn't be loaded. Try again in a minute; if it keeps happening, tell Academic Planning through Ask DAP.");
     } finally {
       setIsLoading(false);
     }
@@ -126,7 +126,7 @@ export function BulletinPreview({ submission }: BulletinPreviewProps) {
       alert(
         error instanceof Error
           ? error.message
-          : `Failed to export as ${format.toUpperCase()}. Please try again.`,
+          : `The ${format.toUpperCase()} file couldn't be made. Try again in a minute; if it keeps happening, tell Academic Planning through Ask DAP.`,
       );
     } finally {
       setExportingFormat(null);

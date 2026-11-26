@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDateTime } from "@/lib/dates/format";
+import { TRY_AGAIN } from "@/lib/messages";
 
 const KINDS = {
   ADD: "Add a course",
@@ -116,7 +117,7 @@ export function CourseListConfirmation({
         setState(data);
         toast.success("Course list confirmed.");
       } else {
-        toast.error("Couldn't confirm the course list", { description: data.error ?? "Please try again." });
+        toast.error("Couldn't confirm the course list", { description: data.error ?? TRY_AGAIN });
       }
     } finally {
       setConfirming(false);
@@ -139,7 +140,7 @@ export function CourseListConfirmation({
         setDetails("");
         load();
       } else {
-        toast.error("Couldn't send the request", { description: data.error ?? "Please try again." });
+        toast.error("Couldn't send the request", { description: data.error ?? TRY_AGAIN });
       }
     } finally {
       setSending(false);

@@ -9,6 +9,7 @@ import {
   inUseResponse,
   requireDeleteConfirmation,
 } from "@/lib/archive";
+import { couldNot } from "@/lib/messages";
 
 export async function PUT(
   request: Request,
@@ -99,7 +100,7 @@ export async function PUT(
   } catch (error) {
     console.error("Failed to update cycle:", error);
     return NextResponse.json(
-      { error: "Failed to update review cycle" },
+      { error: couldNot("update review cycle") },
       { status: 500 },
     );
   }
@@ -133,7 +134,7 @@ export async function GET(
     return NextResponse.json(cycle);
   } catch {
     return NextResponse.json(
-      { error: "Failed to fetch review cycle" },
+      { error: couldNot("load review cycle") },
       { status: 500 },
     );
   }
@@ -186,7 +187,7 @@ export async function DELETE(
   } catch (error) {
     console.error("Failed to delete review cycle:", error);
     return NextResponse.json(
-      { error: "Failed to delete review cycle" },
+      { error: couldNot("delete review cycle") },
       { status: 500 },
     );
   }

@@ -42,8 +42,8 @@ export function EmptyState({
 
 /** Shown when loading data failed, with an optional retry. */
 export function ErrorState({
-  title = "Something went wrong",
-  description = "The information couldn't be loaded. Please try again.",
+  title = "This page couldn't be loaded",
+  description = "Check your connection and try again; if it keeps happening, tell Academic Planning through Ask DAP.",
   onRetry,
   className,
 }: {

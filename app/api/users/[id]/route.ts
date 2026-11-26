@@ -4,6 +4,7 @@ import { getApiUser, requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
 import { requireDeleteConfirmation } from "@/lib/archive";
 import { isPrivilegedRole, isUniversityEmail, UNIVERSITY_DOMAIN } from "@/lib/sign-in-access";
+import { couldNot } from "@/lib/messages";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -62,7 +63,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   } catch (error) {
     console.error("Failed to fetch user:", error);
     return NextResponse.json(
-      { error: "Failed to fetch user" },
+      { error: couldNot("load user") },
       { status: 500 }
     );
   }
@@ -408,7 +409,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     return NextResponse.json(
-      { error: "Failed to update user" },
+      { error: couldNot("update user") },
       { status: 500 }
     );
   }
@@ -483,6 +484,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Failed to delete user:", error);
-    return NextResponse.json({ error: "Failed to delete user" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("delete user") }, { status: 500 });
   }
 }

@@ -13,13 +13,14 @@ import {
   removeCalendarItem,
   setQuietHours,
 } from "@/lib/calendar/edit";
+import { couldNot } from "@/lib/messages";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
 const failed = (error: unknown, what: string) => {
   if (error instanceof CalendarEditError) return NextResponse.json({ error: error.message }, { status: error.status });
   console.error(`Failed to ${what}:`, error);
-  return NextResponse.json({ error: `Failed to ${what}` }, { status: 500 });
+  return NextResponse.json({ error: couldNot(what) }, { status: 500 });
 };
 
 /** GET: the cycle's calendar for the settings screen (task C4). */

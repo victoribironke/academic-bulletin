@@ -21,6 +21,7 @@ import {
   inUseResponse,
   requireDeleteConfirmation,
 } from "@/lib/archive";
+import { NO_ACCESS, couldNot } from "@/lib/messages";
 
 // Valid enum values
 const VALID_COURSE_TYPES = [
@@ -78,7 +79,7 @@ export async function GET(
   } catch (error) {
     console.error("Failed to fetch master course:", error);
     return NextResponse.json(
-      { error: "Failed to fetch course" },
+      { error: couldNot("load course") },
       { status: 500 },
     );
   }
@@ -127,7 +128,7 @@ export async function PATCH(
       existing.ownership === "INSTITUTIONAL" &&
       ["GST_NUC", "GST_BU"].includes(existing.type);
     if (!isAdministrator && !isHostingHod) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
     if (
       isHostingHod &&
@@ -301,7 +302,7 @@ export async function PATCH(
   } catch (error) {
     console.error("Failed to update master course:", error);
     return NextResponse.json(
-      { error: "Failed to update course" },
+      { error: couldNot("update course") },
       { status: 500 },
     );
   }
@@ -356,7 +357,7 @@ export async function DELETE(
   } catch (error) {
     console.error("Failed to delete master course:", error);
     return NextResponse.json(
-      { error: "Failed to delete course" },
+      { error: couldNot("delete course") },
       { status: 500 },
     );
   }

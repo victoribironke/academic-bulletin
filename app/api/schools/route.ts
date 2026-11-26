@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
+import { couldNot } from "@/lib/messages";
 
 // GET /api/schools - List all schools
 export async function GET() {
@@ -22,7 +23,7 @@ export async function GET() {
   } catch (error) {
     console.error("Failed to fetch schools:", error);
     return NextResponse.json(
-      { error: "Failed to fetch schools" },
+      { error: couldNot("load schools") },
       { status: 500 }
     );
   }
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: "Failed to create school" },
+      { error: couldNot("create school") },
       { status: 500 }
     );
   }

@@ -8,6 +8,7 @@ import {
 import { recordActivity } from "@/lib/activity-log";
 import { requireDeleteConfirmation } from "@/lib/archive";
 import { refuseIfArchived } from "@/lib/cycles/archive";
+import { NO_ACCESS, couldNot } from "@/lib/messages";
 
 interface RouteParams {
   params: Promise<{ id: string; commentId: string }>;
@@ -20,7 +21,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const auth = await requireApiUser();
     if (!auth.ok) return auth.response;
     if (!(await canViewSubmission(auth.user, id))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
     const archived = await refuseIfArchived(id);
     if (archived) return archived;
@@ -47,7 +48,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       existing.authorId !== auth.user.id &&
       !isAdministrator(auth.user)
     ) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
 
     const comment = await prisma.comment.update({
@@ -84,7 +85,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     return NextResponse.json(
-      { error: "Failed to update comment" },
+      { error: couldNot("update comment") },
       { status: 500 }
     );
   }
@@ -97,7 +98,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const auth = await requireApiUser();
     if (!auth.ok) return auth.response;
     if (!(await canViewSubmission(auth.user, id))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
     const archived = await refuseIfArchived(id);
     if (archived) return archived;
@@ -113,7 +114,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       existing.authorId !== auth.user.id &&
       !isAdministrator(auth.user)
     ) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
 
     // Q7: the person typed DELETE.
@@ -149,7 +150,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     return NextResponse.json(
-      { error: "Failed to delete comment" },
+      { error: couldNot("delete comment") },
       { status: 500 }
     );
   }

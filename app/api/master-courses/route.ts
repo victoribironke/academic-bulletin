@@ -16,6 +16,7 @@ import { recordActivity } from "@/lib/activity-log";
 import { findSameCodeCourse, sameCodeMessage } from "@/lib/courses/code-key";
 import { pageResult, parsePagination } from "@/lib/pagination";
 import type { Prisma } from "@prisma/client";
+import { couldNot } from "@/lib/messages";
 
 // Valid enum values
 const VALID_COURSE_TYPES = [
@@ -272,7 +273,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("Failed to fetch master courses:", error);
     return NextResponse.json(
-      { error: "Failed to fetch courses" },
+      { error: couldNot("load courses") },
       { status: 500 },
     );
   }
@@ -484,7 +485,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Failed to create master course:", error);
     return NextResponse.json(
-      { error: "Failed to create course" },
+      { error: couldNot("create course") },
       { status: 500 },
     );
   }

@@ -11,6 +11,7 @@ import {
   requireApiUser,
 } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
+import { NO_ACCESS, couldNot } from "@/lib/messages";
 
 // Valid enum values for validation
 const VALID_TITLES = [
@@ -120,7 +121,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("Failed to fetch staff:", error);
     return NextResponse.json(
-      { error: "Failed to fetch staff" },
+      { error: couldNot("load staff") },
       { status: 500 },
     );
   }
@@ -154,7 +155,7 @@ export async function POST(request: Request) {
     } = body;
 
     if (!(await canAccessDepartment(auth.user, departmentId))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
 
     // Required field validation
@@ -301,7 +302,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Failed to create staff:", error);
     return NextResponse.json(
-      { error: "Failed to create staff member" },
+      { error: couldNot("create staff member") },
       { status: 500 },
     );
   }

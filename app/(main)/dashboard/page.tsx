@@ -493,6 +493,7 @@ export default function DashboardPage() {
             ) : (
               <EmptyState
                 title="Nothing to show yet"
+                description="This fills in as programmes move through the review."
                 className="border-0"
               />
             )}
@@ -512,7 +513,11 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             {stats.recentActivity.length === 0 ? (
-              <EmptyState title="No activity yet" className="border-0 py-8" />
+              <EmptyState
+                title="No activity yet"
+                description="Submissions, returns and approvals show here as they happen."
+                className="border-0 py-8"
+              />
             ) : (
               <ol className="space-y-4">
                 {stats.recentActivity.map((activity) => {

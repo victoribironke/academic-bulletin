@@ -30,6 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { TRY_AGAIN } from "@/lib/messages";
 
 const MINIMUM_OUTCOMES = 3;
 const ALLOWED = ["HOD", "PROGRAMME_COORDINATOR", "DEAN", "ADMIN", "SUPER_ADMIN"];
@@ -147,7 +148,7 @@ export default function CoursesWeOwnPage() {
         setEditing(null);
         setReloadKey((key) => key + 1);
       } else {
-        toast.error("Couldn't save the description", { description: data.error ?? "Please try again." });
+        toast.error("Couldn't save the description", { description: data.error ?? TRY_AGAIN });
       }
     } finally {
       setSaving(false);

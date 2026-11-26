@@ -17,6 +17,7 @@ import { photoNotUploadedHere } from "@/lib/images/photo-urls";
 import { isValidMinimumCgpa, minimumCgpaRuleMessage } from "@/lib/submissions/cgpa-rule";
 import { refuseIfArchived } from "@/lib/cycles/archive";
 import { RECALL_PHASE, isPhaseOwner } from "@/lib/submissions/workflow";
+import { NOT_SIGNED_IN, NO_ACCESS, couldNot } from "@/lib/messages";
 
 /** Content columns that aren't anything a person wrote. */
 const BOOKKEEPING_FIELDS = new Set([
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!auth.ok) return auth.response;
     const isMember = await canViewSubmission(auth.user, id);
     if (!isMember && !(await canReadSubmission(auth.user, id))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
 
     const submission = await prisma.submission.findUnique({
@@ -207,7 +208,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   } catch (error) {
     console.error("Failed to fetch submission:", error);
     return NextResponse.json(
-      { error: "Failed to fetch submission" },
+      { error: couldNot("load submission") },
       { status: 500 },
     );
   }
@@ -426,7 +427,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     return NextResponse.json(
-      { error: "Failed to update submission" },
+      { error: couldNot("update submission") },
       { status: 500 },
     );
   }
@@ -439,10 +440,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     const user = await getApiUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: NOT_SIGNED_IN }, { status: 401 });
     }
     if (user.role !== "SUPER_ADMIN") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
     const archived = await refuseIfArchived(id);
     if (archived) return archived;
@@ -505,7 +506,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     return NextResponse.json(
-      { error: "Failed to delete submission" },
+      { error: couldNot("delete submission") },
       { status: 500 },
     );
   }

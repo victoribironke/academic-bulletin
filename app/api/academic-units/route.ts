@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
+import { couldNot } from "@/lib/messages";
 
 // GET /api/academic-units - Fetch the full tree (Schools -> Departments -> Programmes)
 export async function GET() {
@@ -49,7 +50,7 @@ export async function GET() {
   } catch (error) {
     console.error("Failed to fetch academic units:", error);
     return NextResponse.json(
-      { error: "Failed to fetch academic units structure" },
+      { error: couldNot("load academic units structure") },
       { status: 500 },
     );
   }

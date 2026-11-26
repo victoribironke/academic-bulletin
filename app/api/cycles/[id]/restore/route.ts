@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { restoreCycle } from "@/lib/cycles/archive";
+import { couldNot } from "@/lib/messages";
 
 /** POST: brings an archived cycle back from the Archive, closed (task A2). */
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -15,6 +16,6 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ restored: true, summary: result.summary });
   } catch (error) {
     console.error("Failed to restore review cycle:", error);
-    return NextResponse.json({ error: "Failed to restore the review cycle" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("restore the review cycle") }, { status: 500 });
   }
 }

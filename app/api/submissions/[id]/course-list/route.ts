@@ -7,6 +7,7 @@ import {
   getCourseListState,
   isNotSwitchedOn,
 } from "@/lib/courses/course-list";
+import { NO_ACCESS, couldNot } from "@/lib/messages";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -17,13 +18,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const auth = await requireApiUser();
     if (!auth.ok) return auth.response;
     if (!(await canViewSubmission(auth.user, id))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
     return NextResponse.json(await getCourseListState(id));
   } catch (error) {
     if (isNotSwitchedOn(error)) return NextResponse.json({ error: NOT_SWITCHED_ON_MESSAGE, code: "NOT_SWITCHED_ON" }, { status: 503 });
     console.error("Failed to read the course list confirmation:", error);
-    return NextResponse.json({ error: "Failed to load the course list confirmation" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("load the course list confirmation") }, { status: 500 });
   }
 }
 
@@ -53,6 +54,6 @@ export async function POST(_request: Request, { params }: RouteParams) {
   } catch (error) {
     if (isNotSwitchedOn(error)) return NextResponse.json({ error: NOT_SWITCHED_ON_MESSAGE, code: "NOT_SWITCHED_ON" }, { status: 503 });
     console.error("Failed to confirm the course list:", error);
-    return NextResponse.json({ error: "Failed to confirm the course list" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("confirm the course list") }, { status: 500 });
   }
 }

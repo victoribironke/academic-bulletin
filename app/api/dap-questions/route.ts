@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { calendarNow } from "@/lib/clock";
 import { ASK_DAP_NOT_SWITCHED_ON, dapInbox, isNotSwitchedOn } from "@/lib/help/ask-dap";
+import { couldNot } from "@/lib/messages";
 
 /**
  * GET: DAP's inbox of questions (task H6), with status and overdue flags.
@@ -25,6 +26,6 @@ export async function GET(request: Request) {
   } catch (error) {
     if (isNotSwitchedOn(error)) return NextResponse.json({ error: ASK_DAP_NOT_SWITCHED_ON, code: "NOT_SWITCHED_ON" }, { status: 503 });
     console.error("Failed to load the DAP inbox:", error);
-    return NextResponse.json({ error: "Failed to load the questions" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("load the questions") }, { status: 500 });
   }
 }

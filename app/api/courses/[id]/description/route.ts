@@ -21,6 +21,7 @@ import {
   normalizeLearningOutcomes,
   prepareCourseGraceState,
 } from "@/lib/courses/grace-compliance";
+import { NO_ACCESS, couldNot } from "@/lib/messages";
 
 // GET /api/courses/[id]/description - Get course description
 export async function GET(
@@ -55,14 +56,14 @@ export async function GET(
     const auth = await requireApiUser();
     if (!auth.ok) return auth.response;
     if (!(await canReadSubmission(auth.user, description.course.submissionId))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
 
     return NextResponse.json(description);
   } catch (error) {
     console.error("Failed to fetch course description:", error);
     return NextResponse.json(
-      { error: "Failed to fetch course description" },
+      { error: couldNot("load course description") },
       { status: 500 },
     );
   }
@@ -191,7 +192,7 @@ export async function PUT(
   } catch (error) {
     console.error("Failed to update course description:", error);
     return NextResponse.json(
-      { error: "Failed to update course description" },
+      { error: couldNot("update course description") },
       { status: 500 },
     );
   }

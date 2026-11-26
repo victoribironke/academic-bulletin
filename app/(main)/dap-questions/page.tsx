@@ -30,6 +30,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDateTime } from "@/lib/dates/format";
+import { TRY_AGAIN } from "@/lib/messages";
 
 type Question = {
   id: string;
@@ -110,7 +111,7 @@ export default function DapQuestionsPage() {
         setAnswer("");
         setReloadKey((key) => key + 1);
       } else {
-        toast.error("Couldn't send the answer", { description: data.error ?? "Please try again." });
+        toast.error("Couldn't send the answer", { description: data.error ?? TRY_AGAIN });
       }
     } finally {
       setSaving(false);

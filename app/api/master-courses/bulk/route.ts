@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { applyRegistryUpload, planRegistryUpload, preloadAfterUpload } from "@/lib/imports/registry-upload";
+import { couldNot } from "@/lib/messages";
 
 const MAX_IMPORT_ROWS = 5000;
 
@@ -52,6 +53,6 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     console.error("Failed to bulk import Registry courses:", error);
-    return NextResponse.json({ error: "Failed to import Registry courses" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("import Registry courses") }, { status: 500 });
   }
 }

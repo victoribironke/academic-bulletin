@@ -12,6 +12,7 @@ import {
   readUploadForm,
 } from "@/lib/images/photo-upload";
 import { requireDeleteConfirmation } from "@/lib/archive";
+import { NO_ACCESS, couldNot } from "@/lib/messages";
 
 // The photo check calls Gemini, which can take a while.
 export const maxDuration = 60;
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Staff not found" }, { status: 404 });
     }
     if (!(await canAccessDepartment(auth.user, staff.departmentId))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
 
     if (photoRequestTooLarge(request)) {
@@ -134,7 +135,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   } catch (error) {
     console.error("Staff image upload failed:", error);
     return NextResponse.json(
-      { error: "Failed to upload image" },
+      { error: couldNot("upload image") },
       { status: 500 },
     );
   }
@@ -161,7 +162,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Staff not found" }, { status: 404 });
     }
     if (!(await canAccessDepartment(auth.user, staff.departmentId))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
 
     // Q7: the person typed DELETE.
@@ -195,7 +196,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   } catch (error) {
     console.error("Staff image delete failed:", error);
     return NextResponse.json(
-      { error: "Failed to delete image" },
+      { error: couldNot("delete image") },
       { status: 500 },
     );
   }

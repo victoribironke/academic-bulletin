@@ -5,6 +5,7 @@ import { recordActivity } from "@/lib/activity-log";
 import { preloadRegistryCoursesForSubmission } from "@/lib/courses/gst-pool";
 import { requireDeleteConfirmation } from "@/lib/archive";
 import { NOT_IN_ARCHIVED_CYCLE } from "@/lib/cycles/archive";
+import { couldNot } from "@/lib/messages";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -60,7 +61,7 @@ export async function GET(request: Request, { params }: RouteParams) {
   } catch (error) {
     console.error("Failed to fetch programme links:", error);
     return NextResponse.json(
-      { error: "Failed to fetch programme links" },
+      { error: couldNot("load programme links") },
       { status: 500 },
     );
   }
@@ -177,7 +178,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   } catch (error) {
     console.error("Failed to link programmes:", error);
     return NextResponse.json(
-      { error: "Failed to link programmes" },
+      { error: couldNot("link programmes") },
       { status: 500 },
     );
   }
@@ -228,7 +229,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
   } catch (error) {
     console.error("Failed to unlink programme:", error);
     return NextResponse.json(
-      { error: "Failed to unlink programme" },
+      { error: couldNot("unlink programme") },
       { status: 500 },
     );
   }

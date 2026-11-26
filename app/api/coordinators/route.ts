@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { CoordinatorError, coordinatorsFor, nameCoordinator } from "@/lib/people/coordinators";
+import { couldNot } from "@/lib/messages";
 
 const failed = (error: unknown, what: string) => {
   if (error instanceof CoordinatorError) return NextResponse.json({ error: error.message }, { status: error.status });
   console.error(`Failed to ${what}:`, error);
-  return NextResponse.json({ error: `Failed to ${what}` }, { status: 500 });
+  return NextResponse.json({ error: couldNot(what) }, { status: 500 });
 };
 
 /** GET /api/coordinators - The Head's programmes and their coordinators (G2). */

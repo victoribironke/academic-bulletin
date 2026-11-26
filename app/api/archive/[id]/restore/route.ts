@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { restoreArchivedRecord } from "@/lib/archive";
+import { couldNot } from "@/lib/messages";
 
 /**
  * POST /api/archive/[id]/restore
@@ -26,7 +27,7 @@ export async function POST(
   } catch (error) {
     console.error("Failed to restore an archived record:", error);
     return NextResponse.json(
-      { error: "Failed to restore this record" },
+      { error: couldNot("restore this record") },
       { status: 500 },
     );
   }

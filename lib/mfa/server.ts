@@ -12,6 +12,7 @@ import { MFA_RATE_LIMITS, takeRateLimit } from "@/lib/rate-limit";
 import { mfaRequiredFor, MFA_SESSION_MS } from "@/lib/mfa/policy";
 import { findTrustedDevice, rememberDevice, trustedDeviceCookie } from "@/lib/mfa/trusted-device";
 import { matchTotpStep } from "@/lib/mfa/totp";
+import { NOT_SIGNED_IN } from "@/lib/messages";
 import {
   decryptMfaSecret,
   generateRecoveryCodes,
@@ -63,13 +64,13 @@ export async function requireCodeEntrySession(): Promise<
   { ok: true; user: MfaUser; sessionId: string } | { ok: false; response: NextResponse }
 > {
   const access = await getSessionAccess();
-  if (!access) return { ok: false, response: fail(401, "Unauthorized") };
+  if (!access) return { ok: false, response: fail(401, NOT_SIGNED_IN) };
 
   const user = await prisma.user.findUnique({
     where: { id: access.userId },
     select: { ...MFA_USER_SELECT, isActive: true },
   });
-  if (!user?.isActive) return { ok: false, response: fail(401, "Unauthorized") };
+  if (!user?.isActive) return { ok: false, response: fail(401, NOT_SIGNED_IN) };
   if (!mfaRequiredFor(user.role)) {
     return {
       ok: false,

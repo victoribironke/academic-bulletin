@@ -9,6 +9,7 @@ import { canAccessDepartment, requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
 import { archiveRecord, requireDeleteConfirmation, readDeleteBody, requireDeleteReason } from "@/lib/archive";
 import { cleanDeleteReason, deleteNeedsReason } from "@/lib/delete-reason";
+import { NO_ACCESS, couldNot } from "@/lib/messages";
 
 const VALID_TITLES = ["MR", "MRS", "MS", "DR", "PROF", "ENGR", "BARR", "REV", "PASTOR"];
 const VALID_GENDERS = ["MALE", "FEMALE"];
@@ -61,14 +62,14 @@ export async function GET(
     }
 
     if (!(await canAccessDepartment(auth.user, staff.department.id))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
 
     return NextResponse.json(staff);
   } catch (error) {
     console.error("Failed to fetch staff:", error);
     return NextResponse.json(
-      { error: "Failed to fetch staff" },
+      { error: couldNot("load staff") },
       { status: 500 },
     );
   }
@@ -111,7 +112,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Staff not found" }, { status: 404 });
     }
     if (!(await canAccessDepartment(auth.user, existing.departmentId))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
 
     if (title !== undefined && !VALID_TITLES.includes(title)) {
@@ -243,7 +244,7 @@ export async function PATCH(
   } catch (error) {
     console.error("Failed to update staff:", error);
     return NextResponse.json(
-      { error: "Failed to update staff" },
+      { error: couldNot("update staff") },
       { status: 500 },
     );
   }
@@ -269,7 +270,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Staff not found" }, { status: 404 });
     }
     if (!(await canAccessDepartment(auth.user, existing.departmentId))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
 
     const name = staffConfirmationName(existing);
@@ -310,7 +311,7 @@ export async function DELETE(
   } catch (error) {
     console.error("Failed to delete staff:", error);
     return NextResponse.json(
-      { error: "Failed to delete staff" },
+      { error: couldNot("delete staff") },
       { status: 500 },
     );
   }

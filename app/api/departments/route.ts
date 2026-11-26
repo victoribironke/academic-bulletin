@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
+import { couldNot } from "@/lib/messages";
 
 // GET /api/departments - List all departments (with optional school filter)
 export async function GET(request: NextRequest) {
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Failed to fetch departments:", error);
     return NextResponse.json(
-      { error: "Failed to fetch departments" },
+      { error: couldNot("load departments") },
       { status: 500 }
     );
   }
@@ -93,7 +94,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: "Failed to create department" },
+      { error: couldNot("create department") },
       { status: 500 }
     );
   }

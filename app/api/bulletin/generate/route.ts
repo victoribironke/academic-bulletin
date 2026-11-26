@@ -7,6 +7,7 @@ import {
 } from "@/lib/bulletin/generation";
 import { requireApiUser } from "@/lib/api-auth";
 import { canExportBulletin } from "@/lib/bulletin/access";
+import { NO_ACCESS } from "@/lib/messages";
 
 // GET /api/bulletin/generate - Generate bulletin data
 export async function GET(request: Request) {
@@ -41,7 +42,7 @@ export async function GET(request: Request) {
         submissionId,
       }))
     ) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
 
     let bulletinData;

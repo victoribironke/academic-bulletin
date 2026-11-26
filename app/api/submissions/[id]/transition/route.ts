@@ -35,6 +35,7 @@ import {
 import { refuseIfArchived } from "@/lib/cycles/archive";
 import { formatDateTime } from "@/lib/dates/format";
 import { REQUEST_REVISION_LABEL } from "@/lib/submissions/phases";
+import { NOT_SIGNED_IN, NO_ACCESS, couldNot } from "@/lib/messages";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -90,10 +91,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const user = await getApiUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: NOT_SIGNED_IN }, { status: 401 });
     }
     if (!(await canViewSubmission(user, id))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
     const archived = await refuseIfArchived(id);
     if (archived) return archived;
@@ -380,7 +381,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   } catch (error) {
     console.error("Failed to transition submission:", error);
     return NextResponse.json(
-      { error: "Failed to transition submission" },
+      { error: couldNot("transition submission") },
       { status: 500 },
     );
   }

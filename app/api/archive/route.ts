@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
+import { couldNot } from "@/lib/messages";
 
 /**
  * GET /api/archive
@@ -29,7 +30,7 @@ export async function GET() {
   } catch (error) {
     console.error("Failed to list the Archive:", error);
     return NextResponse.json(
-      { error: "Failed to load the Archive" },
+      { error: couldNot("load the Archive") },
       { status: 500 },
     );
   }

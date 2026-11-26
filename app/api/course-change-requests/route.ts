@@ -7,6 +7,7 @@ import {
   listChangeRequests,
   type ChangeStatus,
 } from "@/lib/courses/course-list";
+import { couldNot } from "@/lib/messages";
 
 /** GET: DAP's queue of course change requests (task B10); ?status=OPEN to filter. */
 export async function GET(request: Request) {
@@ -19,6 +20,6 @@ export async function GET(request: Request) {
   } catch (error) {
     if (isNotSwitchedOn(error)) return NextResponse.json({ error: NOT_SWITCHED_ON_MESSAGE, code: "NOT_SWITCHED_ON" }, { status: 503 });
     console.error("Failed to list course change requests:", error);
-    return NextResponse.json({ error: "Failed to load the requests" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("load the requests") }, { status: 500 });
   }
 }

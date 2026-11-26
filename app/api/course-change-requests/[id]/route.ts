@@ -7,6 +7,7 @@ import {
   resolveChangeRequest,
   type ChangeStatus,
 } from "@/lib/courses/course-list";
+import { couldNot } from "@/lib/messages";
 
 /**
  * PATCH: DAP marks a course change request done or declined, or reopens it:
@@ -32,6 +33,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   } catch (error) {
     if (isNotSwitchedOn(error)) return NextResponse.json({ error: NOT_SWITCHED_ON_MESSAGE, code: "NOT_SWITCHED_ON" }, { status: 503 });
     console.error("Failed to update a course change request:", error);
-    return NextResponse.json({ error: "Failed to update the request" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("update the request") }, { status: 500 });
   }
 }

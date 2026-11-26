@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { canViewSubmission, requireApiUser } from "@/lib/api-auth";
 import { NOT_IN_ARCHIVED_CYCLE } from "@/lib/cycles/archive";
+import { NO_ACCESS, couldNot } from "@/lib/messages";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const auth = await requireApiUser();
     if (!auth.ok) return auth.response;
     if (!(await canViewSubmission(auth.user, id))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         source.programmeId !== submission.programmeId ||
         !(await canViewSubmission(auth.user, sourceSubmissionId))
       ) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
       }
 
       const courses = await prisma.course.findMany({
@@ -87,7 +88,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   } catch (error) {
     console.error("Failed to fetch importable courses:", error);
     return NextResponse.json(
-      { error: "Failed to fetch importable courses" },
+      { error: couldNot("load importable courses") },
       { status: 500 },
     );
   }

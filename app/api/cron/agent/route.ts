@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runAgent } from "@/lib/agent/run";
 import { isNotSwitchedOn } from "@/lib/courses/course-list";
+import { NOT_SIGNED_IN } from "@/lib/messages";
 
 /**
  * The reminder agent's scheduled run (T3): call it at 7:00 and at 8:00 am
@@ -11,7 +12,7 @@ import { isNotSwitchedOn } from "@/lib/courses/course-list";
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: NOT_SIGNED_IN }, { status: 401 });
   }
   try {
     return NextResponse.json({ ok: true, ...(await runAgent(new Date())) });

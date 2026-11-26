@@ -15,6 +15,7 @@ import {
   planCourseRowDelete,
 } from "@/lib/courses/delete-course-rows";
 import { cleanDeleteReason } from "@/lib/delete-reason";
+import { couldNot } from "@/lib/messages";
 
 const MAX_IMPORT_ROWS = 500;
 
@@ -146,7 +147,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     console.error("Failed to bulk import courses:", error);
-    return NextResponse.json({ error: "Failed to import courses" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("import courses") }, { status: 500 });
   }
 }
 
@@ -181,6 +182,6 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     console.error("Failed to delete course rows:", error);
-    return NextResponse.json({ error: "Failed to delete these course rows" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("delete these course rows") }, { status: 500 });
   }
 }

@@ -31,6 +31,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDate } from "@/lib/dates/format";
 import type { DepartmentCoordinators } from "@/lib/people/coordinators";
+import { TRY_AGAIN } from "@/lib/messages";
 
 type Form = { firstName: string; lastName: string; email: string; programmeIds: string[] };
 
@@ -83,7 +84,7 @@ export default function CoordinatorsPage() {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error("Couldn't name the coordinator", { description: body.error ?? "Please try again." });
+        toast.error("Couldn't name the coordinator", { description: body.error ?? TRY_AGAIN });
         return;
       }
       setData(body.coordinators);
@@ -115,7 +116,7 @@ export default function CoordinatorsPage() {
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      toast.error("Couldn't take them off", { description: body.error ?? "Please try again." });
+      toast.error("Couldn't take them off", { description: body.error ?? TRY_AGAIN });
       return;
     }
     setData(body.coordinators);

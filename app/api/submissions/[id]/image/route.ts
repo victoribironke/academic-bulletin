@@ -9,6 +9,7 @@ import {
   photoRequestTooLarge,
   readUploadForm,
 } from "@/lib/images/photo-upload";
+import { couldNot } from "@/lib/messages";
 
 // The photo check calls Gemini, which can take a while.
 export const maxDuration = 60;
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   } catch (error) {
     console.error("Image upload failed:", error);
     return NextResponse.json(
-      { error: "Failed to upload image" },
+      { error: couldNot("upload image") },
       { status: 500 },
     );
   }

@@ -2,6 +2,7 @@ import ExcelJS from "exceljs";
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { type CompletenessReport, SEMESTER_CREDIT_RANGE, loadCompletenessReport } from "@/lib/reports/registry-completeness";
+import { couldNot } from "@/lib/messages";
 
 /**
  * GET /api/reports/registry: the Registry completeness report (task B8),
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ ...report, tookMs });
   } catch (error) {
     console.error("Failed to build the Registry completeness report:", error);
-    return NextResponse.json({ error: "Failed to build the report" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("build the report") }, { status: 500 });
   }
 }
 

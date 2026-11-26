@@ -4,6 +4,7 @@ import { parseSubmissionsOpenAt } from "@/lib/submissions/submission-window";
 import { requireApiUser } from "@/lib/api-auth";
 import { serverTimer } from "@/lib/server-timing";
 import { recordActivity } from "@/lib/activity-log";
+import { couldNot } from "@/lib/messages";
 
 export async function GET(request: Request) {
   try {
@@ -58,7 +59,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("Failed to fetch review cycles", error);
     return NextResponse.json(
-      { error: "Failed to fetch review cycles" },
+      { error: couldNot("load review cycles") },
       { status: 500 },
     );
   }
@@ -111,7 +112,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Failed to create review cycle", error);
     return NextResponse.json(
-      { error: "Failed to create review cycle" },
+      { error: couldNot("create review cycle") },
       { status: 500 },
     );
   }

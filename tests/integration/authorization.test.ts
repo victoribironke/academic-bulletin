@@ -45,6 +45,7 @@ vi.mock("@/auth", () => {
 });
 
 import prisma from "@/lib/prisma";
+import { NO_ACCESS } from "@/lib/messages";
 import {
   canAccessDepartment,
   canReadSubmission,
@@ -2499,7 +2500,7 @@ describe("server-side refusals", () => {
           routeParams(outside.id),
         );
         expect(record.status).toBe(403);
-        expect(await record.json()).toEqual({ error: "Forbidden" });
+        expect(await record.json()).toEqual({ error: NO_ACCESS });
 
         const comments = await listComments(
           request(`/api/submissions/${outside.id}/comments`),

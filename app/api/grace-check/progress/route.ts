@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { canReadSubmission, requireApiUser } from "@/lib/api-auth";
 import { getSubmissionGraceProgress } from "@/lib/courses/grace-compliance";
+import { NO_ACCESS, couldNot } from "@/lib/messages";
 
 /**
  * GET /api/grace-check/progress?submissionId=X
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
     const auth = await requireApiUser();
     if (!auth.ok) return auth.response;
     if (!(await canReadSubmission(auth.user, submissionId))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
 
     return NextResponse.json({
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Failed to read GRACE progress:", error);
     return NextResponse.json(
-      { error: "Failed to read GRACE progress" },
+      { error: couldNot("read GRACE progress") },
       { status: 500 },
     );
   }

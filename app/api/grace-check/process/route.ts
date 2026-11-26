@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getApiUser, requireSubmissionWriteAccess } from "@/lib/api-auth";
 import { processPendingGraceAssessments } from "@/lib/courses/grace-compliance";
 import { aiRateLimitResponse } from "@/lib/rate-limit";
+import { couldNot } from "@/lib/messages";
 
 export const maxDuration = 60;
 
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Failed to process queued GRACE checks:", error);
     return NextResponse.json(
-      { error: "Failed to process queued GRACE checks" },
+      { error: couldNot("process queued GRACE checks") },
       { status: 500 },
     );
   }

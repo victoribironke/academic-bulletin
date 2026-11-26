@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DELETE_WORD, TypedDeleteDialog } from "@/components/shared/typed-delete-dialog";
+import { TRY_AGAIN } from "@/lib/messages";
 
 export type DeleteRequest = {
   /** The record's DELETE endpoint, e.g. /api/schools/abc. */
@@ -95,7 +96,7 @@ export function useDeleteRecord() {
       } else {
         setState({ step: "closed" });
         toast.error(`Couldn't delete this ${request.noun}`, {
-          description: data.error ?? "Please try again.",
+          description: data.error ?? TRY_AGAIN,
         });
       }
     } catch {
@@ -123,7 +124,7 @@ export function useDeleteRecord() {
       } else {
         setState((current) =>
           current.step === "confirm"
-            ? { ...current, deleting: false, error: data.error ?? "Please try again." }
+            ? { ...current, deleting: false, error: data.error ?? TRY_AGAIN }
             : current,
         );
       }

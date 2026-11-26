@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
+import { couldNot } from "@/lib/messages";
 
 /** GET /api/mfa/status - The signed-in admin's two-step set-up, for the menu. */
 export async function GET() {
@@ -21,6 +22,6 @@ export async function GET() {
     });
   } catch (error) {
     console.error("Failed to read two-step status:", error);
-    return NextResponse.json({ error: "Failed to load two-step verification" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("load two-step verification") }, { status: 500 });
   }
 }

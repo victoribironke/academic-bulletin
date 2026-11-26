@@ -29,6 +29,7 @@ export default function MasterCoursesPage() {
       <EmptyState
         icon={ShieldAlert}
         title="You don't have access to this page"
+        description="Master Courses is Academic Planning's. To change a course in your programme, use Course Structure in your draft, or Courses We Own; for anything else, use Ask DAP."
         className="mt-8"
       />
     );

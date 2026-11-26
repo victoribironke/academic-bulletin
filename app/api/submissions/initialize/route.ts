@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
 import { preloadRegistryCoursesForSubmission } from "@/lib/courses/gst-pool";
+import { couldNot } from "@/lib/messages";
 
 // POST /api/submissions/initialize - Idempotent bulk creation of submissions
 export async function POST(request: NextRequest) {
@@ -106,7 +107,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Failed to initialize submissions:", error);
     return NextResponse.json(
-      { error: "Failed to initialize submissions" },
+      { error: couldNot("initialize submissions") },
       { status: 500 }
     );
   }

@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDateTime } from "@/lib/dates/format";
+import { TRY_AGAIN } from "@/lib/messages";
 
 /** The fields of each section, offered when asking (any other text is fine). */
 export const SECTION_FIELDS: Record<string, string[]> = {
@@ -109,7 +110,7 @@ export function AskDap({
         setText("");
         setReloadKey((key) => key + 1);
       } else {
-        toast.error("Couldn't send the question", { description: data.error ?? "Please try again." });
+        toast.error("Couldn't send the question", { description: data.error ?? TRY_AGAIN });
       }
     } finally {
       setSending(false);

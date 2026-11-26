@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
 import type { Prisma } from "@prisma/client";
 import { NOT_IN_ARCHIVED_CYCLE } from "@/lib/cycles/archive";
+import { couldNot } from "@/lib/messages";
 
 // GET /api/dashboard/stats - Get dashboard statistics
 export async function GET(request: Request) {
@@ -212,7 +213,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("Failed to fetch dashboard stats:", error);
     return NextResponse.json(
-      { error: "Failed to fetch dashboard stats" },
+      { error: couldNot("load dashboard stats") },
       { status: 500 }
     );
   }

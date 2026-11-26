@@ -8,6 +8,7 @@ import {
   questionProblem,
   questionsForDraft,
 } from "@/lib/help/ask-dap";
+import { NO_ACCESS, couldNot } from "@/lib/messages";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -18,13 +19,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const auth = await requireApiUser();
     if (!auth.ok) return auth.response;
     if (!(await canViewSubmission(auth.user, id))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
     return NextResponse.json(await questionsForDraft(id, await calendarNow()));
   } catch (error) {
     if (isNotSwitchedOn(error)) return NextResponse.json({ error: ASK_DAP_NOT_SWITCHED_ON, code: "NOT_SWITCHED_ON" }, { status: 503 });
     console.error("Failed to load questions to DAP:", error);
-    return NextResponse.json({ error: "Failed to load the questions" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("load the questions") }, { status: 500 });
   }
 }
 
@@ -38,7 +39,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const auth = await requireApiUser();
     if (!auth.ok) return auth.response;
     if (!(await canViewSubmission(auth.user, id))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
     const body = (await request.json().catch(() => ({}))) as { section?: unknown; field?: unknown; question?: unknown };
     const problem = questionProblem(body);
@@ -52,6 +53,6 @@ export async function POST(request: Request, { params }: RouteParams) {
   } catch (error) {
     if (isNotSwitchedOn(error)) return NextResponse.json({ error: ASK_DAP_NOT_SWITCHED_ON, code: "NOT_SWITCHED_ON" }, { status: 503 });
     console.error("Failed to send a question to DAP:", error);
-    return NextResponse.json({ error: "Failed to send the question" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("send the question") }, { status: 500 });
   }
 }

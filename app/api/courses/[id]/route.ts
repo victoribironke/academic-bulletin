@@ -35,6 +35,7 @@ import {
   programmePlace,
   sharedCourseLockedMessage,
 } from "@/lib/courses/shared-courses";
+import { NO_ACCESS, couldNot } from "@/lib/messages";
 
 // GET /api/courses/[id] - Get single course with description
 export async function GET(
@@ -74,14 +75,14 @@ export async function GET(
     const auth = await requireApiUser();
     if (!auth.ok) return auth.response;
     if (!(await canReadSubmission(auth.user, course.submission.id))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
 
     return NextResponse.json(course);
   } catch (error) {
     console.error("Failed to fetch course:", error);
     return NextResponse.json(
-      { error: "Failed to fetch course" },
+      { error: couldNot("load course") },
       { status: 500 },
     );
   }
@@ -248,7 +249,7 @@ export async function PATCH(
   } catch (error) {
     console.error("Failed to update course:", error);
     return NextResponse.json(
-      { error: "Failed to update course" },
+      { error: couldNot("update course") },
       { status: 500 },
     );
   }
@@ -282,7 +283,7 @@ export async function DELETE(
   } catch (error) {
     console.error("Failed to delete course:", error);
     return NextResponse.json(
-      { error: "Failed to delete course" },
+      { error: couldNot("delete course") },
       { status: 500 },
     );
   }

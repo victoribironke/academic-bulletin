@@ -9,6 +9,7 @@ import {
   inUseResponse,
   requireDeleteConfirmation,
 } from "@/lib/archive";
+import { couldNot } from "@/lib/messages";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -52,7 +53,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   } catch (error) {
     console.error("Failed to fetch department:", error);
     return NextResponse.json(
-      { error: "Failed to fetch department" },
+      { error: couldNot("load department") },
       { status: 500 }
     );
   }
@@ -110,7 +111,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     return NextResponse.json(
-      { error: "Failed to update department" },
+      { error: couldNot("update department") },
       { status: 500 }
     );
   }
@@ -161,7 +162,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   } catch (error: unknown) {
     console.error("Failed to delete department:", error);
     return NextResponse.json(
-      { error: "Failed to delete department" },
+      { error: couldNot("delete department") },
       { status: 500 },
     );
   }

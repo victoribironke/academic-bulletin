@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { readDeleteBody, requireDeleteConfirmation } from "@/lib/archive";
 import { CoordinatorError, coordinatorsFor, removeCoordinator } from "@/lib/people/coordinators";
+import { couldNot } from "@/lib/messages";
 
 type RouteParams = { params: Promise<{ userId: string }> };
 
@@ -24,6 +25,6 @@ export async function DELETE(request: Request, { params }: RouteParams) {
   } catch (error) {
     if (error instanceof CoordinatorError) return NextResponse.json({ error: error.message }, { status: error.status });
     console.error("Failed to remove the coordinator:", error);
-    return NextResponse.json({ error: "Failed to remove the coordinator" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("remove the coordinator") }, { status: 500 });
   }
 }

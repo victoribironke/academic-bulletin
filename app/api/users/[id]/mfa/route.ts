@@ -5,6 +5,7 @@ import { confirmationMatches, readConfirmation } from "@/lib/archive";
 import { fail, fullName, MFA_USER_SELECT, noticeAfterResponse } from "@/lib/mfa/server";
 import { resetTwoStepVerification } from "@/lib/mfa/reset";
 import { isPrivilegedRole } from "@/lib/sign-in-access";
+import { couldNot } from "@/lib/messages";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -67,7 +68,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   } catch (error) {
     console.error("Failed to reset two-step verification:", error);
     return NextResponse.json(
-      { error: "Failed to reset two-step verification" },
+      { error: couldNot("reset two-step verification") },
       { status: 500 },
     );
   }

@@ -7,6 +7,7 @@ import {
   isNotSwitchedOn,
   type ChangeKind,
 } from "@/lib/courses/course-list";
+import { couldNot } from "@/lib/messages";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -36,6 +37,6 @@ export async function POST(request: Request, { params }: RouteParams) {
   } catch (error) {
     if (isNotSwitchedOn(error)) return NextResponse.json({ error: NOT_SWITCHED_ON_MESSAGE, code: "NOT_SWITCHED_ON" }, { status: 503 });
     console.error("Failed to send a course change request:", error);
-    return NextResponse.json({ error: "Failed to send the request" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("send the request") }, { status: 500 });
   }
 }

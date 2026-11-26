@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { waitingWorkFor } from "@/lib/desk/waiting";
+import { couldNot } from "@/lib/messages";
 
 /**
  * GET /api/desk/waiting: what is waiting on the signed-in person (task T1),
@@ -14,6 +15,6 @@ export async function GET() {
     return NextResponse.json({ items });
   } catch (error) {
     console.error("Failed to work out the waiting work:", error);
-    return NextResponse.json({ error: "Failed to load what is waiting on you" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("load what is waiting on you") }, { status: 500 });
   }
 }

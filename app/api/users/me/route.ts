@@ -4,6 +4,7 @@ import { getSessionAccess } from "@/auth";
 import { MFA_REQUIRED_RESPONSE } from "@/lib/api-auth";
 import { currentVerification, mfaRequiredFor } from "@/lib/mfa/policy";
 import { serverTimer } from "@/lib/server-timing";
+import { NOT_SIGNED_IN } from "@/lib/messages";
 
 export async function GET() {
   try {
@@ -11,7 +12,7 @@ export async function GET() {
     const access = await getSessionAccess();
     timer.mark("auth");
     if (!access) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: NOT_SIGNED_IN }, { status: 401 });
     }
     const userId = access.userId;
 

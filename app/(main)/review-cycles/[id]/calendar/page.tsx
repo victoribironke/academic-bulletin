@@ -35,6 +35,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { formatDate } from "@/lib/dates/format";
 import { CLINIC_MINUTES, CLINIC_TITLE, CLINIC_WEEKDAYS, CLINICS_END, WEEKDAY_NAMES } from "@/lib/calendar/clinic-sessions";
+import { TRY_AGAIN } from "@/lib/messages";
 
 type Calendar = {
   cycle: { id: string; name: string; isActive: boolean; archived: boolean; dueTime: string };
@@ -141,7 +142,7 @@ export default function CycleCalendarPage({ params }: { params: Promise<{ id: st
         setEditing(null);
         toast.success(typeof data.told === "number" && data.told > 0 ? `${done} ${data.told} people were told by email.` : done);
       } else {
-        toast.error("Couldn't save the change", { description: data.error ?? "Please try again." });
+        toast.error("Couldn't save the change", { description: data.error ?? TRY_AGAIN });
       }
     } finally {
       setSaving(false);
@@ -161,7 +162,7 @@ export default function CycleCalendarPage({ params }: { params: Promise<{ id: st
       setCalendar(data.calendar);
       toast.success("Removed. The change is in the activity log.");
     } else {
-      toast.error("Couldn't remove it", { description: data.error ?? "Please try again." });
+      toast.error("Couldn't remove it", { description: data.error ?? TRY_AGAIN });
     }
   };
 

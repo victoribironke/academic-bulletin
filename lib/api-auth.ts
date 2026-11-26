@@ -6,6 +6,7 @@ import { canEditSubmissionAtStage } from "@/lib/submissions/workflow";
 import { isNamedPhaseOwner, loadPhaseOwners } from "@/lib/submissions/phase-owners";
 import { ARCHIVED_DRAFT_MESSAGE, isSubmissionArchived } from "@/lib/cycles/archive";
 import type { UserRole } from "@prisma/client";
+import { NOT_SIGNED_IN, NO_ACCESS } from "@/lib/messages";
 
 export interface ApiUser {
   id: string;
@@ -108,7 +109,7 @@ export async function requireApiUser(
       response:
         lookup.reason === "mfa_required"
           ? NextResponse.json(MFA_REQUIRED_RESPONSE, { status: 401 })
-          : NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+          : NextResponse.json({ error: NOT_SIGNED_IN }, { status: 401 }),
     };
   }
   const user = lookup.user;
@@ -116,7 +117,7 @@ export async function requireApiUser(
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return {
       ok: false,
-      response: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
+      response: NextResponse.json({ error: NO_ACCESS }, { status: 403 }),
     };
   }
 
@@ -297,7 +298,7 @@ export async function requireSubmissionWriteAccess(
   submissionId: string,
 ): Promise<{ ok: true } | { ok: false; status: number; message: string }> {
   if (!user) {
-    return { ok: false, status: 401, message: "Unauthorized" };
+    return { ok: false, status: 401, message: NOT_SIGNED_IN };
   }
   const allowed = await canWriteSubmission(user, submissionId);
   if (!allowed) {

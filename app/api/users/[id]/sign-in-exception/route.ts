@@ -9,6 +9,7 @@ import {
   UNIVERSITY_DOMAIN,
 } from "@/lib/sign-in-access";
 import { formatDate } from "@/lib/dates/format";
+import { couldNot } from "@/lib/messages";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -103,7 +104,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   } catch (error) {
     console.error("Failed to grant sign-in exception:", error);
     return NextResponse.json(
-      { error: "Failed to save the sign-in exception" },
+      { error: couldNot("save the sign-in exception") },
       { status: 500 },
     );
   }
@@ -157,7 +158,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   } catch (error) {
     console.error("Failed to end sign-in exception:", error);
     return NextResponse.json(
-      { error: "Failed to end the sign-in exception" },
+      { error: couldNot("end the sign-in exception") },
       { status: 500 },
     );
   }

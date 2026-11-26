@@ -7,6 +7,7 @@ import {
   cycleArchiveSummary,
 } from "@/lib/cycles/archive";
 import prisma from "@/lib/prisma";
+import { couldNot } from "@/lib/messages";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -47,6 +48,6 @@ export async function POST(request: Request, { params }: RouteParams) {
     return NextResponse.json({ archived: true, summary: result.summary });
   } catch (error) {
     console.error("Failed to archive review cycle:", error);
-    return NextResponse.json({ error: "Failed to archive the review cycle" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("archive the review cycle") }, { status: 500 });
   }
 }

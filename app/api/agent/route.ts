@@ -8,6 +8,7 @@ import { isNotSwitchedOn } from "@/lib/courses/course-list";
 import { agentControls, planDay, prepareDay } from "@/lib/agent/run";
 import { writeMessage } from "@/lib/agent/write";
 import { AGENT_SETTINGS } from "@/lib/agent/rules";
+import { couldNot } from "@/lib/messages";
 
 const NOT_ON = { error: "The reminder agent isn't switched on yet on this site (its database update hasn't run).", code: "NOT_SWITCHED_ON" };
 const dateOnly = (key: string) => new Date(`${key}T00:00:00.000Z`);
@@ -84,7 +85,7 @@ export async function GET(request: Request) {
   } catch (error) {
     if (isNotSwitchedOn(error)) return NextResponse.json(NOT_ON, { status: 503 });
     console.error("Failed to load the reminder agent:", error);
-    return NextResponse.json({ error: "Failed to load the reminder agent" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("load the reminder agent") }, { status: 500 });
   }
 }
 
@@ -178,6 +179,6 @@ export async function POST(request: Request) {
   } catch (error) {
     if (isNotSwitchedOn(error)) return NextResponse.json(NOT_ON, { status: 503 });
     console.error("Failed to change the reminder agent:", error);
-    return NextResponse.json({ error: "Failed to change the reminder agent" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("change the reminder agent") }, { status: 500 });
   }
 }

@@ -14,6 +14,7 @@ import {
   requireSubmissionWriteAccess,
 } from "@/lib/api-auth";
 import { philosophyGraceHash } from "@/lib/submissions/submit-readiness";
+import { NO_ACCESS, couldNot } from "@/lib/messages";
 
 // GRACE model calls can take a while; allow up to a minute.
 export const maxDuration = 60;
@@ -134,7 +135,7 @@ export async function GET(request: NextRequest) {
 
     if (submissionId) {
       if (!(await canViewSubmission(auth.user, submissionId))) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
       }
       const content = await prisma.submissionContent.findUnique({
         where: { submissionId },
@@ -155,7 +156,7 @@ export async function GET(request: NextRequest) {
         !course ||
         !(await canViewSubmission(auth.user, course.submissionId))
       ) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
       }
       const stored = await prisma.courseDescription.findUnique({
         where: { courseId },
@@ -188,7 +189,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Failed to fetch GRACE result:", error);
     return NextResponse.json(
-      { error: "Failed to fetch GRACE result" },
+      { error: couldNot("load GRACE result") },
       { status: 500 },
     );
   }

@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
 import { entityLabel, recordNames } from "@/lib/activity-names";
+import { couldNot } from "@/lib/messages";
 
 function parseDate(value: string | null) {
   if (!value) return null;
@@ -141,7 +142,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Failed to fetch activity log:", error);
     return NextResponse.json(
-      { error: "Failed to fetch activity log" },
+      { error: couldNot("load activity log") },
       { status: 500 },
     );
   }

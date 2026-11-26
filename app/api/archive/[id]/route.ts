@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { removeArchivedRecord, requireDeleteConfirmation } from "@/lib/archive";
+import { couldNot } from "@/lib/messages";
 
 /**
  * DELETE /api/archive/[id]
@@ -29,7 +30,7 @@ export async function DELETE(
   } catch (error) {
     console.error("Failed to remove an archived record:", error);
     return NextResponse.json(
-      { error: "Failed to remove this record from the Archive" },
+      { error: couldNot("remove this record from the Archive") },
       { status: 500 },
     );
   }

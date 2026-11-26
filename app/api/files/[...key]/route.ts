@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { getFile, isValidFileKey } from "@/lib/storage";
+import { couldNot } from "@/lib/messages";
 
 interface RouteParams {
   params: Promise<{ key: string[] }>;
@@ -33,6 +34,6 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     });
   } catch (error) {
     console.error("Failed to read stored file:", error);
-    return NextResponse.json({ error: "Failed to read file" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("read file") }, { status: 500 });
   }
 }

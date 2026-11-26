@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/dates/format";
 import { DELETE_WORD, useConfirmDelete } from "@/components/shared/typed-delete-dialog";
+import { TRY_AGAIN } from "@/lib/messages";
 
 /** A whole cycle archived in place, with its drafts (task A2). */
 type ArchivedCycle = {
@@ -100,7 +101,7 @@ export default function ArchivePage() {
         setReloadKey((key) => key + 1);
       } else {
         toast.error(`Couldn't restore ${record.label}`, {
-          description: data.error ?? "Please try again.",
+          description: data.error ?? TRY_AGAIN,
         });
       }
     } catch {
@@ -131,7 +132,7 @@ export default function ArchivePage() {
         setReloadKey((key) => key + 1);
       } else {
         toast.error(`Couldn't remove ${record.label}`, {
-          description: data.error ?? "Please try again.",
+          description: data.error ?? TRY_AGAIN,
         });
       }
     } catch {
@@ -159,7 +160,7 @@ export default function ArchivePage() {
         setReloadKey((key) => key + 1);
       } else {
         toast.error(`Couldn't restore ${cycle.name}`, {
-          description: data.error ?? "Please try again.",
+          description: data.error ?? TRY_AGAIN,
         });
       }
     } catch {

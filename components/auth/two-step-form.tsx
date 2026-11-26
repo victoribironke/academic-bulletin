@@ -99,7 +99,7 @@ export function TwoStepForm({
         window.location.assign("/login");
         return null;
       }
-      setError(data.error ?? "Something went wrong. Please try again.");
+      setError(data.error ?? "The code couldn't be checked. Try again; if it keeps failing, ask your DAP officer to reset your authenticator.");
       return null;
     } catch {
       setError("Couldn't reach the server. Check your connection and try again.");

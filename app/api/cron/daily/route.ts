@@ -8,6 +8,7 @@ import { sendDueInvitations } from "@/lib/people/invitations";
 import { runAgent } from "@/lib/agent/run";
 import { isNotSwitchedOn } from "@/lib/courses/course-list";
 import { dailyWorkDue } from "@/lib/agent/rules";
+import { NOT_SIGNED_IN } from "@/lib/messages";
 
 // Sending one summary email per recipient can take a little while.
 export const maxDuration = 60;
@@ -41,7 +42,7 @@ const GRACE_TIME_BUDGET_MS = 30_000;
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: NOT_SIGNED_IN }, { status: 401 });
   }
 
   // T3: the reminder agent, on every call (prepare at 7:00, send at 8:00).

@@ -14,6 +14,7 @@ import {
 } from "@/lib/imports/staff";
 import { toTitleCase } from "@/lib/validation/name-format";
 import { recordActivity } from "@/lib/activity-log";
+import { NO_ACCESS, couldNot } from "@/lib/messages";
 
 const MAX_IMPORT_ROWS = 500;
 
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
       );
     }
     if (!(await canAccessDepartment(auth.user, departmentId))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
 
     const existing = await prisma.staff.findMany({
@@ -92,6 +93,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ imported: result.count }, { status: 201 });
   } catch (error) {
     console.error("Failed to bulk import staff:", error);
-    return NextResponse.json({ error: "Failed to import staff members" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("import staff members") }, { status: 500 });
   }
 }

@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
 import { dapOfficerFor } from "@/lib/people/officers";
 import { formatOpeningDate } from "@/lib/submissions/submission-window";
+import { couldNot } from "@/lib/messages";
 
 /**
  * GET /api/help: what the quick start (task H1) needs beyond the steps: the
@@ -33,6 +34,6 @@ export async function GET() {
     });
   } catch (error) {
     console.error("Failed to load help details:", error);
-    return NextResponse.json({ error: "Failed to load help details" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("load help details") }, { status: 500 });
   }
 }

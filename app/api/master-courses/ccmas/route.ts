@@ -5,6 +5,7 @@ import {
   getCcmasCatalogueSummary,
   syncCcmasCatalogue,
 } from "@/lib/courses/ccmas-catalogue";
+import { couldNot } from "@/lib/messages";
 
 export const maxDuration = 300;
 
@@ -21,7 +22,7 @@ export async function GET() {
   } catch (error) {
     console.error("Failed to read CCMAS catalogue status:", error);
     return NextResponse.json(
-      { error: "Failed to read CCMAS catalogue status" },
+      { error: couldNot("read CCMAS catalogue status") },
       { status: 500 },
     );
   }
@@ -37,7 +38,7 @@ export async function POST() {
   } catch (error) {
     console.error("Failed to synchronise the CCMAS catalogue:", error);
     return NextResponse.json(
-      { error: "Failed to synchronise the CCMAS catalogue" },
+      { error: couldNot("synchronise the CCMAS catalogue") },
       { status: 500 },
     );
   }

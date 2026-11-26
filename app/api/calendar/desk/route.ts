@@ -14,6 +14,7 @@ import { progressForDrafts } from "@/lib/submissions/section-status";
 import type { SubmissionProgress } from "@/lib/submissions/progress";
 import { headDeskStatus, programmeDeskStatuses, withDeskStatus } from "@/lib/desk/programme-status";
 import type { DeskStatus } from "@/lib/desk/status";
+import { NO_ACCESS, couldNot } from "@/lib/messages";
 
 /** Phases 1 to 5 run programme by programme; each has its own countdown. */
 const PROGRAMME_PHASES = 5;
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest) {
     const submissionId = request.nextUrl.searchParams.get("submissionId");
     if (submissionId) {
       if (!(await canReadSubmission(user, submissionId))) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
       }
       const submission = await prisma.submission.findUnique({
         where: { id: submissionId },
@@ -134,6 +135,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Failed to work out deadlines:", error);
-    return NextResponse.json({ error: "Failed to work out deadlines" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("work out deadlines") }, { status: 500 });
   }
 }

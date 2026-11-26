@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
+import { couldNot } from "@/lib/messages";
 
 // GET /api/users/full - List all users with full relations
 export async function GET() {
@@ -58,7 +59,7 @@ export async function GET() {
   } catch (error) {
     console.error("Failed to fetch users:", error);
     return NextResponse.json(
-      { error: "Failed to fetch users" },
+      { error: couldNot("load users") },
       { status: 500 }
     );
   }

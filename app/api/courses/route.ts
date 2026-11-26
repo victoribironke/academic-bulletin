@@ -29,6 +29,7 @@ import {
   isValidCourseUnits,
   parseCourseSemester,
 } from "@/lib/courses/course-rules";
+import { NO_ACCESS, couldNot } from "@/lib/messages";
 
 // GET /api/courses - Get courses for a submission
 export async function GET(request: Request) {
@@ -47,7 +48,7 @@ export async function GET(request: Request) {
     const auth = await requireApiUser();
     if (!auth.ok) return auth.response;
     if (!(await canReadSubmission(auth.user, submissionId))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
 
     // Reading the list never adds courses (G6: a course the department
@@ -119,7 +120,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("Failed to fetch courses:", error);
     return NextResponse.json(
-      { error: "Failed to fetch courses" },
+      { error: couldNot("load courses") },
       { status: 500 },
     );
   }
@@ -293,7 +294,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Failed to create course:", error);
     return NextResponse.json(
-      { error: "Failed to create course" },
+      { error: couldNot("create course") },
       { status: 500 },
     );
   }

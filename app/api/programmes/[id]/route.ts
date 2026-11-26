@@ -9,6 +9,7 @@ import {
   inUseResponse,
   requireDeleteConfirmation,
 } from "@/lib/archive";
+import { couldNot } from "@/lib/messages";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   } catch (error) {
     console.error("Failed to fetch programme:", error);
     return NextResponse.json(
-      { error: "Failed to fetch programme" },
+      { error: couldNot("load programme") },
       { status: 500 },
     );
   }
@@ -133,7 +134,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     return NextResponse.json(
-      { error: "Failed to update programme" },
+      { error: couldNot("update programme") },
       { status: 500 },
     );
   }
@@ -184,7 +185,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   } catch (error: unknown) {
     console.error("Failed to delete programme:", error);
     return NextResponse.json(
-      { error: "Failed to delete programme" },
+      { error: couldNot("delete programme") },
       { status: 500 },
     );
   }

@@ -29,6 +29,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDateTime } from "@/lib/dates/format";
+import { TRY_AGAIN } from "@/lib/messages";
 
 const KINDS: Record<string, string> = {
   ADD: "Add a course",
@@ -110,7 +111,7 @@ export default function CourseRequestsPage() {
         setResponse("");
         setReloadKey((key) => key + 1);
       } else {
-        toast.error("Couldn't update the request", { description: data.error ?? "Please try again." });
+        toast.error("Couldn't update the request", { description: data.error ?? TRY_AGAIN });
       }
     } finally {
       setSaving(false);

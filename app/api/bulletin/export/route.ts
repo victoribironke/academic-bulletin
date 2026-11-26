@@ -9,6 +9,7 @@ import { generateBulletinPdf } from "@/lib/bulletin/export-pdf";
 import { blockingBulletinIssues } from "@/lib/bulletin/validation";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
+import { NO_ACCESS } from "@/lib/messages";
 
 // Large (school or institution-wide) exports can take a while to build.
 export const maxDuration = 60;
@@ -44,7 +45,7 @@ export async function GET(request: Request) {
         schoolId,
       }))
     ) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
 
     let bulletinData;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { addPolicyVersion, checkPolicyUpload, readPolicy, type PolicyUpload } from "@/lib/policy/library";
+import { couldNot } from "@/lib/messages";
 
 /**
  * GET /api/policy[?version=<id>]: the Academic Policy (task H9), split into
@@ -16,7 +17,7 @@ export async function GET(request: Request) {
     return NextResponse.json(policy, { headers: { "Cache-Control": "private, max-age=300" } });
   } catch (error) {
     console.error("Failed to read the Academic Policy:", error);
-    return NextResponse.json({ error: "Failed to load the Academic Policy" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("load the Academic Policy") }, { status: 500 });
   }
 }
 
@@ -36,6 +37,6 @@ export async function POST(request: Request) {
     return NextResponse.json(version, { status: 201 });
   } catch (error) {
     console.error("Failed to upload the Academic Policy:", error);
-    return NextResponse.json({ error: "Failed to upload the Academic Policy" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("upload the Academic Policy") }, { status: 500 });
   }
 }

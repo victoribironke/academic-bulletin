@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { calendarNow } from "@/lib/clock";
 import { clinicsForHome } from "@/lib/calendar/clinics";
+import { couldNot } from "@/lib/messages";
 
 /**
  * GET /api/calendar/clinics - The next clinics with DAP and their joining
@@ -16,6 +17,6 @@ export async function GET() {
     return NextResponse.json(await clinicsForHome(await calendarNow()));
   } catch (error) {
     console.error("Failed to load the clinics:", error);
-    return NextResponse.json({ error: "Failed to load the clinics" }, { status: 500 });
+    return NextResponse.json({ error: couldNot("load the clinics") }, { status: 500 });
   }
 }

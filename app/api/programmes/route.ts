@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireApiUser } from "@/lib/api-auth";
 import { recordActivity } from "@/lib/activity-log";
+import { couldNot } from "@/lib/messages";
 
 // GET /api/programmes - List all programmes (with optional department/school filter)
 export async function GET(request: NextRequest) {
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Failed to fetch programmes:", error);
     return NextResponse.json(
-      { error: "Failed to fetch programmes" },
+      { error: couldNot("load programmes") },
       { status: 500 }
     );
   }
@@ -123,7 +124,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: "Failed to create programme" },
+      { error: couldNot("create programme") },
       { status: 500 }
     );
   }

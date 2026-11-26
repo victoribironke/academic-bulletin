@@ -9,6 +9,7 @@ import { TOTAL_PHASES } from "@/lib/submissions/phases";
 import { NOT_IN_ARCHIVED_CYCLE } from "@/lib/cycles/archive";
 import { isGeneralEducationCourse } from "@/lib/courses/general-education";
 import { isOwnedElsewhere } from "@/lib/courses/shared-courses";
+import { couldNot } from "@/lib/messages";
 
 const SUBMISSION_STATUSES = [
   "DRAFT",
@@ -220,7 +221,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Failed to fetch submissions:", error);
     return NextResponse.json(
-      { error: "Failed to fetch submissions" },
+      { error: couldNot("load submissions") },
       { status: 500 },
     );
   }
@@ -345,7 +346,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: "Failed to create submission" },
+      { error: couldNot("create submission") },
       { status: 500 },
     );
   }
