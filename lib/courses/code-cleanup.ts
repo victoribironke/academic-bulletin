@@ -6,7 +6,10 @@
  *   and units match: programme links, draft rows, prerequisites and "removed"
  *   marks move to the course kept, and the other goes to the Archive.
  * - Where the titles or units differ, nothing changes: the group goes to DAP
- *   in the merge report to decide.
+ *   in the merge report to decide. DAP's decisions can then be passed in:
+ *   merge one exact code into another (the kept course's title and units
+ *   stay), or archive an exact code or the heading rows, which is refused for
+ *   a record any programme or draft uses.
  * - Course rows in the current drafts get the tidied code too.
  *
  * planCodeCleanup writes nothing; applyCodeCleanup runs the plan in one
@@ -46,6 +49,13 @@ export type CodeMerge = {
   otherDifferences: string[];
 };
 export type CodeGroupForDap = { code: string; why: string; courses: RegistryCourseSummary[] };
+/** DAP's decisions on the groups it was asked about (exact codes as they stand). */
+export type CodeCleanupDecisions = {
+  merges?: { from: string; into: string }[];
+  archive?: string[];
+  archiveHeadings?: boolean;
+};
+export type CodeArchive = RegistryCourseSummary & { why: string };
 export type DraftRowRename = { id: string; submissionId: string; programme: string; from: string; to: string };
 export type DraftRowClash = { submissionId: string; programme: string; code: string; rows: string[] };
 
@@ -61,6 +71,10 @@ export type CodeCleanupPlan = {
   draftRenames: DraftRowRename[];
   /** A draft that already has the tidied code on another row. */
   draftClashes: DraftRowClash[];
+  /** Records DAP decided to archive (unused copies, heading rows). */
+  archives: CodeArchive[];
+  /** DAP decisions that couldn't be applied, and why. */
+  decisionProblems: string[];
 };
 
 const summarySelect = {
@@ -124,15 +138,26 @@ function otherDifferences(courses: LoadedCourse[]): string[] {
 }
 
 /** Works out the clean-up without writing anything. */
-export async function planCodeCleanup(db: Db = prisma): Promise<CodeCleanupPlan> {
+export async function planCodeCleanup(db: Db = prisma, decisions: CodeCleanupDecisions = {}): Promise<CodeCleanupPlan> {
   const courses = await db.masterCourse.findMany({ select: summarySelect, orderBy: { code: "asc" } });
+  const archives: CodeArchive[] = [];
+  const decisionProblems: string[] = [];
+  const unused = (course: LoadedCourse) => course._count.programmeLinks === 0 && course._count.submissionCourses === 0;
+  const toArchive = new Set((decisions.archive ?? []).map((code) => code.trim()));
+  const mergeDecisions = new Map((decisions.merges ?? []).map((merge) => [merge.from.trim(), merge.into.trim()]));
+  const usedDecisions = new Set<string>();
 
   const groups = new Map<string, LoadedCourse[]>();
   const untidyable: RegistryCourseSummary[] = [];
   const headings: RegistryCourseSummary[] = [];
   for (const course of courses) {
     if (HEADING_PREFIX.test(course.code.trim())) {
-      headings.push(summarize(course));
+      if (decisions.archiveHeadings && unused(course)) {
+        archives.push({ ...summarize(course), why: "A spreadsheet heading imported as a course; nothing uses it." });
+      } else {
+        if (decisions.archiveHeadings) decisionProblems.push(`${course.code} ${course.title} is a heading row, but a programme or draft uses it; left as it is.`);
+        headings.push(summarize(course));
+      }
       continue;
     }
     if (!inFormat(formatCourseCode(course.code))) {
@@ -162,6 +187,45 @@ export async function planCodeCleanup(db: Db = prisma): Promise<CodeCleanupPlan>
     const sameTitle = new Set(group.map((course) => comparableTitle(course.title))).size === 1;
     const sameUnits = new Set(group.map((course) => course.units)).size === 1;
     if (!sameTitle || !sameUnits) {
+      // DAP's decisions for this group: archive unused copies, merge one into another.
+      let rest = group;
+      for (const course of group) {
+        if (!toArchive.has(course.code)) continue;
+        usedDecisions.add(course.code);
+        if (!unused(course)) {
+          decisionProblems.push(`${course.code} ${course.title} is used by ${course._count.programmeLinks} programmes and ${course._count.submissionCourses} draft rows, so it wasn't archived.`);
+          continue;
+        }
+        archives.push({ ...summarize(course), why: `An unused second course with the code ${code}; DAP decided to archive it.` });
+        rest = rest.filter((item) => item.id !== course.id);
+      }
+      const merging = rest.filter((course) => mergeDecisions.has(course.code));
+      for (const course of merging) {
+        usedDecisions.add(course.code);
+        const keep = rest.find((item) => item.code === mergeDecisions.get(course.code));
+        if (!keep || keep.id === course.id) {
+          decisionProblems.push(`${course.code} was to merge into ${mergeDecisions.get(course.code)}, which isn't in its group; left as it is.`);
+          continue;
+        }
+        merges.push({
+          code,
+          keep: summarize(keep),
+          merge: [summarize(course)],
+          otherDifferences: [comparableTitle(keep.title) !== comparableTitle(course.title) && "title", keep.units !== course.units && "units"].filter(
+            (field): field is string => Boolean(field),
+          ),
+        });
+        rest = rest.filter((item) => item.id !== course.id);
+      }
+      if (rest.length === 1) {
+        const [course] = rest;
+        if (course.code !== code && !merges.some((merge) => merge.keep.id === course.id)) renames.push({ ...summarize(course), to: code });
+        continue;
+      }
+      if (rest.length < group.length && !merges.some((merge) => rest.some((item) => item.id === merge.keep.id))) {
+        decisionProblems.push(`${code}: ${rest.length} courses still share the code after DAP's decisions.`);
+      }
+      if (rest.length === 0 || (rest.length === 1 && merges.some((merge) => merge.keep.id === rest[0].id))) continue;
       forDap.push({
         code,
         why: [!sameTitle && "the titles differ", !sameUnits && "the units differ"].filter(Boolean).join(" and ").replace(/^./, (c) => c.toUpperCase()) + ".",
@@ -176,6 +240,10 @@ export async function planCodeCleanup(db: Db = prisma): Promise<CodeCleanupPlan>
       merge: group.filter((course) => course.id !== keep.id).map(summarize),
       otherDifferences: otherDifferences(group),
     });
+  }
+
+  for (const code of [...toArchive, ...mergeDecisions.keys()]) {
+    if (!usedDecisions.has(code)) decisionProblems.push(`${code} was in DAP's decisions but isn't in a group to decide; nothing changed for it.`);
   }
 
   // Course rows in the current drafts (archived cycles stay as they were).
@@ -213,11 +281,13 @@ export async function planCodeCleanup(db: Db = prisma): Promise<CodeCleanupPlan>
     headings,
     draftRenames,
     draftClashes: [...clashes.values()],
+    archives,
+    decisionProblems,
   };
 }
 
 export function planHasChanges(plan: CodeCleanupPlan): boolean {
-  return plan.renames.length + plan.merges.length + plan.draftRenames.length > 0;
+  return plan.renames.length + plan.merges.length + plan.draftRenames.length + plan.archives.length > 0;
 }
 
 const FILLABLE = [
@@ -321,15 +391,38 @@ async function mergeInto(tx: Prisma.TransactionClient, keepId: string, fromId: s
   await tx.masterCourse.delete({ where: { id: fromId } });
 }
 
+/** Archives a Registry course nothing uses (DAP's decision), then deletes it. */
+async function archiveUnused(tx: Prisma.TransactionClient, course: CodeArchive, actorId: string) {
+  const record = await tx.masterCourse.findUniqueOrThrow({
+    where: { id: course.id },
+    include: { prerequisites: { select: { id: true } }, _count: { select: { programmeLinks: true, submissionCourses: true } } },
+  });
+  // Checked again inside the transaction: something may have started using it.
+  if (record._count.programmeLinks + record._count.submissionCourses > 0) {
+    throw new Error(`${record.code} ${record.title} is in use now; nothing was changed.`);
+  }
+  const { prerequisites, _count, ...data } = record;
+  void _count;
+  await archiveRecord(tx, {
+    entityType: "MASTER_COURSE",
+    entityId: record.id,
+    label: `${record.code} ${record.title} (B3: ${course.why})`,
+    data: { ...data, prerequisiteIds: prerequisites.map(({ id }) => id) },
+    actorId,
+  });
+  await tx.masterCourse.delete({ where: { id: record.id } });
+}
+
 /** Runs the plan in one transaction, with one activity log entry. */
 export async function applyCodeCleanup(
   plan: CodeCleanupPlan,
   options: { actorId: string },
   db: Db = prisma,
-): Promise<{ renamed: number; merged: number; draftRowsRenamed: number }> {
+): Promise<{ renamed: number; merged: number; draftRowsRenamed: number; archived: number }> {
   let merged = 0;
   await db.$transaction(
     async (tx) => {
+      for (const course of plan.archives) await archiveUnused(tx, course, options.actorId);
       for (const merge of plan.merges) {
         for (const course of merge.merge) {
           await mergeInto(tx, merge.keep.id, course.id, merge.code, options.actorId);
@@ -351,13 +444,14 @@ export async function applyCodeCleanup(
           action: "COURSE_CODES_CLEANED",
           entityType: "MASTER_COURSE",
           entityId: "registry",
-          description: `Put course codes in the standard format (B3): ${plan.renames.length} Registry codes tidied, ${merged} duplicate Registry courses merged into ${plan.merges.length}, ${plan.draftRenames.length} draft rows tidied. ${plan.forDap.length} groups left for DAP to decide. Merged courses are in the Archive.`,
+          description: `Put course codes in the standard format (B3): ${plan.renames.length} Registry codes tidied, ${merged} duplicate Registry courses merged into ${plan.merges.length}, ${plan.draftRenames.length} draft rows tidied${plan.archives.length ? `, ${plan.archives.length} unused records archived on DAP's decision` : ""}. ${plan.forDap.length} groups left for DAP to decide. Merged and archived courses are in the Archive.`,
           metadata: {
             renamed: plan.renames.length,
             merged,
             groups: plan.merges.length,
             draftRowsRenamed: plan.draftRenames.length,
             forDap: plan.forDap.map((group) => group.code),
+            archived: plan.archives.map((course) => course.code),
           },
         },
         tx,
@@ -365,7 +459,7 @@ export async function applyCodeCleanup(
     },
     { timeout: 10 * 60_000, maxWait: 30_000 },
   );
-  return { renamed: plan.renames.length, merged, draftRowsRenamed: plan.draftRenames.length };
+  return { renamed: plan.renames.length, merged, draftRowsRenamed: plan.draftRenames.length, archived: plan.archives.length };
 }
 
 /** The merge report for DAP, as Markdown. */
@@ -383,7 +477,22 @@ export function codeCleanupReport(plan: CodeCleanupPlan, heading: string): strin
     `- Groups for DAP to decide (titles or units differ): ${plan.forDap.length}`,
     `- Codes that can't be put in the format: ${plan.untidyable.length}; headings imported as courses: ${plan.headings.length}`,
     `- Draft course rows to tidy: ${plan.draftRenames.length}; drafts with the same code twice: ${plan.draftClashes.length}`,
+    ...(plan.archives.length ? [`- Unused records archived on DAP's decision: ${plan.archives.length}`] : []),
+    ...(plan.decisionProblems.length ? [`- DAP decisions that couldn't be applied: ${plan.decisionProblems.length}`] : []),
     "",
+    ...(plan.decisionProblems.length ? ["## DAP decisions that couldn't be applied", "", ...plan.decisionProblems.map((problem) => `- ${problem}`), ""] : []),
+    ...(plan.archives.length
+      ? [
+          "## Archived on DAP's decision",
+          "",
+          "Unused records (no programme, no draft row). Each goes to the Archive and can be restored.",
+          "",
+          "| Code | Title | Units | Why |",
+          "|---|---|---|---|",
+          ...plan.archives.map((course) => `| ${course.code} | ${course.title} | ${course.units} | ${course.why} |`),
+          "",
+        ]
+      : []),
     "## 1. Groups for DAP to decide",
     "",
     "Nothing in these groups changes until DAP says which course each code should be. Options: merge into one (say which title and units), or give one of them a different code.",

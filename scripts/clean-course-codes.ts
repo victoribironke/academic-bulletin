@@ -5,7 +5,13 @@
  *
  *   DATABASE_URL_FILE=<file holding the database URL> \
  *     npx tsx scripts/clean-course-codes.ts --by <admin email> \
- *       [--report <file.md>] [--confirm DELETE]
+ *       [--dap-merge "<code>><code>" ...] [--dap-archive "<code>,<code>"]
+ *       [--dap-archive-headings] [--report <file.md>] [--confirm DELETE]
+ *
+ * DAP's decisions on the groups in the merge report: --dap-merge "CHM107>CHM 107"
+ * merges the first into the second (the kept course's title and units stay);
+ * --dap-archive archives those exact codes, and --dap-archive-headings the
+ * heading rows, each only when no programme or draft uses it.
  *
  * Without --confirm DELETE it is a dry run: it writes the merge report for
  * DAP (groups to decide, merges, codes tidied) and changes nothing. Merging
@@ -27,6 +33,19 @@ if (args.includes("--confirm") && confirmText?.trim().toUpperCase() !== "DELETE"
   process.exit(1);
 }
 const confirm = confirmText?.trim().toUpperCase() === "DELETE";
+const decisions = {
+  merges: args.flatMap((arg, index) => {
+    if (arg !== "--dap-merge") return [];
+    const [from, into] = (args[index + 1] ?? "").split(">").map((part) => part.trim());
+    if (!from || !into) {
+      console.error(`--dap-merge needs "<code>><code>", not "${args[index + 1] ?? ""}".`);
+      process.exit(1);
+    }
+    return [{ from, into }];
+  }),
+  archive: (option("--dap-archive") ?? "").split(",").map((code) => code.trim()).filter(Boolean),
+  archiveHeadings: args.includes("--dap-archive-headings"),
+};
 if (!by) {
   console.error("Usage: npx tsx scripts/clean-course-codes.ts --by <admin email> [--report <file.md>] [--confirm DELETE]");
   process.exit(1);
@@ -54,7 +73,7 @@ async function main() {
       throw new Error(`${by} is not an Academic Planning admin on ${host}.`);
     }
 
-    const plan = await planCodeCleanup(prisma);
+    const plan = await planCodeCleanup(prisma, decisions);
     const when = new Date().toISOString();
     const report = codeCleanupReport(plan, `Course code clean-up (B3): ${confirm ? "applied" : "dry run"} on ${host}, ${when}`);
     if (reportPath) writeFileSync(reportPath, report + "\n");
@@ -71,11 +90,11 @@ async function main() {
     const started = Date.now();
     const result = await applyCodeCleanup(plan, { actorId: actor.id }, prisma);
     console.log(
-      `\nApplied in ${Math.round((Date.now() - started) / 1000)} s: ${result.renamed} codes tidied, ${result.merged} duplicates merged, ${result.draftRowsRenamed} draft rows tidied.`,
+      `\nApplied in ${Math.round((Date.now() - started) / 1000)} s: ${result.renamed} codes tidied, ${result.merged} duplicates merged, ${result.draftRowsRenamed} draft rows tidied, ${result.archived} unused records archived.`,
     );
     const after = await planCodeCleanup(prisma);
     console.log(
-      `Left: ${after.renames.length} to tidy, ${after.merges.length} to merge, ${after.forDap.length} groups for DAP, ${after.draftRenames.length} draft rows.`,
+      `Left: ${after.renames.length} to tidy, ${after.merges.length} to merge, ${after.forDap.length} groups for DAP, ${after.headings.length} heading rows, ${after.draftRenames.length} draft rows.`,
     );
   } finally {
     await prisma.$disconnect();

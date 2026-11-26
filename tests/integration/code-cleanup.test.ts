@@ -155,6 +155,43 @@ describe("course code clean-up (B3)", () => {
     expect(again.forDap.some((item) => item.code === "ZCC 103")).toBe(true);
   });
 
+  it("applies DAP's decisions: archives unused copies and headings, merges one code into another", async () => {
+    await prisma.masterCourse.createMany({
+      data: [
+        { id: "zcc-301-used", code: "ZCC 301", title: "Used one", units: 3, level: 300, semester: 1 },
+        { id: "zcc-301-spare", code: "ZCC301", title: "Spare one", units: 2, level: 300, semester: 1 },
+        { id: "zcc-302-keep", code: "ZCC 302", title: "General practical", units: 1, level: 300, semester: 1 },
+        { id: "zcc-302-from", code: "ZCC302", title: "Practical one", units: 1, level: 300, semester: 1 },
+        { id: "zcc-heading", code: "LEVEL 900", title: "ZCC 999: Not a course", units: 2, level: 100, semester: 1 },
+      ],
+    });
+    await prisma.programmeCourse.createMany({
+      data: [
+        { programmeId: ids.programmeA, courseId: "zcc-301-used" },
+        { programmeId: ids.programmeB, courseId: "zcc-302-from" },
+      ],
+    });
+    const decisions = { merges: [{ from: "ZCC302", into: "ZCC 302" }], archive: ["ZCC301", "ZCC 301", "ZCC999"], archiveHeadings: true };
+    const plan = await planCodeCleanup(prisma, decisions);
+    expect(plan.archives.map((course) => course.id).sort()).toEqual(["zcc-301-spare", "zcc-heading"]);
+    expect(plan.merges.find((merge) => merge.code === "ZCC 302")).toMatchObject({ keep: { id: "zcc-302-keep" }, otherDifferences: ["title"] });
+    expect(plan.decisionProblems).toEqual([
+      "ZCC 301 Used one is used by 1 programmes and 0 draft rows, so it wasn't archived.",
+      "ZCC999 was in DAP's decisions but isn't in a group to decide; nothing changed for it.",
+    ]);
+    expect(plan.forDap.map((group) => group.code)).toContain("ZCC 103");
+    expect(codeCleanupReport(plan, "B3 decisions")).toContain("## Archived on DAP's decision");
+
+    const result = await applyCodeCleanup(plan, { actorId }, prisma);
+    expect(result.archived).toBe(2);
+    expect(await prisma.masterCourse.count({ where: { id: { in: ["zcc-301-spare", "zcc-heading", "zcc-302-from"] } } })).toBe(0);
+    expect(await prisma.archivedRecord.count({ where: { entityId: { in: ["zcc-301-spare", "zcc-heading", "zcc-302-from"] } } })).toBe(3);
+    expect((await prisma.programmeCourse.findMany({ where: { courseId: "zcc-302-keep" }, select: { programmeId: true } })).map((link) => link.programmeId)).toEqual([ids.programmeB]);
+    const after = await planCodeCleanup(prisma);
+    expect(after.forDap.some((group) => group.code === "ZCC 301" || group.code === "ZCC 302")).toBe(false);
+    expect(after.headings).toEqual([]);
+  });
+
   it("finds the same code in any spacing, and the database rule refuses a second one", async () => {
     expect((await findSameCodeCourse("zcc102"))?.id).toBe(ids.lone);
     expect(await findSameCodeCourse("zcc102", ids.lone)).toBeNull();
