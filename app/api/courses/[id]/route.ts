@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { carryChanged, carryMessage, carryRemoved } from "@/lib/programmes/option-families";
 import prisma from "@/lib/prisma";
 import {
   SEMESTER_RULE_MESSAGE,
@@ -234,6 +235,11 @@ export async function PATCH(
       await synchronizeCourseGraceAssessment(course.id);
     }
 
+    // W18: the same change in the other B.Agric. options' shared levels.
+    const options = Object.keys(updateData).length
+      ? await carryChanged(user!, existing.submissionId, existing, course)
+      : null;
+
     await recordActivity({
       actorId: user!.id,
       action: "COURSE_UPDATED",
@@ -245,7 +251,7 @@ export async function PATCH(
       coalesceWithinMinutes: AUTOSAVE_COALESCE_MINUTES,
     });
 
-    return NextResponse.json(course);
+    return NextResponse.json({ ...course, optionsNote: carryMessage(options) });
   } catch (error) {
     console.error("Failed to update course:", error);
     return NextResponse.json(
@@ -278,8 +284,10 @@ export async function DELETE(
     if (unexplained) return unexplained;
 
     await applyCourseRowDelete(planned.plan, user!.id, cleanDeleteReason(body.reason));
+    // W18: removed from the other B.Agric. options' shared levels too.
+    const options = await carryRemoved(user!, planned.plan.submissionId, planned.plan.rows);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, optionsNote: carryMessage(options) });
   } catch (error) {
     console.error("Failed to delete course:", error);
     return NextResponse.json(

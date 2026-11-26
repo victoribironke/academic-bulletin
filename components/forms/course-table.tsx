@@ -51,6 +51,7 @@ import { BulkImportDialog } from "@/components/imports/bulk-import-dialog";
 import { DELETE_WORD, useConfirmDelete } from "@/components/shared/typed-delete-dialog";
 import { useUser } from "@/contexts/user-context";
 import { CourseListConfirmation } from "@/components/forms/course-list-confirmation";
+import { OptionFamilyNotice, announceOptionsChanged, type OptionFamilySummary } from "@/components/courses/option-family-notice";
 import { deleteNeedsReason } from "@/lib/delete-reason";
 import { TableToolbar } from "@/components/shared/table-toolbar";
 import { TablePagination } from "@/components/shared/table-pagination";
@@ -217,13 +218,20 @@ export function CourseTable({
     deleteReasons.current.push(reason);
   };
   const isSaved = (course: Course) => Boolean(course.id) && !course.isNew;
+  // W18: a B.Agric. option shares its lower levels with the other options.
+  const [optionFamily, setOptionFamily] = useState<OptionFamilySummary | null>(null);
+  const alsoInOptions = (courses: Course[]) =>
+    optionFamily && courses.some((course) => isSaved(course) && course.level <= optionFamily.sharedUpToLevel)
+      ? ` At ${optionFamily.sharedLevels} it's deleted from the ${optionFamily.others.join(" and ")} drafts too.`
+      : "";
   const confirmRemoveCourse = (course: Course) =>
     !isSaved(course)
       ? Promise.resolve(true)
       : confirmDelete({
           title: `Delete ${course.code || "this course"} from this programme's course structure?`,
           description:
-            "Its course description and learning outcomes go with it. It goes when the course structure next saves, and an administrator can restore it from the Archive.",
+            "Its course description and learning outcomes go with it. It goes when the course structure next saves, and an administrator can restore it from the Archive." +
+            alsoInOptions([course]),
           actionLabel: "Delete row",
           askReason,
           onReason: noteReason,
@@ -237,7 +245,8 @@ export function CourseTable({
         : confirmDelete({
             title: `Delete ${courses.length} course rows?`,
             description:
-              "Their course descriptions and learning outcomes go with them. They go when the course structure next saves, and an administrator can restore them from the Archive.",
+              "Their course descriptions and learning outcomes go with them. They go when the course structure next saves, and an administrator can restore them from the Archive." +
+              alsoInOptions(courses),
             items: courses.map((course) => [course.code, course.title].filter(Boolean).join(" ") || "A row with no code yet"),
             actionLabel: `Delete ${courses.length} rows`,
             askReason,
@@ -633,6 +642,8 @@ export function CourseTable({
     isSavingRef.current = true;
     if (!silent) setIsSaving(true);
     const errors: string[] = [];
+    // W18: where a change was also made in the other B.Agric. options.
+    const optionNotes = new Set<string>();
     // Track newly-created course IDs so we can patch local state without refetching
     const createdMap = new Map<string, { id: string; code: string; level: number }>();
     try {
@@ -670,6 +681,7 @@ export function CourseTable({
               errors.push(`Failed to create ${course.code || "new course"}`);
             } else {
               const created = await res.json();
+              if (created.optionsNote) optionNotes.add(created.optionsNote);
               createdMap.set(course.code, { id: created.id, code: course.code, level });
               currentCourseIds.add(created.id);
 
@@ -713,6 +725,9 @@ export function CourseTable({
             });
             if (!res.ok) {
               errors.push(`Failed to update ${course.code}`);
+            } else {
+              const updated = await res.json().catch(() => ({}));
+              if (updated.optionsNote) optionNotes.add(updated.optionsNote);
             }
           }
         }
@@ -734,12 +749,19 @@ export function CourseTable({
         });
         if (res.ok) {
           deleteReasons.current = [];
+          const removed = await res.json().catch(() => ({}));
+          if (removed.optionsNote) optionNotes.add(removed.optionsNote);
         } else {
           const data = await res.json().catch(() => ({}));
           errors.push(data.error ?? `Failed to delete ${removedIds.length === 1 ? "a removed course" : `${removedIds.length} removed courses`}`);
         }
       }
 
+      if (optionNotes.size > 0) {
+        // Shown even for an autosave: the change reached other drafts.
+        toast.info("Shared with the other options", { description: [...optionNotes].join(" ") });
+        announceOptionsChanged(submissionId);
+      }
       if (errors.length > 0) {
         toast.error(`Some courses failed to save: ${errors.join("; ")}`);
       } else {
@@ -879,6 +901,8 @@ export function CourseTable({
         )}
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* W18: a B.Agric. option's shared levels. */}
+        <OptionFamilyNotice submissionId={submissionId} canEdit={!disabled} onFamily={setOptionFamily} />
         {/* B10: the Head confirms the list, or asks DAP for a change. */}
         <CourseListConfirmation
           submissionId={submissionId}
@@ -1215,9 +1239,14 @@ export function CourseTable({
           }
           toast.success(`${data.imported} course(s) imported successfully.`, {
             description:
-              data.graceQueued > 0
-                ? `${data.graceQueued} course description(s) were queued for automatic GRACE checks.`
-                : undefined,
+              [
+                data.graceQueued > 0
+                  ? `${data.graceQueued} course description(s) were queued for automatic GRACE checks.`
+                  : null,
+                data.optionsNote ?? null,
+              ]
+                .filter(Boolean)
+                .join(" ") || undefined,
           });
           await fetchData();
           window.dispatchEvent(

@@ -16,6 +16,7 @@ import {
 } from "@/lib/courses/delete-course-rows";
 import { cleanDeleteReason } from "@/lib/delete-reason";
 import { couldNot } from "@/lib/messages";
+import { carryAdded, carryMessage, carryRemoved } from "@/lib/programmes/option-families";
 
 const MAX_IMPORT_ROWS = 500;
 
@@ -138,10 +139,27 @@ export async function POST(request: Request) {
       timeout: 60_000,
     });
 
+    // W18: imported shared-level rows reach the other B.Agric. options.
+    const options = await carryAdded(
+      user!,
+      submissionId,
+      validated.map(({ data }) => ({
+        code: data!.code,
+        title: data!.title,
+        units: data!.units,
+        status: data!.status as CourseStatus,
+        semester: data!.semester,
+        level: data!.level,
+        prerequisites: data!.prerequisites || null,
+        masterCourseId: null,
+      })),
+    );
+
     return NextResponse.json(
       {
         imported: validated.length,
         graceQueued: validated.filter((row) => row.data?.courseContent).length,
+        optionsNote: carryMessage(options),
       },
       { status: 201 },
     );
@@ -179,7 +197,9 @@ export async function DELETE(request: Request) {
     if (unexplained) return unexplained;
 
     const result = await applyCourseRowDelete(planned.plan, user!.id, cleanDeleteReason(body.reason));
-    return NextResponse.json({ success: true, ...result });
+    // W18: removed from the other B.Agric. options' shared levels too.
+    const options = await carryRemoved(user!, submissionId, planned.plan.rows);
+    return NextResponse.json({ success: true, ...result, optionsNote: carryMessage(options) });
   } catch (error) {
     console.error("Failed to delete course rows:", error);
     return NextResponse.json({ error: couldNot("delete these course rows") }, { status: 500 });

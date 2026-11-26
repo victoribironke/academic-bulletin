@@ -1,0 +1,15 @@
+{
+  "about": "Rule W18: programmes that share their lower levels and split into options. Each option is its own programme on the platform. The shared levels hold the same course rows in every option's draft.",
+  "families": [
+    {
+      "name": "B.Agric. (Hons.) Agriculture",
+      "sharedUpToLevel": 400,
+      "source": "B.Agric. (Hons.) Agriculture.docx, 2023-2027 bulletin: 100 to 400 level identical in all three options; 500 level differs.",
+      "programmes": [
+        { "code": "SSAT-AIT-AGE", "option": "Agricultural Economics and Extension" },
+        { "code": "SSAT-AIT-ANS", "option": "Animal Science" },
+        { "code": "SSAT-AIT-CSS", "option": "Crop Science and Soil Science" }
+      ]
+    }
+  ]
+}

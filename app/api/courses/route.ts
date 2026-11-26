@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { carryAdded, carryMessage } from "@/lib/programmes/option-families";
 import prisma from "@/lib/prisma";
 import {
   formatCourseTitle,
@@ -290,7 +291,10 @@ export async function POST(request: Request) {
       metadata: { courseId: course.id, code: course.code },
     });
 
-    return NextResponse.json({ ...course, description }, { status: 201 });
+    // W18: a B.Agric. option's shared levels reach the other options.
+    const options = await carryAdded(user!, submissionId, [course]);
+
+    return NextResponse.json({ ...course, description, optionsNote: carryMessage(options) }, { status: 201 });
   } catch (error) {
     console.error("Failed to create course:", error);
     return NextResponse.json(
