@@ -74,13 +74,15 @@ export async function GET(request: NextRequest) {
   }
 
   // D3: the invitations wait for 8:00 am WAT, Thursday, November 26, 2026;
-  // from then on, anyone still waiting gets theirs on the next run.
+  // from then on, anyone still waiting gets theirs on the next run, unless
+  // DAP holds them.
   let invitations: Record<string, unknown> = { ok: false };
   try {
-    const { due, results } = await sendDueInvitations();
+    const { due, held, results } = await sendDueInvitations();
     invitations = {
       ok: true,
       due,
+      held,
       sent: results.filter((result) => result.sent).length,
       failed: results.filter((result) => !result.sent).map((result) => ({ email: result.email, reason: result.reason })),
     };

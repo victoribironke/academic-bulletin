@@ -659,52 +659,107 @@ function InviteButton({ userId, invited, onSent }: { userId: string; invited: bo
 function SendInvitationsButton({ waiting, onSent }: { waiting: number; onSent: () => void }) {
   const [open, setOpen] = useState(false);
   const [sending, setSending] = useState(false);
-  if (waiting === 0) return null;
+  // D3: DAP can hold the invitations; while held, nothing goes out.
+  const [hold, setHold] = useState<{ held: boolean; reason: string | null } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/invitations")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.hold) setHold(data.hold);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [waiting]);
+  if (waiting === 0 && !hold?.held) return null;
+  const held = Boolean(hold?.held);
+
+  const setHeld = async (next: boolean) => {
+    const response = await fetch("/api/invitations", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hold: next }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      toast.error(data.error ?? "The change wasn't saved.");
+      return false;
+    }
+    setHold(data.hold);
+    return true;
+  };
+
+  const send = async () => {
+    const response = await fetch("/api/invitations", { method: "POST" });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) {
+      const failed = (data.results ?? []).filter((result: { sent: boolean }) => !result.sent).length;
+      toast.success(`${data.sent} invitation${data.sent === 1 ? "" : "s"} sent.`, {
+        description: failed ? `${failed} could not be sent; see the Activity Log.` : undefined,
+      });
+      setOpen(false);
+      onSent();
+    } else {
+      toast.error(data.error ?? "The invitations weren't sent.");
+    }
+  };
+
+  const run = async (work: () => Promise<unknown>) => {
+    setSending(true);
+    try {
+      await work();
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
     <>
       <Button variant="outline" onClick={() => setOpen(true)}>
         <Mail />
-        Send waiting invitations ({waiting})
+        {held ? `Invitations on hold (${waiting} waiting)` : `Send waiting invitations (${waiting})`}
       </Button>
       <Dialog open={open} onOpenChange={(next) => !sending && setOpen(next)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Send {waiting} invitation{waiting === 1 ? "" : "s"} now?</DialogTitle>
+            <DialogTitle>
+              {held ? "The invitations are on hold" : `Send ${waiting} invitation${waiting === 1 ? "" : "s"} now?`}
+            </DialogTitle>
             <DialogDescription>
-              Each Head of Department, programme coordinator and Dean who hasn&apos;t had one gets their
-              invitation email now. On their own, the invitations go out from 8:00 am WAT on Thursday,
-              November 26, 2026.
+              {held
+                ? `Nobody gets an invitation until you release the hold: not with the daily job, not from here.${hold?.reason ? ` Reason: ${hold.reason}` : ""} ${waiting} ${waiting === 1 ? "person is" : "people are"} waiting.`
+                : "Each Head of Department, programme coordinator and Dean who hasn't had one gets their invitation email now. Otherwise the daily job sends them at 7:00 am WAT. You can hold them instead."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)} disabled={sending}>
               Cancel
             </Button>
-            <Button
-              disabled={sending}
-              onClick={async () => {
-                setSending(true);
-                try {
-                  const response = await fetch("/api/invitations", { method: "POST" });
-                  const data = await response.json().catch(() => ({}));
-                  if (response.ok) {
-                    const failed = (data.results ?? []).filter((result: { sent: boolean }) => !result.sent).length;
-                    toast.success(`${data.sent} invitation${data.sent === 1 ? "" : "s"} sent.`, {
-                      description: failed ? `${failed} could not be sent; see the Activity Log.` : undefined,
-                    });
-                    setOpen(false);
-                    onSent();
-                  } else {
-                    toast.error(data.error ?? "The invitations weren't sent.");
-                  }
-                } finally {
-                  setSending(false);
-                }
-              }}
-            >
-              {sending && <Loader2 className="animate-spin" />}
-              Send {waiting} now
-            </Button>
+            {held ? (
+              <>
+                <Button variant="outline" disabled={sending} onClick={() => void run(async () => (await setHeld(false)) && toast.success("Released: they go out with the next daily run."))}>
+                  Release the hold
+                </Button>
+                {waiting > 0 && (
+                  <Button disabled={sending} onClick={() => void run(async () => (await setHeld(false)) && (await send()))}>
+                    {sending && <Loader2 className="animate-spin" />}
+                    Release and send {waiting} now
+                  </Button>
+                )}
+              </>
+            ) : (
+              <>
+                <Button variant="outline" disabled={sending} onClick={() => void run(async () => (await setHeld(true)) && toast.success("Held: no invitation goes out until you release it."))}>
+                  Hold them
+                </Button>
+                <Button disabled={sending} onClick={() => void run(send)}>
+                  {sending && <Loader2 className="animate-spin" />}
+                  Send {waiting} now
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

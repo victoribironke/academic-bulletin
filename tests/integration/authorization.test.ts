@@ -5667,7 +5667,7 @@ describe("invitations and sign-in tracking (D3)", () => {
 
   it("waits for 8:00 am WAT on November 26 before sending the rest", async () => {
     await withEmail(async (sent) => {
-      expect(await sendDueInvitations(new Date("2026-11-26T07:59:00+01:00"))).toEqual({ due: false, results: [] });
+      expect(await sendDueInvitations(new Date("2026-11-26T07:59:00+01:00"))).toEqual({ due: false, held: false, results: [] });
       expect(sent).toHaveLength(0);
       const later = await sendDueInvitations(new Date("2026-11-26T08:00:00+01:00"));
       expect(later.due).toBe(true);

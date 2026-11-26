@@ -16,6 +16,7 @@ import type { Countdown } from "@/lib/calendar/countdown";
 import { deskCountdown, loadActiveCycleCalendar } from "@/lib/calendar/desk";
 import { UNIVERSITY_DOMAIN, isUniversityEmail } from "@/lib/sign-in-access";
 import { dapOfficerFor } from "@/lib/people/officers";
+import { recordActivity } from "@/lib/activity-log";
 
 const ROLE_NAMES: Record<string, string> = {
   HOD: "Head of Department",
@@ -203,14 +204,53 @@ export function uninvitedPeople() {
 }
 
 /**
- * Sends every waiting invitation, but not before the launch time. The daily
- * job calls this; so can an admin. Returns what happened to each person.
+ * DAP can hold the invitations (D3): while held, the daily job sends none
+ * and "Send waiting invitations" is refused, until DAP releases the hold.
+ * Kept with DAP's other switches (agent_controls), key "invitations".
+ */
+export const INVITATIONS_HOLD_KEY = "invitations";
+
+export type InvitationsHold = { held: boolean; reason: string | null; since: string | null };
+
+export async function invitationsHold(): Promise<InvitationsHold> {
+  const row = await prisma.agentControl.findUnique({ where: { key: INVITATIONS_HOLD_KEY } });
+  return { held: row?.value === "hold", reason: row?.reason ?? null, since: row?.updatedAt.toISOString() ?? null };
+}
+
+export async function setInvitationsHold(held: boolean, actorId: string, reason: string | null): Promise<InvitationsHold> {
+  const why = reason?.trim().slice(0, 300) || null;
+  await prisma.$transaction(async (tx) => {
+    await tx.agentControl.upsert({
+      where: { key: INVITATIONS_HOLD_KEY },
+      create: { key: INVITATIONS_HOLD_KEY, value: held ? "hold" : "send", reason: why, updatedById: actorId },
+      update: { value: held ? "hold" : "send", reason: why, updatedById: actorId },
+    });
+    await recordActivity(
+      {
+        actorId,
+        action: held ? "INVITATIONS_HELD" : "INVITATIONS_RELEASED",
+        entityType: "USER",
+        description: held
+          ? `Held the invitations: none goes out until the hold is released${why ? `. Reason: ${why}` : "."}`
+          : "Released the invitations: anyone still waiting gets theirs with the next daily run, or when DAP sends them.",
+      },
+      tx,
+    );
+  });
+  return invitationsHold();
+}
+
+/**
+ * Sends every waiting invitation, but not before the launch time, and not
+ * while DAP holds them. The daily job calls this; so can an admin. Returns
+ * what happened to each person.
  */
 export async function sendDueInvitations(now: Date = new Date(), options: { evenBeforeLaunch?: boolean } = {}) {
   if (!options.evenBeforeLaunch && now < new Date(INVITATIONS.sendAt)) {
-    return { due: false, results: [] as InvitationResult[] };
+    return { due: false, held: false, results: [] as InvitationResult[] };
   }
+  if ((await invitationsHold()).held) return { due: false, held: true, results: [] as InvitationResult[] };
   const results: InvitationResult[] = [];
   for (const person of await uninvitedPeople()) results.push(await sendInvitation(person.id, now));
-  return { due: true, results };
+  return { due: true, held: false, results };
 }
