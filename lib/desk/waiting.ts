@@ -14,8 +14,21 @@ import { isOwnedElsewhere, programmePlace } from "@/lib/courses/shared-courses";
 import { calculateSubmissionProgress } from "@/lib/submissions/progress";
 import { confirmedCourseLists } from "@/lib/courses/course-list";
 import { PHASE_NAMES } from "@/lib/submissions/phases";
+import { GENERAL_EDUCATION_WHERE, MINIMUM_OUTCOMES } from "@/lib/courses/courses-we-own";
+import { OFFERED_COURSE } from "@/lib/courses/course-owners";
+import { isGeneralEducationFamily } from "@/lib/courses/general-education";
+import { normalizeLearningOutcomes } from "@/lib/courses/grace-compliance";
 
-export type WaitingKind = "REVISION_REQUESTED" | "WAITING_FOR_REVIEW" | "VETTING" | "OPEN_COMMENTS" | "SECTIONS_TO_FINISH";
+export type WaitingKind =
+  | "REVISION_REQUESTED"
+  | "WAITING_FOR_REVIEW"
+  | "VETTING"
+  | "OPEN_COMMENTS"
+  | "SECTIONS_TO_FINISH"
+  | "QUESTIONS"
+  | "COURSE_REQUESTS"
+  | "GENERAL_EDUCATION"
+  | "NO_OWNER";
 
 export type WaitingItem = {
   key: string;
@@ -33,6 +46,10 @@ const RANK: Record<WaitingKind, number> = {
   VETTING: 1,
   OPEN_COMMENTS: 2,
   SECTIONS_TO_FINISH: 3,
+  QUESTIONS: 1,
+  COURSE_REQUESTS: 1,
+  GENERAL_EDUCATION: 3,
+  NO_OWNER: 3,
 };
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -196,8 +213,8 @@ export async function waitingWorkFor(user: ApiUser, nowArg?: Date): Promise<Wait
       where: { cycleId: cycle.id, currentPhase: { gte: 3 }, status: "IN_REVIEW", ...scope },
       select: { id: true, currentPhase: true, programme: { select: { name: true } }, phaseTransitions: lastTransition },
     });
-    return orderWaiting(
-      drafts.map((draft) =>
+    return orderWaiting([
+      ...drafts.map((draft) =>
         item({
           key: `${draft.id}:vetting`,
           kind: "VETTING",
@@ -207,7 +224,92 @@ export async function waitingWorkFor(user: ApiUser, nowArg?: Date): Promise<Wait
           since: draft.phaseTransitions[0]?.transitionedAt ?? null,
         }),
       ),
-    );
+      ...(await academicPlanningQueues(user, scope, now)).map(item),
+    ]);
   }
   return [];
+}
+
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+
+/**
+ * T1, the other desks in R1: Academic Planning's own queues (Ask DAP
+ * questions and course requests, for an officer's school when the roster
+ * links them to one) and, for the General Education desk that DAP runs
+ * (DEC8), its courses still missing text and the courses with no owner.
+ */
+async function academicPlanningQueues(
+  user: ApiUser,
+  scope: Prisma.SubmissionWhereInput,
+  now: Date,
+): Promise<{ key: string; kind: WaitingKind; programme: string; text: string; href: string; since: Date | null }[]> {
+  const queues: { key: string; kind: WaitingKind; programme: string; text: string; href: string; since: Date | null }[] = [];
+  const questions = await prisma.dapQuestion.findMany({
+    // An officer: their school's questions and any sent to them. DAP-wide: all.
+    where: Object.keys(scope).length ? { status: "OPEN", OR: [{ submission: scope }, { officerId: user.id }] } : { status: "OPEN" },
+    select: { askedAt: true, dueAt: true },
+    orderBy: { askedAt: "asc" },
+  });
+  if (questions.length > 0) {
+    const late = questions.filter((question) => question.dueAt < now).length;
+    queues.push({
+      key: "dap-questions",
+      kind: "QUESTIONS",
+      programme: "Ask DAP",
+      text: `${plural(questions.length, "question", "questions")} waiting for an answer${late ? `; ${late} past the one working day` : ""}`,
+      href: "/dap-questions",
+      since: questions[0].askedAt,
+    });
+  }
+  const requests = await prisma.courseChangeRequest.findMany({
+    where: { status: "OPEN", submission: scope },
+    select: { requestedAt: true },
+    orderBy: { requestedAt: "asc" },
+  });
+  if (requests.length > 0) {
+    queues.push({
+      key: "course-requests",
+      kind: "COURSE_REQUESTS",
+      programme: "Course requests",
+      text: `${plural(requests.length, "course-list request", "course-list requests")} to answer`,
+      href: "/course-requests",
+      since: requests[0].requestedAt,
+    });
+  }
+  // The General Education desk and the owner list are DAP-wide.
+  if (user.role === "SUPER_ADMIN" || !user.schoolId) {
+    const complete = (course: { learningOutcomes: unknown; courseContent: string | null }) =>
+      normalizeLearningOutcomes(course.learningOutcomes).length >= MINIMUM_OUTCOMES && Boolean(course.courseContent?.trim());
+    const general = await prisma.masterCourse.findMany({
+      where: { AND: [OFFERED_COURSE, GENERAL_EDUCATION_WHERE] },
+      select: { learningOutcomes: true, courseContent: true },
+    });
+    const missing = general.filter((course) => !complete(course)).length;
+    if (missing > 0) {
+      queues.push({
+        key: "general-education",
+        kind: "GENERAL_EDUCATION",
+        programme: "General Education desk",
+        text: `${plural(missing, "GST, BU-GST or ENT course needs", "GST, BU-GST and ENT courses need")} learning outcomes and content`,
+        href: "/courses-we-own?owner=ge",
+        since: null,
+      });
+    }
+    const unowned = await prisma.masterCourse.findMany({
+      where: { AND: [OFFERED_COURSE, { ownerDeptId: null, ownerSchoolId: null }] },
+      select: { code: true },
+    });
+    const noOwner = unowned.filter((course) => !isGeneralEducationFamily(course.code)).length;
+    if (noOwner > 0) {
+      queues.push({
+        key: "no-owner",
+        kind: "NO_OWNER",
+        programme: "Course Owners",
+        text: `${plural(noOwner, "course has", "courses have")} no owner yet`,
+        href: "/courses-we-own?owner=none",
+        since: null,
+      });
+    }
+  }
+  return queues;
 }

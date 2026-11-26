@@ -7,8 +7,8 @@
  * of Department edit their department's; Deans read their school's; DAP
  * picks any owner, the General Education desk or the courses with no owner.
  */
-import { useEffect, useId, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useId, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { BookOpen, Loader2, Pencil, FileText } from "lucide-react";
 import { useUser } from "@/contexts/user-context";
@@ -64,12 +64,22 @@ type Draft = { learningOutcomes: string; courseContent: string; labWork: string;
 
 const semesterLabel = (semester: number | null) => (semester === 1 ? "1st" : semester === 2 ? "2nd" : "Sessional");
 
+// T1: the desk panel links here with ?owner=ge or ?owner=none.
 export default function CoursesWeOwnPage() {
+  return (
+    <Suspense fallback={<TableSkeleton columns={4} rows={6} />}>
+      <CoursesWeOwn />
+    </Suspense>
+  );
+}
+
+function CoursesWeOwn() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { currentUser, isLoading: userLoading } = useUser();
   const allowed = Boolean(currentUser && ALLOWED.includes(currentUser.role));
   const isAdministrator = currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
-  const [owner, setOwner] = useState<string | null>(null);
+  const [owner, setOwner] = useState<string | null>(searchParams.get("owner"));
   const [filter, setFilter] = useState<"ALL" | "MISSING">("ALL");
   const [search, setSearch] = useState("");
   const [result, setResult] = useState<Result | null>(null);

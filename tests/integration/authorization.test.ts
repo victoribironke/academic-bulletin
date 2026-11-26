@@ -6147,10 +6147,12 @@ describe("what is waiting on each desk (T1)", () => {
   });
 
   it("gives Academic Planning the vetting queue, and an officer only their own school's", async () => {
-    expect((await waiting(ids.admin)).map((item) => item.programme)).toEqual(["T1 Vetting Programme"]);
+    // DAP's other queues (Ask DAP, course requests, the General Education desk) come too.
+    const vetting = async (id: string) => (await waiting(id)).filter((item) => item.kind === "VETTING");
+    expect((await vetting(ids.admin)).map((item) => item.programme)).toEqual(["T1 Vetting Programme"]);
     await prisma.user.update({ where: { id: ids.admin }, data: { schoolId: ids.schoolB } });
     try {
-      expect(await waiting(ids.admin)).toEqual([]);
+      expect(await vetting(ids.admin)).toEqual([]);
     } finally {
       await prisma.user.update({ where: { id: ids.admin }, data: { schoolId: null } });
     }

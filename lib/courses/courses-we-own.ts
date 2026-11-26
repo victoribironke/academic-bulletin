@@ -25,7 +25,7 @@ export const GENERAL_EDUCATION_DESK = "General Education desk";
 /** W15: at least three learning outcomes, and the course content. */
 export const MINIMUM_OUTCOMES = 3;
 
-const GENERAL_EDUCATION_WHERE: Prisma.MasterCourseWhereInput = {
+export const GENERAL_EDUCATION_WHERE: Prisma.MasterCourseWhereInput = {
   OR: [
     { code: { startsWith: "GST " } },
     { code: { startsWith: "BU-GST " } },
