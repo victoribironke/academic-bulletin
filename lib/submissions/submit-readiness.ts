@@ -3,6 +3,7 @@
  * checks on every Submit, so a draft the page would stop can't be sent by
  * calling the API directly.
  */
+import { carriedIssues } from "@/lib/bulletin/carried-fields";
 import { createHash } from "node:crypto";
 import prisma from "@/lib/prisma";
 import { GRACE_SUBMISSION_REQUIRED } from "@/lib/grace-config";
@@ -201,6 +202,7 @@ export async function getSubmitReadinessIssues(
           minimumDuration: true,
           minimumCGPA: true,
           totalUnits: true,
+          carriedFields: true,
         },
       },
     },
@@ -212,9 +214,13 @@ export async function getSubmitReadinessIssues(
       select: { name: true },
     }),
   ]);
-  return submitReadinessIssues(
-    data.programmes[0],
-    submission.content,
-    programmes.map((programme) => programme.name),
-  );
+  return [
+    ...submitReadinessIssues(
+      data.programmes[0],
+      submission.content,
+      programmes.map((programme) => programme.name),
+    ),
+    // V18: text carried over from 2023-2027 that the Head hasn't reviewed.
+    ...carriedIssues(submission.content?.carriedFields ?? []),
+  ];
 }

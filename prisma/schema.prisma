@@ -602,6 +602,10 @@ model SubmissionContent {
   sectionG Json?
   sectionH Json?
 
+  /// E2: fields carried over from the 2023-2027 bulletin that the Head has
+  /// not yet edited or marked reviewed (rule V18).
+  carriedFields String[] @default([])
+
   // Relations
   submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 

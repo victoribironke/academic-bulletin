@@ -18,6 +18,7 @@ import { isValidMinimumCgpa, minimumCgpaRuleMessage } from "@/lib/submissions/cg
 import { refuseIfArchived } from "@/lib/cycles/archive";
 import { RECALL_PHASE, isPhaseOwner } from "@/lib/submissions/workflow";
 import { NOT_SIGNED_IN, NO_ACCESS, couldNot } from "@/lib/messages";
+import { baselineFor, stillCarried } from "@/lib/bulletin/baseline";
 
 /** Content columns that aren't anything a person wrote. */
 const BOOKKEEPING_FIELDS = new Set([
@@ -409,6 +410,15 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         content: true,
       },
     });
+
+    // E2/V18: a carried field the Head has now edited is no longer carried.
+    if (updated?.content && updated.content.carriedFields.length > 0) {
+      const remaining = stillCarried(updated.content.carriedFields, baselineFor(updated.programme.code), updated.content);
+      if (remaining.length !== updated.content.carriedFields.length) {
+        await prisma.submissionContent.update({ where: { submissionId: id }, data: { carriedFields: remaining } });
+        updated.content.carriedFields = remaining;
+      }
+    }
 
     return NextResponse.json(updated);
   } catch (error: unknown) {

@@ -335,6 +335,12 @@ beforeEach(async () => {
     })),
     skipDuplicates: true,
   });
+  // Checks last 12 hours: a test that set its own time (launch day) must not
+  // leave the default sessions expired for the tests after it.
+  await prisma.mfaVerification.updateMany({
+    where: { sessionId: { in: admins.map((admin) => `session-${admin.id}`) } },
+    data: { verifiedAt: new Date() },
+  });
 });
 
 afterAll(async () => {

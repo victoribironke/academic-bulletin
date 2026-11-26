@@ -31,6 +31,11 @@ export const SECTION_OF_ISSUE: Record<string, string> = {
   MISSING_MINIMUM_CGPA: "graduation",
   CGPA_OUT_OF_RANGE: "graduation",
   MISSING_TOTAL_UNITS: "graduation",
+  // V18: text carried over from 2023-2027, not yet reviewed (E2).
+  CARRIED_OVERVIEW: "overview",
+  CARRIED_ADMISSION: "admission",
+  CARRIED_GRADUATION: "graduation",
+  CARRIED_REGULATIONS: "regulations",
 };
 
 /** Checks that only say something is empty: not shown on a section nobody has started. */

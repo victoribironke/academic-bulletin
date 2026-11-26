@@ -103,6 +103,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { PhotoUploadGuidance } from "@/components/shared/photo-upload-guidance";
 import { useConfirmDelete } from "@/components/shared/typed-delete-dialog";
 import { ProgrammeCountdown } from "@/components/calendar/countdown";
+import { CarriedNote, CarriedTextProvider, DraftSummaryButton } from "@/components/submissions/carried-text";
 
 interface Submission {
   id: string;
@@ -486,6 +487,8 @@ export default function SubmissionDetailPage({
   const [totalUnits, setTotalUnits] = useState<number>(154);
   const [regulations, setRegulations] = useState("");
   const [summaryOfChanges, setSummaryOfChanges] = useState("");
+  // E3: a drafted Summary of Changes reloads the editor with it.
+  const [summaryVersion, setSummaryVersion] = useState(0);
 
   // GRACE compliance check state
   const [graceCheckingPhilosophy, setGraceCheckingPhilosophy] = useState(false);
@@ -1250,6 +1253,7 @@ export default function SubmissionDetailPage({
   const openCommentCount = submission.comments.filter((c) => c.status === "OPEN").length;
 
   return (
+    <CarriedTextProvider submissionId={id} refreshKey={String(lastSavedAt?.getTime() ?? 0)} canEdit={canEdit}>
     <div className="space-y-4">
       <PageHeader
         className="mb-2"
@@ -1933,6 +1937,7 @@ export default function SubmissionDetailPage({
                     <div className="space-y-2">
                       <Label>Programme Vision</Label>
                       <FieldHelp field="vision" value={vision} />
+                      <CarriedNote field="vision" value={vision} />
                       {canEdit ? (
                         <Textarea
                           value={vision}
@@ -1954,6 +1959,7 @@ export default function SubmissionDetailPage({
                     <div className="space-y-2">
                       <Label>Programme Mission</Label>
                       <FieldHelp field="mission" value={mission} />
+                      <CarriedNote field="mission" value={mission} />
                       {canEdit ? (
                         <Textarea
                           value={mission}
@@ -1977,6 +1983,7 @@ export default function SubmissionDetailPage({
                         <div>
                           <Label>Programme Philosophy *</Label>
                           <FieldHelp field="philosophy" value={philosophy} />
+                          <CarriedNote field="philosophy" value={philosophy} />
                           <p className="text-xs text-muted-foreground mt-0.5">
                             {GRACE_SUBMISSION_REQUIRED ? (
                               <>
@@ -2072,6 +2079,7 @@ export default function SubmissionDetailPage({
                     <div className="space-y-2">
                       <Label>Programme Objectives *</Label>
                       <FieldHelp field="objectives" value={objectives} />
+                      <CarriedNote field="objectives" value={objectives} />
                       <p className="text-xs text-muted-foreground">
                         The specific objectives are to:
                       </p>
@@ -2125,6 +2133,7 @@ export default function SubmissionDetailPage({
                     <div className="space-y-2">
                       <Label>Unique Features</Label>
                       <FieldHelp field="uniqueFeatures" value={uniqueFeatures} />
+                      <CarriedNote field="uniqueFeatures" value={uniqueFeatures} />
                       {uniqueFeatures.map((feature, index) => (
                         <div key={index} className="flex items-start gap-2">
                           <span className="mt-2 text-sm text-muted-foreground w-6">
@@ -2175,6 +2184,7 @@ export default function SubmissionDetailPage({
                     <div className="space-y-2">
                       <Label>Employability Skills</Label>
                       <FieldHelp field="employability" value={employability} />
+                      <CarriedNote field="employability" value={employability} />
                       {employability.map((skill, index) => (
                         <div key={index} className="flex items-start gap-2">
                           <span className="mt-2 text-sm text-muted-foreground w-6">
@@ -2234,6 +2244,7 @@ export default function SubmissionDetailPage({
                         {UNIVERSITY_ADMISSION.utme.text}
                       </p>
                       <FieldHelp field="utmeRequirements" value={utmeRequirements} />
+                      <CarriedNote field="utmeRequirements" value={utmeRequirements} />
                       {canEdit ? (
                         <Textarea
                           value={utmeRequirements}
@@ -2258,6 +2269,7 @@ export default function SubmissionDetailPage({
                         {UNIVERSITY_ADMISSION.directEntry.text}
                       </p>
                       <FieldHelp field="directEntryRequirements" value={directEntryRequirements} />
+                      <CarriedNote field="directEntryRequirements" value={directEntryRequirements} />
                       {canEdit ? (
                         <Textarea
                           value={directEntryRequirements}
@@ -2282,6 +2294,7 @@ export default function SubmissionDetailPage({
                         {UNIVERSITY_ADMISSION.transfer.text}
                       </p>
                       <FieldHelp field="transferRequirements" value={transferRequirements} />
+                      <CarriedNote field="transferRequirements" value={transferRequirements} />
                       {canEdit ? (
                         <Textarea
                           value={transferRequirements}
@@ -2344,6 +2357,7 @@ export default function SubmissionDetailPage({
                     <div className="space-y-2">
                       <Label>Graduation Requirements *</Label>
                       <FieldHelp field="graduationRequirements" value={graduationRequirements} />
+                      <CarriedNote field="graduationRequirements" value={graduationRequirements} />
                       {canEdit ? (
                         <Textarea
                           value={graduationRequirements}
@@ -2452,6 +2466,7 @@ export default function SubmissionDetailPage({
                     <div className="space-y-2">
                       <Label>Programme Regulations</Label>
                       <FieldHelp field="regulations" value={regulations} />
+                      <CarriedNote field="regulations" value={regulations} />
                       {canEdit ? (
                         <RichTextEditor
                           content={regulations}
@@ -2471,8 +2486,18 @@ export default function SubmissionDetailPage({
                     <div className="space-y-2">
                       <Label>Summary of Changes</Label>
                       <FieldHelp field="summaryOfChanges" value={summaryOfChanges} />
+                      <DraftSummaryButton
+                        submissionId={id}
+                        current={summaryOfChanges}
+                        onUse={(html) => {
+                          setSummaryOfChanges(html);
+                          setSummaryVersion((version) => version + 1);
+                          setHasChanges(true);
+                        }}
+                      />
                       {canEdit ? (
                         <RichTextEditor
+                          key={summaryVersion}
                           content={summaryOfChanges}
                           onChange={(content) => {
                             setSummaryOfChanges(content);
@@ -2701,5 +2726,6 @@ export default function SubmissionDetailPage({
       </Dialog>
       {deleteDialog}
     </div>
+    </CarriedTextProvider>
   );
 }
