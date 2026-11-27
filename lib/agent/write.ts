@@ -144,7 +144,12 @@ const defaultAi: AiCall | null = process.env.ANTHROPIC_API_KEY
       const response = await client.messages.create(
         {
           model: AI_MODEL,
-          max_tokens: 600,
+          // A short rewrite needs no thinking: with it on (the model's
+          // default), the thinking used up a small token limit and no text
+          // came back. Thinking off is allowed at effort high or below.
+          max_tokens: 2000,
+          thinking: { type: "disabled" },
+          output_config: { effort: "low" },
           system:
             "You write the opening of short reminder emails from the Directorate of Academic Planning at Babcock University to Heads of Department preparing their programme's bulletin. " +
             "Use only the facts given: never add a number, date or claim that is not in them, and write no links (the programme links follow your opening). " +
@@ -154,7 +159,10 @@ const defaultAi: AiCall | null = process.env.ANTHROPIC_API_KEY
         },
         { signal },
       );
-      return response.content.map((part) => (part.type === "text" ? part.text : "")).join("").trim();
+      const text = response.content.map((part) => (part.type === "text" ? part.text : "")).join("").trim();
+      // Say why there's no usable text, so DAP's samples show it (T6).
+      if (response.stop_reason !== "end_turn") throw new Error(`the model stopped early (${response.stop_reason})`);
+      return text;
     }
   : null;
 
