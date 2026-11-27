@@ -7,6 +7,7 @@
  */
 import prisma from "@/lib/prisma";
 import { courseCodeKey } from "@/lib/courses/code-key";
+import { COURSE_OWNER_SELECT, PROGRAMME_PLACE_SELECT, isOwnedElsewhere, programmePlace } from "@/lib/courses/shared-courses";
 import { confirmedCourseLists } from "@/lib/courses/course-list";
 import { getCourseGraceBlockers } from "@/lib/courses/grace-compliance";
 import { generalEducationBlockFor, isGeneralEducationCourse, programmeLevels } from "@/lib/courses/general-education";
@@ -44,7 +45,7 @@ export async function loadDraftData(submissionId: string): Promise<DraftData> {
     select: {
       id: true,
       currentPhase: true,
-      programme: { select: { code: true, name: true, duration: true, isNew: true, departmentId: true } },
+      programme: { select: { code: true, name: true, duration: true, isNew: true, ...PROGRAMME_PLACE_SELECT } },
       content: true,
       courses: {
         select: {
@@ -55,14 +56,19 @@ export async function loadDraftData(submissionId: string): Promise<DraftData> {
           semester: true,
           status: true,
           masterCourseId: true,
-          masterCourse: { select: { type: true, ownership: true, ownerDeptId: true } },
+          lectureHours: true,
+          practicalHours: true,
+          electiveGroupId: true,
+          masterCourse: { select: COURSE_OWNER_SELECT },
           description: { select: { learningOutcomes: true, courseContent: true } },
         },
       },
       comments: { where: { status: "OPEN" }, select: { section: true } },
+      electiveGroups: { select: { id: true, name: true, chooseUnits: true } },
     },
   });
   const departmentId = draft.programme.departmentId;
+  const place = programmePlace(draft.programme);
   const unlinked = draft.courses.filter((course) => !course.masterCourseId).map((course) => course.code);
   const [staff, confirmed, blockers, registryMatches] = await Promise.all([
     prisma.staff.findMany({
@@ -99,8 +105,12 @@ export async function loadDraftData(submissionId: string): Promise<DraftData> {
         status: course.status,
         inRegistry: Boolean(course.masterCourseId) || known.has(courseCodeKey(course.code)),
         generalEducation: isGeneralEducationCourse(course),
-        owned: !course.masterCourse || course.masterCourse.ownerDeptId === departmentId,
+        // W4: the same test as the Course Structure screen's credit summary.
+        owned: !isOwnedElsewhere(course, place),
         description: course.description ? { learningOutcomes: outcomes, courseContent: course.description.courseContent ?? "" } : null,
+        lectureHours: course.lectureHours,
+        practicalHours: course.practicalHours,
+        electiveGroupId: course.electiveGroupId,
       };
     }),
     staff: staff.map(({ firstName, surname, ...member }) => ({
@@ -111,6 +121,7 @@ export async function loadDraftData(submissionId: string): Promise<DraftData> {
     openComments: draft.comments,
     courseListConfirmed: confirmed.has(draft.id),
     graceBlocked: blocked,
+    electiveGroups: draft.electiveGroups,
   };
 }
 

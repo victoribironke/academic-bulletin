@@ -10,6 +10,8 @@ import type { SubmissionStatus, UserRole } from "@prisma/client";
 import { DEFAULT_PHASE_OWNERS, canEditSubmissionAtStage, getWorkflowAccess, resolveWorkflowTransition } from "@/lib/submissions/workflow";
 import { GENERAL_EDUCATION_LOCKED_MESSAGE } from "@/lib/courses/general-education";
 import { calculateSubmissionProgress } from "@/lib/submissions/progress";
+import { runRules } from "@/lib/checks/rules";
+import { creditSummary, graduationNumbersText } from "@/lib/courses/credit-summary";
 import { formatStaffName, getTitleDisplay, staffRankLabel } from "@/lib/validation/name-format";
 import { PRACTICE_IDS, PRACTICE_PREFIX, isPracticeId } from "@/lib/practice/ids";
 import {
@@ -607,6 +609,62 @@ function practicePreview(state: PracticeState) {
   };
 }
 
+// ── Checks (F1, F2) and the credit numbers (W4, W5) ──
+
+function practiceCourses(state: PracticeState) {
+  return state.courses.map((course) => {
+    const description = state.descriptions.find((item) => item.courseId === course.id);
+    return {
+      code: course.code,
+      title: course.title,
+      units: course.units,
+      level: course.level,
+      semester: course.semester,
+      status: course.status,
+      // The practice courses come from the Registry and the General Education block.
+      inRegistry: true,
+      generalEducation: course.isGeneralEducation,
+      owned: true,
+      description: description
+        ? { learningOutcomes: description.learningOutcomes.filter((item) => item.trim()), courseContent: description.courseContent ?? "" }
+        : null,
+    };
+  });
+}
+
+/** The same checks as a real programme; GRACE (V12) runs on real programmes only. */
+function practiceChecks(state: PracticeState) {
+  const confirmed = Boolean(state.courseList.confirmedAt) && state.courseList.confirmedFingerprint === courseFingerprint(state);
+  const results = runRules({
+    submissionId: PRACTICE_IDS.draft,
+    phase: state.submission.currentPhase,
+    programme: { code: PRACTICE_PROGRAMME.code, name: PRACTICE_PROGRAMME.name, duration: PRACTICE_PROGRAMME.duration, isNew: false },
+    content: state.content,
+    courses: practiceCourses(state),
+    staff: state.staff
+      .filter((member) => member.isActive)
+      .map((member) => ({
+        type: member.type,
+        academicRank: member.academicRank,
+        highestQualification: member.highestQualification || null,
+        customJobTitle: member.customJobTitle,
+        name: `${member.firstName} ${member.surname}`.trim(),
+      })),
+    openComments: state.comments.filter((comment) => comment.status === "OPEN").map((comment) => ({ section: comment.section })),
+    courseListConfirmed: confirmed,
+    graceBlocked: [],
+  }).map((finding) => ({ ...finding, accepted: null }));
+  const mustFix = results.filter((result) => result.level === "MUST").length;
+  const pleaseCheck = results.filter((result) => result.level === "CHECK").length;
+  return { ready: mustFix === 0, counts: { mustFix, pleaseCheck, accepted: 0 }, open: mustFix + pleaseCheck, results };
+}
+
+function practiceCredits(state: PracticeState) {
+  const summary = creditSummary(practiceCourses(state));
+  const stated = typeof state.content.totalUnits === "number" ? state.content.totalUnits : null;
+  return { ...summary, statedTotal: stated, graduationText: summary.totals.total > 0 ? graduationNumbersText(summary.totals) : null };
+}
+
 // ── Router ──
 
 export function handlePracticeRequest(state: PracticeState, viewer: PracticeViewer, request: PracticeRequest): PracticeResult {
@@ -633,6 +691,15 @@ export function handlePracticeRequest(state: PracticeState, viewer: PracticeView
     }
     if (sub === "options" && method === "GET") return ok(state, { family: null });
     if (sub === "sections" && method === "GET") return ok(state, practiceSections(state));
+    if (sub === "checks") {
+      if (method === "GET") return ok(state, practiceChecks(state));
+      return refuse(state, 409, "Accepting a check with a reason is kept on your real programme, not in the practice one.", { code: "PRACTICE" });
+    }
+    if (sub === "credit-summary" && method === "GET") return ok(state, practiceCredits(state));
+    if (sub === "elective-groups") {
+      if (method === "GET") return ok(state, { groups: [] });
+      return refuse(state, 409, "Elective groups are made on your real programme, not in the practice one.", { code: "PRACTICE" });
+    }
     if (sub === "questions") {
       if (method === "GET") return ok(state, state.questions.map((question) => questionView(question, viewer)));
       if (method === "POST") {

@@ -108,6 +108,28 @@ describe("the rules engine (F1)", () => {
     expect(rules({ ...data, content: { ...data.content, minimumCGPA: 5.5 } })).toContain("V26:MUST");
   });
 
+  it("asks to check units that don't match the contact hours, but not for projects (V23, W2)", () => {
+    const data = draft();
+    data.courses = data.courses.map((item) =>
+      item.code === "ECO 101" ? { ...item, lectureHours: 30, practicalHours: 0 } : item.code === "ECO 111" ? { ...item, lectureHours: 45, practicalHours: 0 } : item.code === "ECO 490" ? { ...item, lectureHours: 0, practicalHours: 0 } : item,
+    );
+    const found = runRules(data).filter((finding) => finding.rule === "V23");
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ level: "CHECK", items: ["ECO 101"] });
+    expect(found[0].message).toContain("ECO 101 (3 units; 30 lecture and 0 practical hours give 2)");
+  });
+
+  it("needs each elective group to say how many units a student chooses, and to offer that many (V25, W3)", () => {
+    const data = draft();
+    data.courses = data.courses.map((item) => (item.code === "ECO 401" || item.code === "ECO 411" ? { ...item, status: "ELECTIVE", electiveGroupId: "g1" } : item));
+    expect(runRules({ ...data, electiveGroups: [{ id: "g1", name: "400 options", chooseUnits: 3 }] }).filter((finding) => finding.rule === "V25")).toEqual([]);
+    expect(rules({ ...data, electiveGroups: [{ id: "g1", name: "400 options", chooseUnits: 9 }] })).toContain("V25:MUST");
+    expect(rules({ ...data, electiveGroups: [{ id: "g1", name: "400 options", chooseUnits: 3 }, { id: "g2", name: "Empty", chooseUnits: 3 }] })).toContain("V25:MUST");
+    // Electives outside any group: a "Please check", and they count in full.
+    const loose = runRules({ ...data, electiveGroups: [] }).find((finding) => finding.rule === "V25");
+    expect(loose).toMatchObject({ level: "CHECK", items: ["ECO 401", "ECO 411"] });
+  });
+
   it("works out the credit numbers the app writes (W4, W5)", () => {
     const numbers = creditNumbers([
       course("GST 111", 100, 1, 2, { generalEducation: true }),

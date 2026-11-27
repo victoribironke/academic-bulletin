@@ -4,8 +4,9 @@ import React from "react";
 import { Separator } from "@/components/ui/separator";
 import { cleanText, departmentLabel } from "@/lib/bulletin/document-utils";
 import { SafeRichText } from "@/components/shared/safe-rich-text";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BulletinProgramme, BulletinCourse } from "@/lib/bulletin/generation";
+import { CreditSummaryTable } from "@/components/courses/credit-summary-table";
+import { OUTCOMES_LEAD, courseHeading, graduationNumbersLine, programmeCreditSummary } from "@/lib/bulletin/course-layout";
 
 interface BulletinProgrammeViewProps {
   programme: BulletinProgramme;
@@ -19,6 +20,9 @@ export function BulletinProgrammeView({
   const nonAcademicStaff = programme.staff.filter(
     (s) => s.type === "NON_ACADEMIC",
   );
+  // W4 and W5: the same figures the checks and the exports use.
+  const credits = programmeCreditSummary(programme);
+  const numbersLine = graduationNumbersLine(credits);
 
   // Helper to group courses
   // Sessional courses have no semester (B13, rule W17) and get their own table.
@@ -250,49 +254,11 @@ export function BulletinProgrammeView({
           <p className="mb-4">{programme.content.graduationRequirements}</p>
         )}
 
+        {/* W5: the graduation numbers and W4: the credit summary, built by the app. */}
+        {numbersLine && <p className="mb-4">{numbersLine}</p>}
         <div className="mt-4 mb-6">
-          <h3 className="font-semibold mb-2">Credit Requirements Summary</h3>
-          <div className="overflow-x-auto text-sm">
-            <Table className="border w-full">
-              <TableHeader className="bg-muted">
-                <TableRow>
-                  <TableHead className="w-1/4">Level</TableHead>
-                  <TableHead className="w-1/4">Core Units</TableHead>
-                  <TableHead className="w-1/4">Elective Units</TableHead>
-                  <TableHead className="w-1/4">Total</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {Array.from(new Set(programme.courses.map(c => c.level)))
-                  .sort()
-                  .map(level => {
-                    const courses = programme.courses.filter(c => c.level === level);
-                    const core = courses.filter(c => c.status === "CORE" || c.status === "MANDATORY").reduce((acc, c) => acc + c.units, 0);
-                    const elective = courses.filter(c => c.status === "ELECTIVE").reduce((acc, c) => acc + c.units, 0);
-                    return (
-                      <TableRow key={level}>
-                        <TableCell className="font-medium">{level}</TableCell>
-                        <TableCell>{core}</TableCell>
-                        <TableCell>{elective}</TableCell>
-                        <TableCell className="font-semibold">{core + elective}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-                <TableRow className="bg-muted/50">
-                  <TableCell className="font-bold">Total Requirements</TableCell>
-                  <TableCell className="font-bold">
-                    {programme.courses.filter(c => c.status === "CORE" || c.status === "MANDATORY").reduce((acc, c) => acc + c.units, 0)}
-                  </TableCell>
-                  <TableCell className="font-bold">
-                    {programme.courses.filter(c => c.status === "ELECTIVE").reduce((acc, c) => acc + c.units, 0)}
-                  </TableCell>
-                  <TableCell className="text-base font-semibold text-foreground">
-                    {programme.courses.reduce((sum, c) => sum + c.units, 0)}
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </div>
+          <h3 className="font-semibold mb-2">Credit Summary</h3>
+          <CreditSummaryTable summary={credits} />
         </div>
 
         <div className="grid grid-cols-2 gap-4 mt-4">
@@ -303,8 +269,8 @@ export function BulletinProgrammeView({
             </div>
           )}
           <div className="bg-muted p-3 rounded">
-            <span className="font-medium">Total Credit Units Expected:</span>{" "}
-            {programme.content?.totalUnits || programme.courses.reduce((sum, c) => sum + c.units, 0)}
+            <span className="font-medium">Minimum Credits to Graduate:</span>{" "}
+            {credits.totals.total}
           </div>
         </div>
       </section>
@@ -396,22 +362,23 @@ export function BulletinProgrammeView({
             .filter((c) => c.description?.courseContent || (c.description?.learningOutcomes && c.description.learningOutcomes.length > 0))
             .map((course) => (
               <div key={course.code} className="mb-4">
-                <h3 className="font-semibold">{course.code} - {course.title} ({course.units} Units)</h3>
-                {course.description?.courseContent && (
-                  // Plain text, exactly as the Word and PDF exports print it.
-                  <p className="mt-1 text-sm whitespace-pre-line">
-                    {cleanText(course.description.courseContent)}
-                  </p>
-                )}
+                {/* W15: the heading line, the lead-in, the outcomes, then the content. */}
+                <h3 className="font-semibold">{courseHeading(course)}</h3>
                 {course.description?.learningOutcomes && course.description.learningOutcomes.length > 0 && (
-                  <div className="mt-2 text-sm text-muted-foreground">
-                    <strong>Learning Outcomes:</strong>
-                    <ul className="list-disc list-inside mt-1">
+                  <div className="mt-2 text-sm">
+                    <p className="font-medium">{OUTCOMES_LEAD}</p>
+                    <ol className="mt-1 list-decimal list-inside">
                       {course.description.learningOutcomes.map((outcome, i) => (
                         <li key={i}>{outcome}</li>
                       ))}
-                    </ul>
+                    </ol>
                   </div>
+                )}
+                {course.description?.courseContent && (
+                  // Plain text, exactly as the Word and PDF exports print it.
+                  <p className="mt-2 text-sm whitespace-pre-line">
+                    {cleanText(course.description.courseContent)}
+                  </p>
                 )}
               </div>
             ))}

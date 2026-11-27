@@ -63,6 +63,25 @@ describe("practice programme (U6)", () => {
     expect(state.courses.some((course) => course.id === id)).toBe(false);
   });
 
+  it("shows the readiness checks and the credit numbers, and keeps nothing it can't (F2, W4, W5)", () => {
+    const state = startingPracticeState("HOD");
+    const checks = call(state, head, "GET", `${draft}/checks`);
+    expect(checks.status).toBe(200);
+    const body = checks.body as { ready: boolean; counts: { mustFix: number }; results: { rule: string; accepted: null }[] };
+    // A half-drafted programme: things to fix, never GRACE (real programmes only).
+    expect(body.ready).toBe(false);
+    expect(body.counts.mustFix).toBeGreaterThan(0);
+    expect(body.results.some((result) => result.rule === "V12")).toBe(false);
+    expect(call(state, head, "POST", `${draft}/checks`, { key: "V3", reason: "A reason long enough" }).status).toBe(409);
+
+    const credits = call(state, head, "GET", `${draft}/credit-summary`).body as { totals: { total: number; generalEducation: number }; graduationText: string };
+    expect(credits.totals.total).toBe(state.courses.reduce((sum, course) => sum + course.units, 0));
+    expect(credits.totals.generalEducation).toBeGreaterThan(0);
+    expect(credits.graduationText).toMatch(/^To graduate, a student must earn at least \d+ credits/);
+    expect(call(state, head, "GET", `${draft}/elective-groups`).body).toEqual({ groups: [] });
+    expect(call(state, head, "POST", `${draft}/elective-groups`, { name: "Options", chooseUnits: 3 }).status).toBe(409);
+  });
+
   it("keeps the General Education block locked, as on a real draft", () => {
     const state = startingPracticeState("HOD");
     const general = state.courses.find((course) => course.isGeneralEducation)!;

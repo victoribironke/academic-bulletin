@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { carryAdded, carryMessage } from "@/lib/programmes/option-families";
 import prisma from "@/lib/prisma";
+import { GROUP_RULE_MESSAGE, HOURS_RULE_MESSAGE, readElectiveGroup, readHours } from "@/lib/courses/hours-and-groups";
 import {
   formatCourseTitle,
   formatCourseCode,
@@ -20,6 +21,7 @@ import {
   ownerName,
   programmePlace,
   startDescriptionFromRegistry,
+  isOwnedElsewhere,
 } from "@/lib/courses/shared-courses";
 import { isGeneralEducationCourse } from "@/lib/courses/general-education";
 import { recordActivity } from "@/lib/activity-log";
@@ -110,6 +112,8 @@ export async function GET(request: Request) {
           isGeneralEducation: locked,
           isMandatory: locked,
           descriptionAccess: access,
+          // W4: taught by another department (a non-departmental credit).
+          ownedElsewhere: place ? isOwnedElsewhere(course, place) : false,
           sharedOwner: ownerName(course.masterCourse),
           sharedWithProgrammes: course.masterCourse?._count.programmeLinks ?? 0,
         };
@@ -141,6 +145,9 @@ export async function POST(request: Request) {
       level,
       prerequisites,
       masterCourseId,
+      lectureHours,
+      practicalHours,
+      electiveGroupId,
     } = body;
 
     if (
@@ -245,6 +252,15 @@ export async function POST(request: Request) {
       }
     }
 
+    // W2: contact hours; W3: the elective group, on this same draft.
+    const lecture = readHours(lectureHours);
+    const practical = readHours(practicalHours);
+    if (!lecture.ok || !practical.ok) {
+      return NextResponse.json({ error: HOURS_RULE_MESSAGE }, { status: 400 });
+    }
+    const group = await readElectiveGroup(electiveGroupId, submissionId);
+    if (!group.ok) return NextResponse.json({ error: GROUP_RULE_MESSAGE }, { status: 400 });
+
     const course = await prisma.course.create({
       data: {
         code: formattedCode,
@@ -256,6 +272,9 @@ export async function POST(request: Request) {
         submissionId,
         prerequisites: prerequisites || null,
         masterCourseId: masterCourseId || null,
+        lectureHours: lecture.value ?? null,
+        practicalHours: practical.value ?? null,
+        electiveGroupId: group.value ?? null,
       },
       include: {
         description: true,

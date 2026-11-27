@@ -52,6 +52,9 @@ import { DELETE_WORD, useConfirmDelete } from "@/components/shared/typed-delete-
 import { useUser } from "@/contexts/user-context";
 import { CourseListConfirmation } from "@/components/forms/course-list-confirmation";
 import { OptionFamilyNotice, announceOptionsChanged, type OptionFamilySummary } from "@/components/courses/option-family-notice";
+import { ElectiveGroupsPanel, type ElectiveGroupView } from "@/components/courses/elective-groups-panel";
+import { CreditSummaryTable } from "@/components/courses/credit-summary-table";
+import { creditSummary, hoursHint, unitsFromHours } from "@/lib/courses/credit-summary";
 import { deleteNeedsReason } from "@/lib/delete-reason";
 import { TableToolbar } from "@/components/shared/table-toolbar";
 import { TablePagination } from "@/components/shared/table-pagination";
@@ -155,7 +158,18 @@ interface Course {
   isNew?: boolean;
   isMandatory?: boolean; // New flag for locking
   importedDescription?: PreviousCourse["description"];
+  /** W2: contact hours a semester (empty until entered). */
+  lectureHours?: number | null;
+  practicalHours?: number | null;
+  /** W3: the elective group, or NO_GROUP in the table. */
+  electiveGroupId?: string | null;
+  isGeneralEducation?: boolean;
+  /** W4: taught by another department (a non-departmental credit). */
+  ownedElsewhere?: boolean;
 }
+
+/** The "Elective group" column's "no group" choice (a select item can't be empty). */
+const NO_GROUP = "none";
 
 export function CourseTable({
   submissionId,
@@ -177,6 +191,16 @@ export function CourseTable({
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [activeLevel, setActiveLevel] = useState("100");
+  // W3: the draft's named elective groups.
+  const [electiveGroups, setElectiveGroups] = useState<ElectiveGroupView[]>([]);
+  const loadElectiveGroups = useCallback(async () => {
+    const res = await fetch(`/api/submissions/${submissionId}/elective-groups`).catch(() => null);
+    if (res?.ok) setElectiveGroups(((await res.json()) as { groups: ElectiveGroupView[] }).groups);
+  }, [submissionId]);
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => void loadElectiveGroups(), 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [loadElectiveGroups]);
 
   // Import from registry state
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -276,6 +300,7 @@ export function CourseTable({
           grouped[course.level].push({
             ...course,
             semester: course.semester ?? SESSIONAL_VALUE,
+            electiveGroupId: course.electiveGroupId ?? NO_GROUP,
           });
         }
         if (course.id) {
@@ -624,6 +649,39 @@ export function CourseTable({
       width: "70px",
     },
     {
+      // W2: units = lecture hours / 15 + practical hours / 45.
+      key: "lectureHours",
+      header: "Lecture hrs",
+      type: "number",
+      min: 0,
+      max: 600,
+      optional: true,
+      alwaysEditable: true,
+      width: "80px",
+    },
+    {
+      key: "practicalHours",
+      header: "Practical hrs",
+      type: "number",
+      min: 0,
+      max: 600,
+      optional: true,
+      alwaysEditable: true,
+      width: "80px",
+    },
+    {
+      // W3: an elective's named group.
+      key: "electiveGroupId",
+      header: "Elective group",
+      type: "select",
+      options: [
+        { value: NO_GROUP, label: "None" },
+        ...electiveGroups.map((group) => ({ value: group.id, label: group.name })),
+      ],
+      alwaysEditable: true,
+      width: "150px",
+    },
+    {
       key: "prerequisites",
       header: "Prerequisites",
       type: "text",
@@ -663,6 +721,9 @@ export function CourseTable({
             ...course,
             // 1, 2, or null for a sessional course (B13)
             semester: parseCourseSemester(course.semester) ?? null,
+            electiveGroupId: course.electiveGroupId && course.electiveGroupId !== NO_GROUP ? course.electiveGroupId : null,
+            lectureHours: course.lectureHours ?? null,
+            practicalHours: course.practicalHours ?? null,
             submissionId,
           };
 
@@ -766,6 +827,7 @@ export function CourseTable({
         toast.error(`Some courses failed to save: ${errors.join("; ")}`);
       } else {
         setIsDirty(false);
+        void loadElectiveGroups();
         if (!silent) toast.success("All courses saved successfully");
         window.dispatchEvent(
           new CustomEvent("bulletin:courses-changed", {
@@ -833,6 +895,37 @@ export function CourseTable({
   }, [isDirty, coursesByLevel, disabled, isLoading]);
 
   // Calculate totals
+  // W4: the credit summary, built from the rows as they stand (saved or not).
+  const allRows = useMemo(() => LEVELS.flatMap((level) => coursesByLevel[level] || []), [LEVELS, coursesByLevel]);
+  const summary = useMemo(
+    () =>
+      creditSummary(
+        allRows
+          .filter((course) => course.code?.trim())
+          .map((course) => ({
+            code: course.code,
+            level: course.level,
+            units: Number(course.units) || 0,
+            status: course.status,
+            generalEducation: !!(course.isGeneralEducation || course.isMandatory),
+            owned: !course.ownedElsewhere,
+            electiveGroupId: course.electiveGroupId && course.electiveGroupId !== NO_GROUP ? course.electiveGroupId : null,
+          })),
+        electiveGroups,
+      ),
+    [allRows, electiveGroups],
+  );
+  // W2: a gentle note when the hours don't give the units.
+  const hoursMismatches = useMemo(
+    () =>
+      allRows.filter((course) => {
+        if (course.isMandatory || /project|siwes|internship|industrial|practicum|dissertation/i.test(course.title ?? "")) return false;
+        const fromHours = unitsFromHours(course.lectureHours, course.practicalHours);
+        return fromHours !== null && Math.abs(fromHours - (Number(course.units) || 0)) > 0.01;
+      }),
+    [allRows],
+  );
+
   const getTotals = (level: number) => {
     const courses = coursesByLevel[level] || [];
     const sem1 = courses.filter((c) => parseCourseSemester(c.semester) === 1);
@@ -1004,6 +1097,32 @@ export function CourseTable({
             );
           })}
         </Tabs>
+
+        {/* W3: named elective groups; W4: the credit summary the app builds. */}
+        <ElectiveGroupsPanel
+          submissionId={submissionId}
+          groups={electiveGroups}
+          disabled={disabled}
+          onChanged={() => {
+            void loadElectiveGroups();
+            window.dispatchEvent(new CustomEvent("bulletin:courses-changed", { detail: { submissionId } }));
+          }}
+        />
+        <section aria-labelledby={`${submissionId}-credit-summary`} className="space-y-2">
+          <h3 id={`${submissionId}-credit-summary`} className="text-sm font-semibold">
+            Credit summary
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Built by the app from the courses above, as the bulletin prints it (rule W4). Non-departmental means courses taught by other
+            departments; an elective group counts as the units a student chooses from it.
+          </p>
+          <CreditSummaryTable summary={summary} />
+          {hoursMismatches.length > 0 && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Please check the contact hours of {hoursMismatches.map((course) => course.code).join(", ")}: {hoursHint(hoursMismatches[0].units)}
+            </p>
+          )}
+        </section>
       </CardContent>
 
       {/* Import from Registry Dialog */}

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { carryChanged, carryMessage, carryRemoved } from "@/lib/programmes/option-families";
 import prisma from "@/lib/prisma";
+import { GROUP_RULE_MESSAGE, HOURS_RULE_MESSAGE, readElectiveGroup, readHours } from "@/lib/courses/hours-and-groups";
 import {
   SEMESTER_RULE_MESSAGE,
   UNITS_RULE_MESSAGE,
@@ -106,6 +107,9 @@ export async function PATCH(
       level,
       prerequisites,
       masterCourseId,
+      lectureHours,
+      practicalHours,
+      electiveGroupId,
     } = body;
 
     // Check if course exists
@@ -215,6 +219,17 @@ export async function PATCH(
       updateData.prerequisites = prerequisites || null;
     if (masterCourseId !== undefined)
       updateData.masterCourseId = masterCourseId || null;
+    // W2: contact hours; W3: the elective group, on this same draft.
+    const lecture = readHours(lectureHours);
+    const practical = readHours(practicalHours);
+    if (!lecture.ok || !practical.ok) {
+      return NextResponse.json({ error: HOURS_RULE_MESSAGE }, { status: 400 });
+    }
+    if (lecture.value !== undefined) updateData.lectureHours = lecture.value;
+    if (practical.value !== undefined) updateData.practicalHours = practical.value;
+    const group = await readElectiveGroup(electiveGroupId, existing.submissionId);
+    if (!group.ok) return NextResponse.json({ error: GROUP_RULE_MESSAGE }, { status: 400 });
+    if (group.value !== undefined) updateData.electiveGroupId = group.value;
 
     const course = await prisma.course.update({
       where: { id },

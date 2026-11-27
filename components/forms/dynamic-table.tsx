@@ -32,6 +32,10 @@ export interface Column<T> {
   options?: { value: string; label: string }[];
   width?: string;
   required?: boolean;
+  /** A number column that can be left empty (saved as nothing, not 0). */
+  optional?: boolean;
+  /** Editable even on a row that is otherwise read-only (not on a locked row). */
+  alwaysEditable?: boolean;
 }
 
 interface DynamicTableProps<T extends Record<string, unknown>> {
@@ -159,7 +163,8 @@ export function DynamicTable<T extends Record<string, unknown>>({
 
   const renderCell = (row: T, rowIndex: number, column: Column<T>) => {
     const value = row[column.key];
-    const rowEditable = isRowEditable ? isRowEditable(row) : true;
+    const rowEditable =
+      (isRowEditable ? isRowEditable(row) : true) || (!!column.alwaysEditable && !isRowLocked?.(row));
 
     if (disabled || column.type === "readonly" || !rowEditable) {
       if (column.type === "select" || column.type === "combobox") {
@@ -201,7 +206,11 @@ export function DynamicTable<T extends Record<string, unknown>>({
             min={column.min}
             max={column.max}
             onChange={(e) =>
-              updateCell(rowIndex, column.key, parseInt(e.target.value) || 0)
+              updateCell(
+                rowIndex,
+                column.key,
+                column.optional && e.target.value.trim() === "" ? null : parseInt(e.target.value) || 0,
+              )
             }
             placeholder={column.placeholder}
             className="h-8 text-sm w-20"

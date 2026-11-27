@@ -107,6 +107,9 @@ import { DELETE as deleteCourseRows } from "@/app/api/courses/bulk/route";
 import { confirmCourseList as confirmCourseListNow } from "@/lib/courses/course-list";
 import { GET as readSectionMarks } from "@/app/api/submissions/[id]/sections/route";
 import { GET as readChecks, POST as acceptCheck } from "@/app/api/submissions/[id]/checks/route";
+import { GET as listElectiveGroups, POST as addElectiveGroup } from "@/app/api/submissions/[id]/elective-groups/route";
+import { DELETE as removeElectiveGroup, PATCH as changeElectiveGroup } from "@/app/api/submissions/[id]/elective-groups/[groupId]/route";
+import { GET as readCreditSummary } from "@/app/api/submissions/[id]/credit-summary/route";
 import { GET as readDraftQuestions, POST as askDapRoute } from "@/app/api/submissions/[id]/questions/route";
 import { GET as readDapInbox } from "@/app/api/dap-questions/route";
 import { PATCH as answerDapQuestion } from "@/app/api/dap-questions/[id]/route";
@@ -7074,5 +7077,119 @@ describe("readiness checks and firm gates (F1 to F3)", () => {
     });
     expect(logged.description).toContain(`Approved past 1 open check (override): ${reason}`);
     expect(logged.metadata).toMatchObject({ checksOverride: { reason, open: ["V13:courses"] }, flagged: true });
+  });
+});
+
+// Tasks W2 to W5: contact hours, named elective groups, and the credit
+// numbers the app builds from them.
+describe("contact hours, elective groups and the credit numbers (W2 to W5)", () => {
+  const cycleId = "w-groups-cycle";
+  const submissionId = "w-groups-submission";
+  const otherId = "w-groups-other";
+  const context = { params: Promise.resolve({ id: submissionId }) };
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.create({ data: { id: cycleId, name: "W groups", createdById: ids.super } });
+    await prisma.submission.createMany({
+      data: [
+        { id: submissionId, title: "W Groups Bulletin", programmeId: ids.programmeA, createdById: ids.hod, cycleId },
+        { id: otherId, title: "W Groups Other", programmeId: ids.programmeB, createdById: ids.super, cycleId },
+      ],
+    });
+    await prepareDraftForSubmit(submissionId);
+  });
+
+  afterAll(async () => {
+    await prisma.activityLog.deleteMany({ where: { entityId: { in: [submissionId, otherId] } } });
+    await prisma.submission.deleteMany({ where: { id: { in: [submissionId, otherId] } } });
+    await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+  });
+
+  const json = (method: string, body: object) =>
+    new Request("http://localhost", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const editCourse = (courseId: string, body: object) => {
+    authState.userId = ids.hod;
+    return updateCourseRow(
+      new NextRequest(`http://localhost/api/courses/${courseId}`, { method: "PATCH", body: JSON.stringify(body) }),
+      { params: Promise.resolve({ id: courseId }) },
+    );
+  };
+  const credits = async () => {
+    authState.userId = ids.hod;
+    return (await readCreditSummary(new Request("http://localhost"), context)).json();
+  };
+  const rulesNow = async () => {
+    authState.userId = ids.hod;
+    return ((await (await readChecks(new Request("http://localhost"), context)).json()).results as { rule: string; level: string; key: string }[]);
+  };
+
+  it("keeps contact hours on a course and asks to check units that don't match them", async () => {
+    const course = await prisma.course.findFirstOrThrow({ where: { submissionId, code: "RDY 211" } });
+    expect((await editCourse(course.id, { lectureHours: 700 })).status).toBe(400);
+    expect((await editCourse(course.id, { lectureHours: -1 })).status).toBe(400);
+    const lecture = course.units * 15;
+    expect((await editCourse(course.id, { lectureHours: lecture, practicalHours: 0 })).status).toBe(200);
+    expect(await prisma.course.findUniqueOrThrow({ where: { id: course.id }, select: { lectureHours: true, practicalHours: true } })).toEqual({
+      lectureHours: lecture,
+      practicalHours: 0,
+    });
+    expect((await rulesNow()).some((result) => result.rule === "V23")).toBe(false);
+    expect((await editCourse(course.id, { lectureHours: lecture - 15 })).status).toBe(200);
+    expect((await rulesNow()).find((result) => result.rule === "V23")).toMatchObject({ level: "CHECK" });
+    // Cleared again: nothing to check.
+    expect((await editCourse(course.id, { lectureHours: null, practicalHours: null })).status).toBe(200);
+    expect((await rulesNow()).some((result) => result.rule === "V23")).toBe(false);
+  });
+
+  it("groups electives by name, counts what a student chooses, and removes a group only once DELETE is typed", async () => {
+    authState.userId = ids.hod;
+    expect((await addElectiveGroup(json("POST", { name: "", chooseUnits: 3 }), context)).status).toBe(400);
+    expect((await addElectiveGroup(json("POST", { name: "300 level options", chooseUnits: 0 }), context)).status).toBe(400);
+    const created = await addElectiveGroup(json("POST", { name: "300 level options", chooseUnits: 3 }), context);
+    expect(created.status).toBe(201);
+    const group = await created.json();
+    expect((await addElectiveGroup(json("POST", { name: "300 Level Options", chooseUnits: 3 }), context)).status).toBe(409);
+    authState.userId = ids.dean;
+    expect((await addElectiveGroup(json("POST", { name: "Dean group", chooseUnits: 3 }), context)).status).toBe(403);
+
+    // An empty group must be filled or removed (V25).
+    expect((await rulesNow()).find((result) => result.rule === "V25")).toMatchObject({ level: "MUST" });
+
+    // Two 300-level electives join it; a group on another draft is refused.
+    const [first, second] = await Promise.all(
+      ["RDY 311", "RDY 312"].map((code) => prisma.course.findFirstOrThrow({ where: { submissionId, code } })),
+    );
+    const before = (await credits()).totals.total;
+    const elsewhere = await prisma.electiveGroup.create({ data: { submissionId: otherId, name: "Not here", chooseUnits: 3 } });
+    expect((await editCourse(first.id, { electiveGroupId: elsewhere.id })).status).toBe(400);
+    for (const course of [first, second]) {
+      expect((await editCourse(course.id, { status: "ELECTIVE", electiveGroupId: group.id })).status).toBe(200);
+    }
+    authState.userId = ids.hod;
+    const listed = await (await listElectiveGroups(new Request("http://localhost"), context)).json();
+    expect(listed.groups).toEqual([
+      { id: group.id, name: "300 level options", chooseUnits: 3, courses: ["RDY 311", "RDY 312"], offeredUnits: first.units + second.units },
+    ]);
+    // W3/W5: the totals count the 3 units chosen, not both courses.
+    const after = await credits();
+    expect(after.totals.total).toBe(before - first.units - second.units + 3);
+    expect(after.graduationText).toContain(`at least ${after.totals.total} credits`);
+    expect((await rulesNow()).filter((result) => result.rule === "V25")).toEqual([]);
+
+    // Asking for more than the group offers must be fixed.
+    const tooMany = first.units + second.units + 1;
+    const changed = await changeElectiveGroup(json("PATCH", { chooseUnits: tooMany }), { params: Promise.resolve({ id: submissionId, groupId: group.id }) });
+    expect(changed.status).toBe(200);
+    expect((await rulesNow()).find((result) => result.rule === "V25")).toMatchObject({ level: "MUST", key: `V25:${group.id}:short` });
+
+    const groupContext = { params: Promise.resolve({ id: submissionId, groupId: group.id }) };
+    expect((await removeElectiveGroup(json("DELETE", {}), groupContext)).status).toBe(400);
+    expect((await removeElectiveGroup(json("DELETE", { confirm: "DELETE" }), groupContext)).status).toBe(200);
+    expect(await prisma.electiveGroup.count({ where: { id: group.id } })).toBe(0);
+    expect(await prisma.course.count({ where: { id: { in: [first.id, second.id] }, electiveGroupId: null } })).toBe(2);
+    expect(await prisma.activityLog.count({ where: { entityId: submissionId, action: { in: ["ELECTIVE_GROUP_ADDED", "ELECTIVE_GROUP_UPDATED", "ELECTIVE_GROUP_REMOVED"] } } })).toBe(3);
+    // Ungrouped electives are a "Please check" and count in full again.
+    expect((await rulesNow()).find((result) => result.rule === "V25")).toMatchObject({ level: "CHECK" });
+    expect((await credits()).totals.total).toBe(before);
   });
 });

@@ -338,9 +338,9 @@ model User {
   updatedAt DateTime @updatedAt
 
   // From the roster (tasks D1, D2): "Prof.", "Dr."; WhatsApp number; acting in the role.
-  title     String?
-  whatsapp  String?
-  isActing  Boolean  @default(false)
+  title         String?
+  whatsapp      String?
+  isActing      Boolean   @default(false)
   // Invitations and sign-in (task D3).
   invitedAt     DateTime?
   firstSignInAt DateTime?
@@ -359,11 +359,11 @@ model User {
   // mfaEnabledAt is set it belongs to a set-up nobody has confirmed yet.
   // mfaLastUsedStep is the last accepted 30-second step, so a code can't be
   // used twice.
-  mfaSecret        String?
-  mfaEnabledAt     DateTime?
-  mfaLastUsedStep  Int?
-  mfaRecoveryCodes MfaRecoveryCode[]
-  mfaVerifications MfaVerification[]
+  mfaSecret         String?
+  mfaEnabledAt      DateTime?
+  mfaLastUsedStep   Int?
+  mfaRecoveryCodes  MfaRecoveryCode[]
+  mfaVerifications  MfaVerification[]
   mfaTrustedDevices MfaTrustedDevice[]
 
   // Foreign Keys (optional - user may be linked to school/department)
@@ -375,11 +375,11 @@ model User {
   department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
 
   // Submissions created by this user
-  submissions          Submission[]
+  submissions             Submission[]
   // Phase transitions performed by this user
-  phaseTransitions     PhaseTransition[]
+  phaseTransitions        PhaseTransition[]
   // Comments made by this user
-  comments             Comment[]
+  comments                Comment[]
   courseListConfirmations CourseListConfirmation[]
   courseChangeRequests    CourseChangeRequest[]    @relation("CourseChangeRequester")
   courseChangesResolved   CourseChangeRequest[]    @relation("CourseChangeResolver")
@@ -389,13 +389,13 @@ model User {
   agentMessages           AgentMessage[]           @relation("AgentMessageRecipient")
   checkAcceptances        CheckAcceptance[]
   // Cycles created by this admin
-  reviewCycles         ReviewCycle[]
-  programmeAssignments UserProgramme[]
-  activities           ActivityLog[]
+  reviewCycles            ReviewCycle[]
+  programmeAssignments    UserProgramme[]
+  activities              ActivityLog[]
   // Records this user deleted into the Archive
-  archivedRecords      ArchivedRecord[]
+  archivedRecords         ArchivedRecord[]
   // Review phases this user owns by name, beyond what their role grants
-  phaseOwnerships      PhaseOwner[]
+  phaseOwnerships         PhaseOwner[]
 
   @@map("users")
 }
@@ -479,12 +479,12 @@ model Staff {
 // ============================================================================
 
 model ReviewCycle {
-  id          String    @id @default(cuid())
-  name        String // e.g., "2025/2026 Bulletin Review"
-  description String?
-  isActive    Boolean   @default(true)
-  startedAt   DateTime  @default(now())
-  closedAt    DateTime?
+  id                String    @id @default(cuid())
+  name              String // e.g., "2025/2026 Bulletin Review"
+  description       String?
+  isActive          Boolean   @default(true)
+  startedAt         DateTime  @default(now())
+  closedAt          DateTime?
   /// "Submit to School" stays off before this moment (task F0); empty means no limit.
   submissionsOpenAt DateTime?
   /// Calendar settings (task C1, work order section 4.6).
@@ -497,10 +497,10 @@ model ReviewCycle {
   /// Task A2 (DEC5): an archived cycle keeps its drafts, comments, photos and
   /// log entries where they are, read-only, and is left out of every
   /// dashboard, count and default view until it is restored.
-  isTest       Boolean   @default(false)
-  archivedAt   DateTime?
-  archivedById String?
-  createdById String
+  isTest            Boolean   @default(false)
+  archivedAt        DateTime?
+  archivedById      String?
+  createdById       String
 
   createdBy    User               @relation(fields: [createdById], references: [id])
   submissions  Submission[]
@@ -515,20 +515,20 @@ model ReviewCycle {
 }
 
 model Submission {
-  id           String           @id @default(cuid())
-  title        String
-  currentPhase Int              @default(1) // Phase 1-10
-  status       SubmissionStatus @default(DRAFT)
-  submittedAt  DateTime?
-  approvedAt   DateTime?
+  id                         String           @id @default(cuid())
+  title                      String
+  currentPhase               Int              @default(1) // Phase 1-10
+  status                     SubmissionStatus @default(DRAFT)
+  submittedAt                DateTime?
+  approvedAt                 DateTime?
   /// Registry courses the department removed from this draft, so a later
   /// Registry upload doesn't put them back (task G6).
-  dismissedRegistryCourseIds String[] @default([])
+  dismissedRegistryCourseIds String[]         @default([])
   /// When the Dean first opened it at School Board Harmonisation; until then
   /// the department can recall it (task D5). Cleared on each submission.
-  openedByDeanAt DateTime?
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  openedByDeanAt             DateTime?
+  createdAt                  DateTime         @default(now())
+  updatedAt                  DateTime         @updatedAt
 
   // Foreign Keys
   programmeId String
@@ -536,18 +536,19 @@ model Submission {
   cycleId     String?
 
   // Relations
-  programme          Programme           @relation(fields: [programmeId], references: [id], onDelete: Cascade)
-  createdBy          User                @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  cycle              ReviewCycle?        @relation(fields: [cycleId], references: [id])
-  content            SubmissionContent?
-  phaseTransitions   PhaseTransition[]
-  comments           Comment[]
-  courses            Course[]
-  courseDescriptions CourseDescription[]
+  programme              Programme               @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  createdBy              User                    @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  cycle                  ReviewCycle?            @relation(fields: [cycleId], references: [id])
+  content                SubmissionContent?
+  phaseTransitions       PhaseTransition[]
+  comments               Comment[]
+  courses                Course[]
+  courseDescriptions     CourseDescription[]
   courseListConfirmation CourseListConfirmation?
   courseChangeRequests   CourseChangeRequest[]
   dapQuestions           DapQuestion[]
   checkAcceptances       CheckAcceptance[]
+  electiveGroups         ElectiveGroup[]
 
   @@unique([programmeId, cycleId])
   @@map("submissions")
@@ -619,29 +620,50 @@ model SubmissionContent {
 // ============================================================================
 
 model Course {
-  id            String       @id @default(cuid())
-  code          String // e.g., "COS 101"
-  title         String // e.g., "Introduction to Computing Sciences" - sentence case
-  units         Int // Credit units, 0 to 12 (task B13)
-  status        CourseStatus @default(CORE) // Core or Elective
-  semester      Int? // 1 or 2; empty for a sessional course with no semester (B13, rule W17)
-  level         Int // 100, 200, 300, 400
-  prerequisites String? // Display string for prerequisites
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id             String       @id @default(cuid())
+  code           String // e.g., "COS 101"
+  title          String // e.g., "Introduction to Computing Sciences" - sentence case
+  units          Int // Credit units, 0 to 12 (task B13)
+  status         CourseStatus @default(CORE) // Core or Elective
+  semester       Int? // 1 or 2; empty for a sessional course with no semester (B13, rule W17)
+  level          Int // 100, 200, 300, 400
+  prerequisites  String? // Display string for prerequisites
+  lectureHours   Int? // W2: lecture hours a semester; units = lecture hours / 15 + practical hours / 45
+  practicalHours Int? // W2
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   // Foreign Keys
-  submissionId   String
-  masterCourseId String? // Link to centralized master course
+  submissionId    String
+  masterCourseId  String? // Link to centralized master course
+  electiveGroupId String? // W3: the named group an elective belongs to
 
   // Relations
-  submission   Submission         @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  masterCourse MasterCourse?      @relation(fields: [masterCourseId], references: [id], onDelete: SetNull)
-  description  CourseDescription?
+  submission    Submission         @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  masterCourse  MasterCourse?      @relation(fields: [masterCourseId], references: [id], onDelete: SetNull)
+  electiveGroup ElectiveGroup?     @relation(fields: [electiveGroupId], references: [id], onDelete: SetNull)
+  description   CourseDescription?
 
   @@unique([code, submissionId])
   @@unique([title, submissionId])
   @@map("courses")
+}
+
+/// W3: electives belong to a named group; a student chooses at least
+/// `chooseUnits` units from it, and the totals count that minimum.
+model ElectiveGroup {
+  id           String   @id @default(cuid())
+  submissionId String
+  name         String
+  chooseUnits  Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  courses    Course[]
+
+  @@unique([submissionId, name])
+  @@map("elective_groups")
 }
 
 // ============================================================================

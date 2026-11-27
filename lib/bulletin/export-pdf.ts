@@ -1,5 +1,6 @@
 import PDFDocument from "pdfkit";
 import { courseSemesterLabel, courseSemesterOrder } from "@/lib/courses/course-rules";
+import { CREDIT_SUMMARY_HEADERS, OUTCOMES_LEAD, courseHeading, creditSummaryRows, graduationNumbersLine, programmeCreditSummary } from "@/lib/bulletin/course-layout";
 import type {
   BulletinCourse,
   BulletinData,
@@ -383,20 +384,14 @@ function drawAdmission(doc: PdfDoc, programme: BulletinProgramme) {
     drawStructuredText(doc, content.graduationRequirements);
   }
 
-  subHeading(doc, "Credit Requirements Summary");
-  const levels = [...new Set(programme.courses.map((course) => course.level))].sort((a, b) => a - b);
-  const rows = levels.map((level) => {
-    const courses = programme.courses.filter((course) => course.level === level);
-    const core = courses.filter((course) => ["CORE", "MANDATORY"].includes(course.status)).reduce((sum, course) => sum + course.units, 0);
-    const elective = courses.filter((course) => course.status === "ELECTIVE").reduce((sum, course) => sum + course.units, 0);
-    return [`${level} Level`, String(core), String(elective), String(core + elective)];
-  });
-  const coreTotal = programme.courses.filter((course) => ["CORE", "MANDATORY"].includes(course.status)).reduce((sum, course) => sum + course.units, 0);
-  const electiveTotal = programme.courses.filter((course) => course.status === "ELECTIVE").reduce((sum, course) => sum + course.units, 0);
-  rows.push(["Total Requirements", String(coreTotal), String(electiveTotal), String(coreTotal + electiveTotal)]);
-  drawTable(doc, ["Level", "Core Units", "Elective Units", "Total"], rows, [150, 105, 105, contentWidth(doc) - 360], { firstColumnBold: true });
+  // W4: the credit summary and W5: the graduation numbers, built by the app.
+  const credits = programmeCreditSummary(programme);
+  const numbersLine = graduationNumbersLine(credits);
+  if (numbersLine) bodyText(doc, numbersLine);
+  subHeading(doc, "Credit Summary");
+  const width = contentWidth(doc);
+  drawTable(doc, CREDIT_SUMMARY_HEADERS, creditSummaryRows(credits), [110, (width - 110) / 4, (width - 110) / 4, (width - 110) / 4, (width - 110) / 4], { firstColumnBold: true });
   if (content?.minimumCGPA) bodyText(doc, `Minimum CGPA: ${content.minimumCGPA}`, { bold: true });
-  if (content?.totalUnits) bodyText(doc, `Total Expected Units: ${content.totalUnits}`, { bold: true });
 }
 
 function groupCourses(courses: BulletinCourse[]) {
@@ -444,10 +439,11 @@ function drawCourseDescriptions(doc: PdfDoc, programme: BulletinProgramme) {
   }
   courses.forEach((course) => {
     ensureSpace(doc, 110);
-    subHeading(doc, `${course.code}: ${course.title} (${course.units} Units)`);
+    // W15: the heading line, the lead-in, the outcomes, then the content.
+    subHeading(doc, courseHeading(course));
     const description = course.description!;
     if (description.learningOutcomes?.length) {
-      bodyText(doc, "Learning Outcomes", { bold: true });
+      bodyText(doc, OUTCOMES_LEAD, { bold: true });
       description.learningOutcomes.forEach((outcome, index) => bodyText(doc, `${index + 1}. ${outcome}`));
     }
     if (description.courseContent) {

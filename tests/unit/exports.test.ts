@@ -84,7 +84,7 @@ describe("bulletin exports", () => {
       "A complete programme mission.",
       "A complete programme philosophy.",
       "2. Admission and Graduation Requirements",
-      "Credit Requirements Summary",
+      "Credit Summary",
       "3. Programme Course Structure",
       "4. Course Descriptions",
       "5. Staff Directory",
@@ -100,6 +100,35 @@ describe("bulletin exports", () => {
     expect([...first].sort((a, b) => a - b)).toEqual(first);
     const pdf = await generateBulletinPdf({ ...bulletin, university: { vision: "The university vision.", mission: null } });
     expect(pdf.subarray(0, 4).toString()).toBe("%PDF");
+  });
+
+  it("prints the credit summary, graduation numbers and description layout the app builds (W4, W5, W15)", async () => {
+    const programme = bulletin.programmes[0];
+    const withRules: BulletinData = {
+      ...bulletin,
+      programmes: [
+        {
+          ...programme,
+          electiveGroups: [{ id: "g1", name: "100 level electives", chooseUnits: 2 }],
+          courses: [
+            { ...programme.courses[0], generalEducation: false, owned: true, lectureHours: 45, practicalHours: 0 },
+            { code: "GST 111", title: "Communication in English", units: 2, status: "CORE", semester: 1, level: 100, generalEducation: true, owned: false },
+            { code: "MTH 101", title: "Elementary Mathematics I", units: 3, status: "CORE", semester: 1, level: 100, generalEducation: false, owned: false },
+            { code: "CSC 103", title: "Computing Ethics", units: 2, status: "ELECTIVE", semester: 1, level: 100, owned: true, electiveGroupId: "g1" },
+            { code: "CSC 105", title: "Computing History", units: 2, status: "ELECTIVE", semester: 1, level: 100, owned: true, electiveGroupId: "g1" },
+          ],
+        },
+      ],
+    };
+    const xml = await JSZip.loadAsync(await generateBulletinDocx(withRules)).then((zip) => zip.file("word/document.xml")!.async("string"));
+    for (const header of ["General Education", "Departmental", "Non-departmental"]) expect(xml).toContain(header);
+    // 3 + 2 chosen from the group = 5 departmental, 3 outside, 2 General Education: 10.
+    expect(xml).toContain(
+      "To graduate, a student must earn at least 10 credits: 5 in the department&apos;s own courses, 3 in courses from other departments, and 2 in General Education.",
+    );
+    expect(xml).toContain("CSC 101: Introduction to Computing (3 units, Core; 45 lecture hours, 0 practical hours)");
+    expect(xml).toContain("At the end of this course, students should be able to:");
+    expect((await generateBulletinPdf(withRules)).subarray(0, 4).toString()).toBe("%PDF");
   });
 
   it("generates a valid PDF document", async () => {

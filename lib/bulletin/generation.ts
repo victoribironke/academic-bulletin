@@ -14,6 +14,8 @@ import {
   staffRankLabel,
 } from "@/lib/validation/name-format";
 import { NOT_IN_ARCHIVED_CYCLE } from "@/lib/cycles/archive";
+import { COURSE_OWNER_SELECT, type ProgrammePlace, isOwnedElsewhere } from "@/lib/courses/shared-courses";
+import { isGeneralEducationCourse } from "@/lib/courses/general-education";
 
 // Types
 export type ExportLevel = "department" | "school" | "institution";
@@ -37,6 +39,14 @@ export interface BulletinCourse {
   ownership?: string;
   ownerDepartment?: string;
   description?: BulletinCourseDescription;
+  /** W4: General Education, and taught by the programme's own department. */
+  generalEducation?: boolean;
+  owned?: boolean;
+  /** W2 and W15: contact hours a semester. */
+  lectureHours?: number | null;
+  practicalHours?: number | null;
+  /** W3: the elective group the course belongs to. */
+  electiveGroupId?: string | null;
 }
 
 export interface BulletinStaff {
@@ -62,6 +72,8 @@ export interface BulletinProgramme {
   schoolCode: string;
   submissionStatus?: string;
   courses: BulletinCourse[];
+  /** W3: named elective groups; the totals count what a student chooses. */
+  electiveGroups?: { id: string; name: string; chooseUnits: number }[];
   staff: BulletinStaff[];
   content?: {
     deanImageUrl?: string;
@@ -97,6 +109,70 @@ export interface BulletinData {
   };
   /** W14: the university's vision and mission (DAP's wording), printed first on every programme page. */
   university?: { vision: string | null; mission: string | null } | null;
+}
+
+
+/** The Registry owner of each course, for its department code and for W4. */
+const BULLETIN_OWNER_SELECT = {
+  ...COURSE_OWNER_SELECT,
+  ownerDepartment: { select: { code: true, name: true } },
+} as const;
+
+type CourseRow = {
+  code: string;
+  title: string;
+  units: number;
+  status: string;
+  semester: number | null;
+  level: number;
+  prerequisites: string | null;
+  lectureHours: number | null;
+  practicalHours: number | null;
+  electiveGroupId: string | null;
+  masterCourse: {
+    type: string;
+    ownership: string;
+    ownerDeptId: string | null;
+    ownerSchoolId: string | null;
+    ownerDepartment: { code: string; name: string } | null;
+    ownerSchool: { name: string } | null;
+  } | null;
+  description: {
+    learningOutcomes: unknown;
+    courseContent: string | null;
+    labWork: string | null;
+    entrepreneurialAspect: string | null;
+  } | null;
+};
+
+/** One course as the bulletin prints it. */
+function toBulletinCourse(c: CourseRow, place: ProgrammePlace): BulletinCourse {
+  return {
+    code: c.code,
+    title: c.title,
+    units: c.units,
+    status: c.status,
+    semester: c.semester,
+    level: c.level,
+    prerequisites: c.prerequisites || undefined,
+    ownership: c.masterCourse?.ownership,
+    ownerDepartment: c.masterCourse?.ownerDepartment?.code,
+    generalEducation: isGeneralEducationCourse(c),
+    owned: !isOwnedElsewhere(c, place),
+    lectureHours: c.lectureHours,
+    practicalHours: c.practicalHours,
+    electiveGroupId: c.electiveGroupId,
+    description: c.description
+      ? {
+          learningOutcomes: Array.isArray(c.description.learningOutcomes)
+            ? (c.description.learningOutcomes as string[])
+            : undefined,
+          courseContent: c.description.courseContent || undefined,
+          labWork: c.description.labWork || undefined,
+          entrepreneurialAspect: c.description.entrepreneurialAspect || undefined,
+        }
+      : undefined,
+  };
 }
 
 /**
@@ -135,18 +211,14 @@ export async function generateDepartmentBulletin(
     include: {
       courses: {
         include: {
-          masterCourse: {
-            select: {
-              ownership: true,
-              ownerDepartment: { select: { code: true } },
-            },
-          },
+          masterCourse: { select: BULLETIN_OWNER_SELECT },
           description: true,
         },
         orderBy: [{ level: "asc" }, { semester: "asc" }, { code: "asc" }],
       },
       content: true,
       courseDescriptions: true,
+      electiveGroups: { select: { id: true, name: true, chooseUnits: true } },
     },
   });
 
@@ -173,29 +245,8 @@ export async function generateDepartmentBulletin(
   );
 
   // Format courses
-  const formattedCourses: BulletinCourse[] = (submission?.courses || []).map(
-    (c) => ({
-      code: c.code,
-      title: c.title,
-      units: c.units,
-      status: c.status,
-      semester: c.semester,
-      level: c.level,
-      prerequisites: c.prerequisites || undefined,
-      ownership: c.masterCourse?.ownership,
-      ownerDepartment: c.masterCourse?.ownerDepartment?.code,
-      description: c.description
-        ? {
-            learningOutcomes: Array.isArray(c.description.learningOutcomes)
-              ? (c.description.learningOutcomes as string[])
-              : undefined,
-            courseContent: c.description.courseContent || undefined,
-            labWork: c.description.labWork || undefined,
-            entrepreneurialAspect:
-              c.description.entrepreneurialAspect || undefined,
-          }
-        : undefined,
-    }),
+  const formattedCourses: BulletinCourse[] = (submission?.courses || []).map((c) =>
+    toBulletinCourse(c, { departmentId: programme.departmentId, schoolId: programme.department.schoolId }),
   );
 
   const bulletinProgramme: BulletinProgramme = {
@@ -209,6 +260,7 @@ export async function generateDepartmentBulletin(
     schoolCode: programme.department.school.code,
     submissionStatus: submission?.status,
     courses: formattedCourses,
+    electiveGroups: submission?.electiveGroups ?? [],
     staff: formattedStaff,
     content: submission?.content
       ? {
@@ -298,18 +350,14 @@ export async function generateSchoolBulletin(
         include: {
           courses: {
             include: {
-              masterCourse: {
-                select: {
-                  ownership: true,
-                  ownerDepartment: { select: { code: true } },
-                },
-              },
+              masterCourse: { select: BULLETIN_OWNER_SELECT },
               description: true,
             },
             orderBy: [{ level: "asc" }, { semester: "asc" }, { code: "asc" }],
           },
           content: true,
           courseDescriptions: true,
+          electiveGroups: { select: { id: true, name: true, chooseUnits: true } },
         },
       });
 
@@ -332,30 +380,9 @@ export async function generateSchoolBulletin(
         type: s.type,
       }));
 
-      const formattedCourses: BulletinCourse[] = (
-        submission?.courses || []
-      ).map((c) => ({
-        code: c.code,
-        title: c.title,
-        units: c.units,
-        status: c.status,
-        semester: c.semester,
-        level: c.level,
-        prerequisites: c.prerequisites || undefined,
-        ownership: c.masterCourse?.ownership,
-        ownerDepartment: c.masterCourse?.ownerDepartment?.code,
-        description: c.description
-          ? {
-              learningOutcomes: Array.isArray(c.description.learningOutcomes)
-                ? (c.description.learningOutcomes as string[])
-                : undefined,
-              courseContent: c.description.courseContent || undefined,
-              labWork: c.description.labWork || undefined,
-              entrepreneurialAspect:
-                c.description.entrepreneurialAspect || undefined,
-            }
-          : undefined,
-      }));
+      const formattedCourses: BulletinCourse[] = (submission?.courses || []).map((c) =>
+        toBulletinCourse(c, { departmentId: dept.id, schoolId: school.id }),
+      );
 
       programmes.push({
         id: prog.id,
@@ -368,6 +395,7 @@ export async function generateSchoolBulletin(
         schoolCode: school.code,
         submissionStatus: submission?.status,
         courses: formattedCourses,
+        electiveGroups: submission?.electiveGroups ?? [],
         staff: formattedStaff,
         content: submission?.content
           ? {
@@ -456,18 +484,14 @@ export async function generateInstitutionBulletin(): Promise<BulletinData> {
           include: {
             courses: {
               include: {
-                masterCourse: {
-                  select: {
-                    ownership: true,
-                    ownerDepartment: { select: { code: true } },
-                  },
-                },
+                masterCourse: { select: BULLETIN_OWNER_SELECT },
                 description: true,
               },
               orderBy: [{ level: "asc" }, { semester: "asc" }, { code: "asc" }],
             },
             content: true,
             courseDescriptions: true,
+            electiveGroups: { select: { id: true, name: true, chooseUnits: true } },
           },
         });
 
@@ -490,30 +514,9 @@ export async function generateInstitutionBulletin(): Promise<BulletinData> {
           type: s.type,
         }));
 
-        const formattedCourses: BulletinCourse[] = (
-          submission?.courses || []
-        ).map((c) => ({
-          code: c.code,
-          title: c.title,
-          units: c.units,
-          status: c.status,
-          semester: c.semester,
-          level: c.level,
-          prerequisites: c.prerequisites || undefined,
-          ownership: c.masterCourse?.ownership,
-          ownerDepartment: c.masterCourse?.ownerDepartment?.code,
-          description: c.description
-            ? {
-                learningOutcomes: Array.isArray(c.description.learningOutcomes)
-                  ? (c.description.learningOutcomes as string[])
-                  : undefined,
-                courseContent: c.description.courseContent || undefined,
-                labWork: c.description.labWork || undefined,
-                entrepreneurialAspect:
-                  c.description.entrepreneurialAspect || undefined,
-              }
-            : undefined,
-        }));
+        const formattedCourses: BulletinCourse[] = (submission?.courses || []).map((c) =>
+          toBulletinCourse(c, { departmentId: dept.id, schoolId: school.id }),
+        );
 
         programmes.push({
           id: prog.id,
@@ -526,6 +529,7 @@ export async function generateInstitutionBulletin(): Promise<BulletinData> {
           schoolCode: school.code,
           submissionStatus: submission?.status,
           courses: formattedCourses,
+          electiveGroups: submission?.electiveGroups ?? [],
           staff: formattedStaff,
           content: submission?.content
             ? {

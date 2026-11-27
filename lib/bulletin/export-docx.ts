@@ -20,6 +20,7 @@ import {
   WidthType,
 } from "docx";
 import { courseSemesterLabel, courseSemesterOrder } from "@/lib/courses/course-rules";
+import { CREDIT_SUMMARY_HEADERS, OUTCOMES_LEAD, courseHeading, creditSummaryRows, graduationNumbersLine, programmeCreditSummary } from "@/lib/bulletin/course-layout";
 import type {
   BulletinCourse,
   BulletinData,
@@ -396,20 +397,13 @@ function admissionSection(programme: BulletinProgramme): DocElement[] {
     elements.push(heading("Graduation Requirements", 2), ...structuredElements(content.graduationRequirements));
   }
 
-  elements.push(heading("Credit Requirements Summary", 2));
-  const levels = [...new Set(programme.courses.map((course) => course.level))].sort((a, b) => a - b);
-  const rows = levels.map((level) => {
-    const courses = programme.courses.filter((course) => course.level === level);
-    const core = courses.filter((course) => ["CORE", "MANDATORY"].includes(course.status)).reduce((sum, course) => sum + course.units, 0);
-    const elective = courses.filter((course) => course.status === "ELECTIVE").reduce((sum, course) => sum + course.units, 0);
-    return [`${level} Level`, String(core), String(elective), String(core + elective)];
-  });
-  const coreTotal = programme.courses.filter((course) => ["CORE", "MANDATORY"].includes(course.status)).reduce((sum, course) => sum + course.units, 0);
-  const electiveTotal = programme.courses.filter((course) => course.status === "ELECTIVE").reduce((sum, course) => sum + course.units, 0);
-  rows.push(["Total Requirements", String(coreTotal), String(electiveTotal), String(coreTotal + electiveTotal)]);
-  elements.push(docxTable(["Level", "Core Units", "Elective Units", "Total"], rows, [34, 22, 22, 22], { firstColumnBold: true, centeredColumns: [1, 2, 3] }));
+  // W4: the credit summary and W5: the graduation numbers, built by the app.
+  const credits = programmeCreditSummary(programme);
+  const numbersLine = graduationNumbersLine(credits);
+  if (numbersLine) elements.push(paragraph(numbersLine));
+  elements.push(heading("Credit Summary", 2));
+  elements.push(docxTable(CREDIT_SUMMARY_HEADERS, creditSummaryRows(credits), [28, 18, 18, 18, 18], { firstColumnBold: true, centeredColumns: [1, 2, 3, 4] }));
   if (content?.minimumCGPA) elements.push(paragraph(`Minimum CGPA: ${content.minimumCGPA}`, { bold: true }));
-  if (content?.totalUnits) elements.push(paragraph(`Total Expected Units: ${content.totalUnits}`, { bold: true }));
   return elements;
 }
 
@@ -454,9 +448,10 @@ function courseDescriptionsSection(programme: BulletinProgramme): DocElement[] {
   if (!courses.length) return [...elements, paragraph("No course descriptions are available.", { italic: true })];
   courses.forEach((course) => {
     const description = course.description!;
-    elements.push(heading(`${course.code}: ${course.title} (${course.units} Units)`, 2));
+    // W15: the heading line, the lead-in, the outcomes, then the content.
+    elements.push(heading(courseHeading(course), 2));
     if (description.learningOutcomes?.length) {
-      elements.push(paragraph("Learning Outcomes", { bold: true }));
+      elements.push(paragraph(OUTCOMES_LEAD, { bold: true }));
       description.learningOutcomes.forEach((outcome, index) => elements.push(listItem(outcome, index + 1)));
     }
     if (description.courseContent) elements.push(paragraph("Course Content", { bold: true }), ...structuredElements(description.courseContent));

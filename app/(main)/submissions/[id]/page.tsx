@@ -104,6 +104,7 @@ import { PhotoUploadGuidance } from "@/components/shared/photo-upload-guidance";
 import { useConfirmDelete } from "@/components/shared/typed-delete-dialog";
 import { ProgrammeCountdown } from "@/components/calendar/countdown";
 import { ReadinessPanel } from "@/components/submissions/readiness-panel";
+import { GraduationNumbers } from "@/components/submissions/graduation-numbers";
 import { CarriedNote, CarriedTextProvider, DraftSummaryButton } from "@/components/submissions/carried-text";
 
 interface Submission {
@@ -2415,6 +2416,19 @@ export default function SubmissionDetailPage({
                             {minimumCGPA}
                           </p>
                         )}
+                      </div>
+
+                      <div className="space-y-2 sm:col-span-2">
+                        <GraduationNumbers
+                          submissionId={submission.id}
+                          refreshKey={String(lastSavedAt?.getTime() ?? 0)}
+                          totalUnits={totalUnits}
+                          canEdit={canEdit}
+                          onUseTotal={(total) => {
+                            setTotalUnits(total);
+                            setHasChanges(true);
+                          }}
+                        />
                       </div>
 
                       <div className="space-y-2">

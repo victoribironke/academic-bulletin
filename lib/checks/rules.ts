@@ -11,6 +11,7 @@ import policy from "@/config/academic-policy.json";
 import { generalEducationBlockFor, isGeneralEducationFamily, programmeLevels } from "@/lib/courses/general-education";
 import { admissionWordingProblems } from "@/lib/bulletin/admission-wording";
 import { carriedIssues } from "@/lib/bulletin/carried-fields";
+import { type CreditGroup, creditSummary, unitsFromHours } from "@/lib/courses/credit-summary";
 
 export type CheckLevel = "MUST" | "CHECK" | "FIXED";
 
@@ -49,6 +50,11 @@ export type DraftCourse = {
   generalEducation: boolean;
   owned: boolean;
   description: { learningOutcomes: string[]; courseContent: string } | null;
+  /** W2: contact hours a semester, when the Head has entered them. */
+  lectureHours?: number | null;
+  practicalHours?: number | null;
+  /** W3: the elective group the course belongs to. */
+  electiveGroupId?: string | null;
 };
 
 export type DraftData = {
@@ -62,6 +68,8 @@ export type DraftData = {
   courseListConfirmed: boolean;
   graceBlocked: string[];
   approvedLoadExceptions?: { level: number; semester: number }[];
+  /** W3: the draft's named elective groups. */
+  electiveGroups?: CreditGroup[];
 };
 
 const text = (value: unknown) => (typeof value === "string" ? value.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim() : "");
@@ -87,13 +95,9 @@ function similarity(a: string, b: string): number {
   return shared / Math.min(left.size, right.size);
 }
 
-/** W4/W5: the numbers the app builds from the Course Structure. */
-export function creditNumbers(courses: DraftCourse[]) {
-  const sum = (rows: DraftCourse[]) => rows.reduce((total, course) => total + (course.units || 0), 0);
-  const general = courses.filter((course) => course.generalEducation);
-  const departmental = courses.filter((course) => !course.generalEducation && course.owned);
-  const outside = courses.filter((course) => !course.generalEducation && !course.owned);
-  return { generalEducation: sum(general), departmental: sum(departmental), outside: sum(outside), total: sum(courses) };
+/** W4/W5: the numbers the app builds from the Course Structure, counting each elective group's minimum (W3). */
+export function creditNumbers(courses: DraftCourse[], groups: CreditGroup[] = []) {
+  return creditSummary(courses, groups).totals;
 }
 
 export function runRules(data: DraftData): Finding[] {
@@ -103,7 +107,8 @@ export function runRules(data: DraftData): Finding[] {
   const courses = data.courses;
   const levels = levelsOf(data);
   const finalLevel = (data.programme.duration ?? 4) * 100;
-  const numbers = creditNumbers(courses);
+  const groups = data.electiveGroups ?? [];
+  const numbers = creditNumbers(courses, groups);
   const sessional = courses.length > 0 && courses.filter((course) => !course.generalEducation).every((course) => course.semester === null);
 
   // V1: the stated total agrees with the Course Structure.
@@ -140,7 +145,16 @@ export function runRules(data: DraftData): Finding[] {
       for (const semester of [1, 2]) {
         const rows = courses.filter((course) => course.level === level && course.semester === semester);
         if (rows.length === 0 || rows.some((course) => PLACEMENT.test(course.title))) continue;
-        const total = rows.reduce((sum, course) => sum + course.units, 0);
+        // W3: a group's courses count as the units a student chooses from it;
+        // a group spread over other semesters can't be placed, so skip.
+        const groupsHere = groups.filter((group) => rows.some((course) => course.electiveGroupId === group.id));
+        const spread = groupsHere.some((group) =>
+          courses.some((course) => course.electiveGroupId === group.id && (course.level !== level || course.semester !== semester)),
+        );
+        if (spread) continue;
+        const total =
+          rows.filter((course) => !groupsHere.some((group) => group.id === course.electiveGroupId)).reduce((sum, course) => sum + course.units, 0) +
+          groupsHere.reduce((sum, group) => sum + group.chooseUnits, 0);
         const { min, max } = POLICY.semesterCredits;
         if (total >= min && total <= max) continue;
         if (data.approvedLoadExceptions?.some((item) => item.level === level && item.semester === semester)) continue;
@@ -345,6 +359,59 @@ export function runRules(data: DraftData): Finding[] {
       key: `V22:${mismatched.join(",")}`,
       message: `The number of ${list(mismatched)} doesn't match its level or semester (the first digit is the level; odd numbers usually run in the first semester, even in the second).`,
       items: mismatched,
+    });
+  }
+
+  // V23: units match the contact hours (W2); projects and placements are exempt.
+  const offHours = courses
+    .filter((course) => !course.generalEducation && (course.lectureHours != null || course.practicalHours != null))
+    .filter((course) => !PLACEMENT.test(course.title) && !/project|dissertation|thesis|research essay/i.test(course.title))
+    .filter((course) => {
+      const fromHours = unitsFromHours(course.lectureHours, course.practicalHours);
+      return fromHours !== null && Math.abs(fromHours - course.units) > 0.01;
+    });
+  if (offHours.length) {
+    const describe = (course: DraftCourse) => {
+      const fromHours = Math.round((unitsFromHours(course.lectureHours, course.practicalHours) ?? 0) * 100) / 100;
+      return `${course.code} (${unitsWord(course.units)}; ${course.lectureHours ?? 0} lecture and ${course.practicalHours ?? 0} practical hours give ${fromHours})`;
+    };
+    add({
+      rule: "V23",
+      level: "CHECK",
+      section: "courses",
+      key: `V23:${offHours.map((course) => `${course.code}=${course.units}/${course.lectureHours ?? 0}/${course.practicalHours ?? 0}`).join(",")}`,
+      message: `Units don't match the contact hours (a unit is 15 lecture hours or 45 practical hours) for ${list(offHours.map(describe), 4)}.`,
+      items: offHours.map((course) => course.code),
+    });
+  }
+
+  // V25: each elective group says how many units a student chooses, and offers at least that many (W3).
+  for (const group of groups) {
+    const members = courses.filter((course) => course.electiveGroupId === group.id);
+    const offered = members.reduce((sum, course) => sum + course.units, 0);
+    if (members.length === 0) {
+      add({ rule: "V25", level: "MUST", section: "courses", key: `V25:${group.id}:empty`, message: `The elective group "${group.name}" has no courses. Add its courses, or remove the group.` });
+    } else if (!(group.chooseUnits > 0)) {
+      add({ rule: "V25", level: "MUST", section: "courses", key: `V25:${group.id}:choose`, message: `Say how many units a student chooses from the elective group "${group.name}".` });
+    } else if (offered < group.chooseUnits) {
+      add({
+        rule: "V25",
+        level: "MUST",
+        section: "courses",
+        key: `V25:${group.id}:short`,
+        message: `The elective group "${group.name}" asks students to choose ${unitsWord(group.chooseUnits)} but offers only ${unitsWord(offered)}.`,
+      });
+    }
+  }
+  const ungrouped = courses.filter((course) => course.status === "ELECTIVE" && !course.generalEducation && !groups.some((group) => group.id === course.electiveGroupId));
+  if (ungrouped.length) {
+    add({
+      rule: "V25",
+      level: "CHECK",
+      section: "courses",
+      key: `V25:ungrouped:${ungrouped.map((course) => course.code).join(",")}`,
+      message: `Put ${list(ungrouped.map((course) => course.code))} in an elective group that says how many units a student chooses; until then every elective counts in the totals.`,
+      items: ungrouped.map((course) => course.code),
     });
   }
 
