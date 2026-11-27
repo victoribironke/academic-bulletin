@@ -15,7 +15,7 @@ import {
 import { loadPhaseOwners, previousGateActorId } from "@/lib/submissions/phase-owners";
 import { bulletinContentHash, linkStateChangeToLedger } from "@/lib/submissions/ledger";
 import { PHASE_REQUIRED_EVIDENCE } from "@/lib/submissions/phases";
-import { getSubmitReadinessIssues } from "@/lib/submissions/submit-readiness";
+import { blocking, runChecks } from "@/lib/checks/run";
 import { getSubmissionWindow } from "@/lib/submissions/submission-window";
 import { recordActivity } from "@/lib/activity-log";
 import {
@@ -28,10 +28,12 @@ import {
 import { takeRateLimit } from "@/lib/rate-limit";
 import {
   type GraceOverrideRecord,
+  canOverrideGrace,
   decideGraceApproval,
   getGraceGate,
   readGraceOverride,
 } from "@/lib/submissions/grace-gate";
+import { GRACE_OVERRIDE_REASON_LENGTH } from "@/lib/grace-config";
 import { refuseIfArchived } from "@/lib/cycles/archive";
 import { formatDateTime } from "@/lib/dates/format";
 import { REQUEST_REVISION_LABEL } from "@/lib/submissions/phases";
@@ -207,6 +209,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // No bulletin is approved on with a failing or out-of-date GRACE result,
     // unless an allowed role overrides it with a reason (kept in the ledger).
     let graceOverride: GraceOverrideRecord | null = null;
+    let checksOverride: { reason: string; open: string[] } | null = null;
     if (action === "APPROVE") {
       const graceGate = await getGraceGate(id);
       const decision = decideGraceApproval({
@@ -237,6 +240,33 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
       graceOverride = decision.override;
+
+      // F3: approving needs the checks to pass and no open comments (GRACE
+      // has its own gate just above, with its override). D4: only a Super
+      // Administrator gets past, with a written reason kept on the ledger.
+      const stillOpen = blocking(await runChecks(id)).filter(
+        (result) => result.rule !== "V12" && result.key !== "PHILOSOPHY_GRACE_REQUIRED",
+      );
+      if (stillOpen.length > 0) {
+        const asked = (body as { checksOverride?: { reason?: unknown } } | null)?.checksOverride;
+        const reason = typeof asked?.reason === "string" ? asked.reason.trim() : "";
+        const { min, max } = GRACE_OVERRIDE_REASON_LENGTH;
+        if (!asked || !canOverrideGrace(user.role) || reason.length < min || reason.length > max) {
+          return NextResponse.json(
+            {
+              error: !asked
+                ? "This bulletin can't be approved yet: resolve the open comments and the checks that must be fixed."
+                : !canOverrideGrace(user.role)
+                  ? "Only a Super Administrator can approve a bulletin past checks that must be fixed."
+                  : `Give the reason for approving past the open checks (${min} to ${max} characters).`,
+              code: !asked ? "CHECKS_OPEN" : !canOverrideGrace(user.role) ? "CHECKS_OVERRIDE_NOT_ALLOWED" : "CHECKS_OVERRIDE_REASON_REQUIRED",
+              issues: stillOpen.map((result) => result.message),
+            },
+            { status: !asked ? 409 : !canOverrideGrace(user.role) ? 403 : 400 },
+          );
+        }
+        checksOverride = { reason, open: stillOpen.map((result) => result.key) };
+      }
     }
 
     if (action === "SUBMIT") {
@@ -258,7 +288,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       // Report every problem at once, so the department can fix them in one go.
-      const readiness = await getSubmitReadinessIssues(id);
+      // F3: every "Must fix" of the rules engine (GRACE is reported below).
+      const readiness = blocking(await runChecks(id))
+        .filter((result) => result.rule !== "V12")
+        .map((result) => ({ code: result.key, message: result.message }));
       const blockers = await getCourseGraceBlockers(id);
       const graceBlocked = hasCourseGraceBlockers(blockers);
       const startedChecks =
@@ -349,6 +382,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               : action === "RECALL"
                 ? `Recalled ${updated.programme.name} from the Dean before it was opened; it is a draft again.`
                 : `${action.charAt(0)}${action.slice(1).toLowerCase()} action recorded for ${updated.programme.name}.`,
+            checksOverride
+              ? `Approved past ${checksOverride.open.length} open check${checksOverride.open.length === 1 ? "" : "s"} (override): ${checksOverride.reason}`
+              : "",
             phaseOverride
               ? `Phase override: acted on Phase ${fromPhase}, which the ${phaseOverride.role.replaceAll("_", " ").toLowerCase()} role does not own. Reason: ${phaseOverride.reason}`
               : "",
@@ -363,6 +399,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             ...(remarks?.trim() && { remarks: remarks.trim() }),
             ...(requiredEvidence && { reference }),
             ...(graceOverride && { graceOverride }),
+            ...(checksOverride && { checksOverride, flagged: true }),
             ...(phaseOverride && { phaseOverride, flagged: true }),
           },
         },

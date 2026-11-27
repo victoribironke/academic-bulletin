@@ -387,6 +387,7 @@ model User {
   dapQuestionsAssigned    DapQuestion[]            @relation("DapQuestionOfficer")
   dapQuestionsAnswered    DapQuestion[]            @relation("DapQuestionAnswerer")
   agentMessages           AgentMessage[]           @relation("AgentMessageRecipient")
+  checkAcceptances        CheckAcceptance[]
   // Cycles created by this admin
   reviewCycles         ReviewCycle[]
   programmeAssignments UserProgramme[]
@@ -546,6 +547,7 @@ model Submission {
   courseListConfirmation CourseListConfirmation?
   courseChangeRequests   CourseChangeRequest[]
   dapQuestions           DapQuestion[]
+  checkAcceptances       CheckAcceptance[]
 
   @@unique([programmeId, cycleId])
   @@map("submissions")
@@ -1105,3 +1107,20 @@ model AgentControl {
   @@map("agent_controls")
 }
 
+/// F1: a "Please check" the person accepted, with their reason. The key names
+/// the check and what it is about (for example "V3:200:1" for 200 level,
+/// first semester), so a new problem of the same kind is shown again.
+model CheckAcceptance {
+  id           String   @id @default(cuid())
+  submissionId String
+  checkKey     String
+  reason       String
+  acceptedById String?
+  acceptedAt   DateTime @default(now())
+
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  acceptedBy User?      @relation(fields: [acceptedById], references: [id], onDelete: SetNull)
+
+  @@unique([submissionId, checkKey])
+  @@map("check_acceptances")
+}

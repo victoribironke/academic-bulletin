@@ -1,0 +1,8 @@
+{
+  "about": "Task F6 (decision DEC12): the Academic Policy's limits the checks use, kept here rather than in code. approvedLoadExceptions are DAP's approved semesters outside the credit range (rule W9, package file 03): { programme, level, semester, reason }.",
+  "semesterCredits": { "min": 16, "max": 24 },
+  "cgpa": { "min": 2.0, "max": 5.0 },
+  "summaryOfChangesMinWords": 50,
+  "learningOutcomesMin": 3,
+  "approvedLoadExceptions": []
+}

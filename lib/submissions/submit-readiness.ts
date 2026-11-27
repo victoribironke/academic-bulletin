@@ -3,7 +3,6 @@
  * checks on every Submit, so a draft the page would stop can't be sent by
  * calling the API directly.
  */
-import { carriedIssues } from "@/lib/bulletin/carried-fields";
 import { createHash } from "node:crypto";
 import prisma from "@/lib/prisma";
 import { GRACE_SUBMISSION_REQUIRED } from "@/lib/grace-config";
@@ -187,7 +186,12 @@ export function submitReadinessIssues(
   return issues;
 }
 
-export async function getSubmitReadinessIssues(
+/**
+ * The required-content checks the bulletin export already had (sections
+ * present, philosophy length and GRACE, duration, total units). The rules
+ * engine (lib/checks) adds the Appendix A checks and is what Submit uses.
+ */
+export async function legacyReadinessIssues(
   submissionId: string,
 ): Promise<SubmitReadinessIssue[]> {
   const submission = await prisma.submission.findUniqueOrThrow({
@@ -202,7 +206,6 @@ export async function getSubmitReadinessIssues(
           minimumDuration: true,
           minimumCGPA: true,
           totalUnits: true,
-          carriedFields: true,
         },
       },
     },
@@ -214,13 +217,15 @@ export async function getSubmitReadinessIssues(
       select: { name: true },
     }),
   ]);
-  return [
-    ...submitReadinessIssues(
-      data.programmes[0],
-      submission.content,
-      programmes.map((programme) => programme.name),
-    ),
-    // V18: text carried over from 2023-2027 that the Head hasn't reviewed.
-    ...carriedIssues(submission.content?.carriedFields ?? []),
-  ];
+  return submitReadinessIssues(
+    data.programmes[0],
+    submission.content,
+    programmes.map((programme) => programme.name),
+  );
+}
+
+/** What blocks Submit: every Must fix of the rules engine (F1, F3). */
+export async function getSubmitReadinessIssues(submissionId: string): Promise<SubmitReadinessIssue[]> {
+  const { runChecks, blocking } = await import("@/lib/checks/run");
+  return blocking(await runChecks(submissionId)).map((result) => ({ code: result.key, message: result.message }));
 }

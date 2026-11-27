@@ -80,7 +80,7 @@ describe("text carried over from 2023-2027 (E2, E3, V18)", () => {
 
   it("asks Submit to wait until the carried text is reviewed (V18)", async () => {
     const issues = await getSubmitReadinessIssues(ids.draft);
-    expect(issues.map((issue) => issue.code)).toEqual(expect.arrayContaining(["CARRIED_OVERVIEW", "CARRIED_ADMISSION"]));
+    expect(issues.map((issue) => issue.code)).toEqual(expect.arrayContaining(["V18:overview", "V18:admission"]));
   });
 
   it("drops a field when the Head marks it reviewed, or edits it", async () => {

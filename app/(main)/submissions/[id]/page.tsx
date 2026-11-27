@@ -103,6 +103,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { PhotoUploadGuidance } from "@/components/shared/photo-upload-guidance";
 import { useConfirmDelete } from "@/components/shared/typed-delete-dialog";
 import { ProgrammeCountdown } from "@/components/calendar/countdown";
+import { ReadinessPanel } from "@/components/submissions/readiness-panel";
 import { CarriedNote, CarriedTextProvider, DraftSummaryButton } from "@/components/submissions/carried-text";
 
 interface Submission {
@@ -1288,6 +1289,14 @@ export default function SubmissionDetailPage({
       <PhaseTracker currentPhase={submission.currentPhase} status={submission.status} />
       {/* C3: this programme's deadline, next to the phase steps. */}
       <ProgrammeCountdown submissionId={submission.id} />
+
+      {/* F2: what is still open before Submit, from the checks (F1). */}
+      <ReadinessPanel
+        submissionId={submission.id}
+        refreshKey={String(lastSavedAt?.getTime() ?? 0)}
+        canEdit={canEdit}
+        onGoToSection={setActiveSection}
+      />
 
       {/* A2: a draft of an archived cycle opens read-only. */}
       {submission.cycle?.archivedAt && (

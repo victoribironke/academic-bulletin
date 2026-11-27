@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { Prisma, type GraceStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
+import { isGeneralEducationCourse } from "@/lib/courses/general-education";
 import {
   GraceServiceError,
   runGraceCheck,
@@ -513,6 +514,7 @@ export async function getCourseGraceBlockers(
     select: {
       code: true,
       title: true,
+      masterCourse: { select: { type: true, ownership: true } },
       description: {
         select: {
           courseContent: true,
@@ -535,6 +537,9 @@ export async function getCourseGraceBlockers(
   };
 
   for (const course of courses) {
+    // F4: General Education courses are checked at the General Education
+    // desk, not in the Head of Department's gate.
+    if (isGeneralEducationCourse(course)) continue;
     const description = course.description;
     if (!description?.courseContent?.trim()) {
       blockers.missing.push(course.code);
