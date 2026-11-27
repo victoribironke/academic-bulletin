@@ -102,6 +102,7 @@ import { GraduationNumbers } from "@/components/submissions/graduation-numbers";
 import { LeaderDetails } from "@/components/submissions/leader-details";
 import { CommentsList } from "@/components/submissions/comments-list";
 import { CopySection } from "@/components/submissions/copy-section";
+import { AiHelper } from "@/components/submissions/ai-helper";
 import { COPYABLE_SECTIONS } from "@/lib/submissions/copy-section";
 import { SaveStatus } from "@/components/shared/save-status";
 import { useOnline } from "@/hooks/use-online";
@@ -523,6 +524,8 @@ export default function SubmissionDetailPage({
   const [summaryOfChanges, setSummaryOfChanges] = useState("");
   // E3: a drafted Summary of Changes reloads the editor with it.
   const [summaryVersion, setSummaryVersion] = useState(0);
+  // H7: text accepted from the AI helper reloads the regulations editor.
+  const [regulationsVersion, setRegulationsVersion] = useState(0);
 
   // GRACE compliance check state
   const [graceCheckingPhilosophy, setGraceCheckingPhilosophy] = useState(false);
@@ -891,6 +894,29 @@ export default function SubmissionDetailPage({
       }
     };
   }, [hasChanges, canEdit, submission, id, buildContentPayload, conflict, retryTick]);
+
+  // H7: a suggestion the person chose to use goes into its field, then saves as usual.
+  const applyHelperText = (field: string, text: string) => {
+    const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+    const setters: Record<string, (value: string) => void> = {
+      philosophy: setPhilosophy,
+      mission: setMission,
+      vision: setVision,
+      utmeRequirements: setUtmeRequirements,
+      directEntryRequirements: setDirectEntryRequirements,
+      transferRequirements: setTransferRequirements,
+      graduationRequirements: setGraduationRequirements,
+    };
+    if (setters[field]) setters[field](text);
+    else if (field === "objectives") setObjectives(lines.length ? lines : [""]);
+    else if (field === "uniqueFeatures") setUniqueFeatures(lines.length ? lines : [""]);
+    else if (field === "employability") setEmployability(lines.length ? lines : [""]);
+    else if (field === "regulations") {
+      setRegulations(lines.map((line) => `<p>${line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`).join(""));
+      setRegulationsVersion((value) => value + 1);
+    } else return;
+    setHasChanges(true);
+  };
 
   const handleSave = async (force = false): Promise<boolean> => {
     if (!submission) return false;
@@ -1727,6 +1753,20 @@ export default function SubmissionDetailPage({
                   </div>
                   {/* H6: a question about this section goes to the school's DAP officer. */}
                   <div className="flex flex-col items-start gap-2 sm:max-w-sm sm:items-end">
+                    {/* H7: the AI helper; nothing changes until the person uses a suggestion. */}
+                    {canEdit && (
+                      <AiHelper
+                        key={`ai-${activeSection}`}
+                        submissionId={id}
+                        section={activeSection}
+                        sectionTitle={currentSection?.title ?? activeSection}
+                        programmeName={submission.programme.name}
+                        philosophy={philosophy}
+                        comments={submission.comments.filter((comment) => comment.section === activeSection)}
+                        canEdit={canEdit}
+                        onApply={applyHelperText}
+                      />
+                    )}
                     {/* G8: a department with several programmes copies a section's words. */}
                     {canEdit && COPYABLE_SECTIONS[activeSection] && (
                       <CopySection
@@ -2515,6 +2555,7 @@ export default function SubmissionDetailPage({
                       <CarriedNote field="regulations" value={regulations} />
                       {canEdit ? (
                         <RichTextEditor
+                          key={regulationsVersion}
                           content={regulations}
                           onChange={(content) => {
                             setRegulations(content);

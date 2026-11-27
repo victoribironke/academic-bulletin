@@ -14,6 +14,8 @@ export const AI_RATE_LIMITS = {
   graceQueue: { limit: 12, windowSeconds: 60 },
   /** A staff or programme photo reviewed on upload. */
   imageReview: { limit: 10, windowSeconds: 60 },
+  /** H7: the AI helper explaining a comment. */
+  assistant: { limit: 10, windowSeconds: 60 },
 } as const;
 
 export type AiRateLimit = keyof typeof AI_RATE_LIMITS;

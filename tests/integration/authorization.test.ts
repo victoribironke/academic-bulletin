@@ -113,6 +113,7 @@ import { GET as readCreditSummary } from "@/app/api/submissions/[id]/credit-summ
 import { GET as readLeaders, PATCH as saveLeader } from "@/app/api/submissions/[id]/leaders/route";
 import { POST as undoDelete } from "@/app/api/archive/undo/route";
 import { GET as listCopyTargets, POST as copySection } from "@/app/api/submissions/[id]/copy-section/route";
+import { POST as askHelper } from "@/app/api/submissions/[id]/assistant/route";
 import { GET as readDraftQuestions, POST as askDapRoute } from "@/app/api/submissions/[id]/questions/route";
 import { GET as readDapInbox } from "@/app/api/dap-questions/route";
 import { PATCH as answerDapQuestion } from "@/app/api/dap-questions/[id]/route";
@@ -7460,5 +7461,44 @@ describe("copying a section to the department's other programmes (G8)", () => {
       carriedFields: ["utmeRequirements"],
     });
     expect(await prisma.activityLog.count({ where: { entityId: siblingId, action: "SECTION_COPIED" } })).toBe(1);
+  });
+});
+
+// Task H7: the AI helper explains a comment; it changes nothing on the draft.
+describe("the AI helper (H7)", () => {
+  const cycleId = "h7-cycle";
+  const submissionId = "h7-submission";
+  const context = { params: Promise.resolve({ id: submissionId }) };
+  let commentId = "";
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.create({ data: { id: cycleId, name: "H7", createdById: ids.super } });
+    await prisma.submission.create({
+      data: { id: submissionId, title: "H7 Bulletin", programmeId: ids.programmeA, createdById: ids.hod, cycleId },
+    });
+    commentId = (
+      await prisma.comment.create({ data: { submissionId, authorId: ids.dean, content: "Say who the programme is for.", phase: 1, section: "overview" } })
+    ).id;
+  });
+
+  afterAll(async () => {
+    await prisma.submission.deleteMany({ where: { id: submissionId } });
+    await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+  });
+
+  const ask = (userId: string, body: object) => {
+    authState.userId = userId;
+    return askHelper(new Request("http://localhost", { method: "POST", body: JSON.stringify(body) }), context);
+  };
+
+  it("only helps someone who can edit the draft, with one of its own comments", async () => {
+    expect((await ask(ids.dean, { action: "explain-comment", commentId })).status).toBe(403);
+    expect((await ask(ids.hod, { action: "rewrite-everything" })).status).toBe(400);
+    expect((await ask(ids.hod, { action: "explain-comment", commentId: "not-here" })).status).toBe(404);
+    const before = await prisma.submission.findUniqueOrThrow({ where: { id: submissionId }, select: { updatedAt: true } });
+    // Without the AI service (as in tests) it says so; nothing on the draft changes either way.
+    const answer = await ask(ids.hod, { action: "explain-comment", commentId });
+    expect([200, 503]).toContain(answer.status);
+    expect((await prisma.submission.findUniqueOrThrow({ where: { id: submissionId }, select: { updatedAt: true } })).updatedAt).toEqual(before.updatedAt);
   });
 });

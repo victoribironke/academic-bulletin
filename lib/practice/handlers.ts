@@ -696,6 +696,9 @@ export function handlePracticeRequest(state: PracticeState, viewer: PracticeView
       return refuse(state, 409, "Accepting a check with a reason is kept on your real programme, not in the practice one.", { code: "PRACTICE" });
     }
     if (sub === "credit-summary" && method === "GET") return ok(state, practiceCredits(state));
+    // The practice programme has no 2023-2027 text, and the AI helper costs a model call.
+    if (sub === "baseline" && method === "GET") return ok(state, { hasBaseline: false, carried: [], texts: {} });
+    if (sub === "assistant") return refuse(state, 409, "The AI helper works on your real programme, not in the practice one.", { code: "PRACTICE" });
     if (sub === "elective-groups") {
       if (method === "GET") return ok(state, { groups: [] });
       return refuse(state, 409, "Elective groups are made on your real programme, not in the practice one.", { code: "PRACTICE" });
