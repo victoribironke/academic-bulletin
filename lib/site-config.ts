@@ -26,5 +26,5 @@ export const INVITATIONS = {
   fromName: "Directorate of Academic Planning, Babcock University",
   /** Not before 8:00 am WAT, Thursday, November 26, 2026. */
   sendAt: "2026-11-26T08:00:00+01:00",
-  roles: ["HOD", "PROGRAMME_COORDINATOR", "DEAN"] as const,
+  roles: ["HOD", "PROGRAMME_COORDINATOR", "DEAN", "LECTURER", "COMMITTEE_MEMBER"] as const,
 };

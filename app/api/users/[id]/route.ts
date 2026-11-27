@@ -71,6 +71,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 // Role tier hierarchy: higher number = higher privilege
 const ROLE_TIERS: Record<string, number> = {
+  LECTURER: 0,
+  COMMITTEE_MEMBER: 0,
   PROGRAMME_COORDINATOR: 1,
   HOD: 2,
   DEAN: 3,

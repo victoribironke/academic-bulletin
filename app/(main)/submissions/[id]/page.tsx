@@ -118,6 +118,7 @@ const RichTextViewer = dynamic(() => import("@/components/editor/rich-text-edito
 const BulletinPreview = dynamic(() => import("@/components/preview/bulletin-preview").then((m) => m.BulletinPreview));
 type BulletinPreviewProps = ComponentProps<typeof import("@/components/preview/bulletin-preview").BulletinPreview>;
 const AiHelper = dynamic(() => import("@/components/submissions/ai-helper").then((m) => m.AiHelper));
+const LecturerAssignments = dynamic(() => import("@/components/courses/lecturer-assignments").then((m) => m.LecturerAssignments));
 
 interface Submission {
   id: string;
@@ -2543,7 +2544,12 @@ export default function SubmissionDetailPage({
 
                 {/* Course Descriptions Section */}
                 {visitedSections.has("descriptions") && (
-                  <div hidden={activeSection !== "descriptions"}>
+                  <div hidden={activeSection !== "descriptions"} className="space-y-4">
+                    {/* G2: courses given to lecturers, and the Head's decisions. */}
+                    <LecturerAssignments
+                      submissionId={submission.id}
+                      canDecide={currentUser?.role === "HOD" || currentUser?.role === "SUPER_ADMIN"}
+                    />
                     <CourseDescriptionForm
                       submissionId={submission.id}
                       disabled={!canEdit}

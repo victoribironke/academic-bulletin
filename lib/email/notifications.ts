@@ -439,6 +439,8 @@ export async function sendDailyDigests(now = new Date()): Promise<DigestResult> 
 // ── New user access ──────────────────────────────────────────────────────────
 
 const ROLE_LABELS: Record<string, string> = {
+  LECTURER: "Lecturer",
+  COMMITTEE_MEMBER: "Committee Member",
   PROGRAMME_COORDINATOR: "Programme Coordinator",
   HOD: "Head of Department",
   DEAN: "Dean",

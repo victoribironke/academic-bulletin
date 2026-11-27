@@ -9,7 +9,7 @@ import { couldNot } from "@/lib/messages";
  */
 export async function GET(request: Request) {
   try {
-    const auth = await requireApiUser();
+    const auth = await requireApiUser(undefined, { limitedRoles: ["LECTURER", "COMMITTEE_MEMBER"] });
     if (!auth.ok) return auth.response;
     const versionId = new URL(request.url).searchParams.get("version");
     const policy = await readPolicy(versionId);

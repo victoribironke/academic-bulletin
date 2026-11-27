@@ -83,6 +83,7 @@ export async function loadDraftData(submissionId: string): Promise<DraftData> {
       },
       comments: { where: { status: "OPEN" }, select: { section: true } },
       electiveGroups: { select: { id: true, name: true, chooseUnits: true } },
+      courseAssignments: { select: { status: true, course: { select: { code: true } } } },
     },
   });
   const departmentId = draft.programme.departmentId;
@@ -140,6 +141,7 @@ export async function loadDraftData(submissionId: string): Promise<DraftData> {
     courseListConfirmed: confirmed.has(draft.id),
     graceBlocked: blocked,
     electiveGroups: draft.electiveGroups,
+    assignments: draft.courseAssignments.map((assignment) => ({ code: assignment.course.code, status: assignment.status })),
     leaders: resolveLeaders(
       draft.programme.department.school,
       draft.programme.department,

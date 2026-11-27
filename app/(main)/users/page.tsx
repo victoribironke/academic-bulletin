@@ -98,6 +98,8 @@ interface User {
 }
 
 const ROLE_TIERS: Record<string, number> = {
+  LECTURER: 0,
+  COMMITTEE_MEMBER: 0,
   PROGRAMME_COORDINATOR: 1,
   HOD: 2,
   DEAN: 3,
@@ -106,6 +108,8 @@ const ROLE_TIERS: Record<string, number> = {
 };
 
 const ROLE_STYLES: Record<string, string> = {
+  LECTURER: "border-border bg-background text-muted-foreground",
+  COMMITTEE_MEMBER: "border-border bg-background text-muted-foreground",
   PROGRAMME_COORDINATOR: "border-brand-gold/40 bg-brand-gold/10 text-foreground",
   HOD: "border-border bg-muted text-foreground",
   DEAN: "border-primary/20 bg-primary/10 text-primary",

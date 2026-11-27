@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { SubmissionStatus } from "@prisma/client";
 import dynamic from "next/dynamic";
 
@@ -190,9 +191,16 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [failed, setFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const router = useRouter();
+  // G2: a lecturer starts at their courses, a committee member at the programmes.
+  const limitedHome =
+    currentUser?.role === "LECTURER" ? "/my-courses" : currentUser?.role === "COMMITTEE_MEMBER" ? "/submissions" : null;
+  useEffect(() => {
+    if (limitedHome) router.replace(limitedHome);
+  }, [limitedHome, router]);
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || limitedHome) return;
     let cancelled = false;
     fetch("/api/dashboard/stats")
       .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
@@ -208,7 +216,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [currentUser, reloadKey]);
+  }, [currentUser, reloadKey, limitedHome]);
 
   if (userLoading || (!stats && !failed)) {
     return (

@@ -48,7 +48,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const auth = await requireApiUser();
+    const auth = await requireApiUser(undefined, { limitedRoles: ["COMMITTEE_MEMBER"] });
     if (!auth.ok) return auth.response;
     if (!(await canReadSubmission(auth.user, submissionId))) {
       return NextResponse.json({ error: NO_ACCESS }, { status: 403 });

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { canLecturerEditCourse, lecturerAssignment } from "@/lib/courses/assignments";
 import { GraceServiceError, runGraceCheck } from "@/lib/grace";
 import {
   currentCourseGraceState,
@@ -41,9 +42,14 @@ export async function POST(request: NextRequest) {
     }
 
     const user = await getApiUser();
-    const gate = await requireSubmissionWriteAccess(user, targetSubmissionId);
-    if (!gate.ok) {
-      return NextResponse.json({ error: gate.message }, { status: gate.status });
+    // G2: a lecturer checks a course given to them, while it is with them.
+    const lecturerOwnCourse =
+      user?.role === "LECTURER" && type === "course" && typeof courseId === "string" && (await canLecturerEditCourse(user.id, courseId));
+    if (!lecturerOwnCourse) {
+      const gate = await requireSubmissionWriteAccess(user, targetSubmissionId);
+      if (!gate.ok) {
+        return NextResponse.json({ error: gate.message }, { status: gate.status });
+      }
     }
 
     const limited = await aiRateLimitResponse("graceCheck", user!.id);
@@ -130,8 +136,11 @@ export async function GET(request: NextRequest) {
   const courseId = searchParams.get("courseId");
 
   try {
-    const auth = await requireApiUser();
+    const auth = await requireApiUser(undefined, { limitedRoles: ["LECTURER", "COMMITTEE_MEMBER"] });
     if (!auth.ok) return auth.response;
+    if (auth.user.role === "LECTURER" && (!courseId || !(await lecturerAssignment(auth.user.id, courseId)))) {
+      return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
+    }
 
     if (submissionId) {
       if (!(await canViewSubmission(auth.user, submissionId))) {
@@ -154,7 +163,7 @@ export async function GET(request: NextRequest) {
       });
       if (
         !course ||
-        !(await canViewSubmission(auth.user, course.submissionId))
+        (auth.user.role !== "LECTURER" && !(await canViewSubmission(auth.user, course.submissionId)))
       ) {
         return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
       }

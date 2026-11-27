@@ -20,6 +20,18 @@ enum UserRole {
   DEAN
   ADMIN
   SUPER_ADMIN
+  /// G2: sees only the courses their Head gives them; writes their descriptions.
+  LECTURER
+  /// G2: reads and comments on the programmes the Head names; edits nothing.
+  COMMITTEE_MEMBER
+}
+
+/// G2: where a lecturer's course stands.
+enum AssignmentStatus {
+  ASSIGNED
+  READY
+  ACCEPTED
+  RETURNED
 }
 
 enum SubmissionStatus {
@@ -404,6 +416,7 @@ model User {
   archivedRecords         ArchivedRecord[]
   // Review phases this user owns by name, beyond what their role grants
   phaseOwnerships         PhaseOwner[]
+  lecturerAssignments     CourseAssignment[]       @relation("LecturerAssignments")
 
   @@map("users")
 }
@@ -557,6 +570,7 @@ model Submission {
   dapQuestions           DapQuestion[]
   checkAcceptances       CheckAcceptance[]
   electiveGroups         ElectiveGroup[]
+  courseAssignments      CourseAssignment[]
 
   @@unique([programmeId, cycleId])
   @@map("submissions")
@@ -651,10 +665,33 @@ model Course {
   masterCourse  MasterCourse?      @relation(fields: [masterCourseId], references: [id], onDelete: SetNull)
   electiveGroup ElectiveGroup?     @relation(fields: [electiveGroupId], references: [id], onDelete: SetNull)
   description   CourseDescription?
+  assignment    CourseAssignment?
 
   @@unique([code, submissionId])
   @@unique([title, submissionId])
   @@map("courses")
+}
+
+/// G2: a course in a draft given to a lecturer, who writes its description
+/// and marks it "Ready for my Head"; the Head accepts it or returns it.
+model CourseAssignment {
+  id           String           @id @default(cuid())
+  courseId     String           @unique
+  submissionId String
+  lecturerId   String
+  status       AssignmentStatus @default(ASSIGNED)
+  note         String?
+  assignedById String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  course     Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  lecturer   User       @relation("LecturerAssignments", fields: [lecturerId], references: [id], onDelete: Cascade)
+
+  @@index([lecturerId])
+  @@index([submissionId])
+  @@map("course_assignments")
 }
 
 /// W3: electives belong to a named group; a student chooses at least

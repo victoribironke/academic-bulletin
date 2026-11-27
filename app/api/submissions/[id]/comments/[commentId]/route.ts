@@ -18,7 +18,7 @@ interface RouteParams {
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const { id, commentId } = await params;
-    const auth = await requireApiUser();
+    const auth = await requireApiUser(undefined, { limitedRoles: ["COMMITTEE_MEMBER"] });
     if (!auth.ok) return auth.response;
     if (!(await canViewSubmission(auth.user, id))) {
       return NextResponse.json({ error: NO_ACCESS }, { status: 403 });

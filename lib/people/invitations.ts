@@ -21,6 +21,8 @@ import { recordActivity } from "@/lib/activity-log";
 const ROLE_NAMES: Record<string, string> = {
   HOD: "Head of Department",
   PROGRAMME_COORDINATOR: "Programme Coordinator",
+  LECTURER: "Lecturer",
+  COMMITTEE_MEMBER: "Committee Member",
   DEAN: "Dean",
 };
 
@@ -134,7 +136,7 @@ async function loadPerson(userId: string) {
   const unit =
     user.role === "DEAN"
       ? (user.school?.name ?? "your school")
-      : user.role === "PROGRAMME_COORDINATOR" && user.programmeAssignments.length
+      : (user.role === "PROGRAMME_COORDINATOR" || user.role === "COMMITTEE_MEMBER") && user.programmeAssignments.length
         ? user.programmeAssignments.map((item) => item.programme.name).join(", ")
         : (user.department?.name ?? "your department");
   // The DAP officer named for the school on the roster (task D1).

@@ -73,6 +73,8 @@ export type DraftData = {
   electiveGroups?: CreditGroup[];
   /** E4: the Dean and Head of Department as the school and department records give them. */
   leaders?: Leaders;
+  /** G2: courses given to lecturers, and where each stands. */
+  assignments?: { code: string; status: string }[];
 };
 
 const text = (value: unknown) => (typeof value === "string" ? value.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim() : "");
@@ -330,6 +332,20 @@ export function runRules(data: DraftData): Finding[] {
           ? `Give a job title to ${list(named)}, listed with rank Other.`
           : `Give a job title to the ${untitled.length} staff member${untitled.length === 1 ? "" : "s"} listed with rank Other.`,
       items: named,
+    });
+  }
+
+  // V20: every course given to a lecturer is accepted by the Head (G2).
+  const waiting = (data.assignments ?? []).filter((assignment) => assignment.status !== "ACCEPTED");
+  if (waiting.length) {
+    const words: Record<string, string> = { ASSIGNED: "with the lecturer", READY: "ready for you", RETURNED: "returned to the lecturer" };
+    add({
+      rule: "V20",
+      level: "MUST",
+      section: "descriptions",
+      key: `V20:${waiting.map((assignment) => `${assignment.code}=${assignment.status}`).join(",")}`,
+      message: `Accept or return the lecturers' work before submitting: ${list(waiting.map((assignment) => `${assignment.code} (${words[assignment.status] ?? assignment.status})`))}.`,
+      items: waiting.map((assignment) => assignment.code),
     });
   }
 

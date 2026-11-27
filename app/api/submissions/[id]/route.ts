@@ -65,7 +65,7 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
-    const auth = await requireApiUser();
+    const auth = await requireApiUser(undefined, { limitedRoles: ["COMMITTEE_MEMBER"] });
     if (!auth.ok) return auth.response;
     const isMember = await canViewSubmission(auth.user, id);
     if (!isMember && !(await canReadSubmission(auth.user, id))) {

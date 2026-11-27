@@ -99,8 +99,17 @@ export async function getApiUser(options?: {
   return (await lookupApiUser(options)).user;
 }
 
+/**
+ * G2: roles that see only what a route explicitly lets them see. A lecturer
+ * works on the courses given to them; a committee member reads and comments
+ * on the programmes named for them. Every other route refuses them, so a
+ * route written for the older roles can never show them too much.
+ */
+export const LIMITED_ROLES: readonly UserRole[] = ["LECTURER", "COMMITTEE_MEMBER"];
+
 export async function requireApiUser(
   allowedRoles?: UserRole[],
+  options: { limitedRoles?: readonly UserRole[] } = {},
 ): Promise<AuthGate> {
   const lookup = await lookupApiUser();
   if (!lookup.user) {
@@ -115,6 +124,16 @@ export async function requireApiUser(
   const user = lookup.user;
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: NO_ACCESS }, { status: 403 }),
+    };
+  }
+  if (
+    LIMITED_ROLES.includes(user.role) &&
+    !allowedRoles?.includes(user.role) &&
+    !options.limitedRoles?.includes(user.role)
+  ) {
     return {
       ok: false,
       response: NextResponse.json({ error: NO_ACCESS }, { status: 403 }),
@@ -173,7 +192,8 @@ export async function canViewSubmission(
 
   if (user.role === "HOD") {
     if (submission.programme.department.id === user.departmentId) return true;
-  } else if (user.role === "PROGRAMME_COORDINATOR") {
+  } else if (user.role === "PROGRAMME_COORDINATOR" || user.role === "COMMITTEE_MEMBER") {
+    // G2: a committee member reads and comments on the programmes named for them.
     const assigned = await prisma.userProgramme.findUnique({
       where: {
         userId_programmeId: {

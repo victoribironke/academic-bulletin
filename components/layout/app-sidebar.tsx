@@ -62,6 +62,8 @@ type NavItem = {
   icon: React.ComponentType<{ className?: string }>;
   permission?: Permission;
   roles?: UserRole[];
+  /** G2: the lecturer and committee roles see only items that name them here. */
+  limitedRoles?: UserRole[];
   /** Extra path prefixes that should mark this item as active. */
   matches?: string[];
 };
@@ -78,12 +80,21 @@ const NAV_GROUPS: NavGroup[] = [
         icon: LayoutDashboard,
         permission: "view:dashboard",
       },
+      // G2: a lecturer's only page: the courses their Head gave them.
+      {
+        title: "My Courses",
+        href: "/my-courses",
+        icon: BookOpenText,
+        roles: ["LECTURER"],
+        limitedRoles: ["LECTURER"],
+      },
       {
         title: "Submissions",
         href: "/submissions",
         icon: FileText,
         permission: "view:submissions",
         matches: ["/submissions"],
+        limitedRoles: ["COMMITTEE_MEMBER"],
       },
       {
         title: "Bulletins",
@@ -96,6 +107,7 @@ const NAV_GROUPS: NavGroup[] = [
         title: "Academic Policy",
         href: "/policy",
         icon: BookOpenText,
+        limitedRoles: ["LECTURER", "COMMITTEE_MEMBER"],
       },
       // U6: a programme to try every action on; nothing is recorded.
       {
@@ -148,6 +160,12 @@ const NAV_GROUPS: NavGroup[] = [
         permission: "view:staff",
       },
       // G2: the Head names programme coordinators for the department's programmes.
+      {
+        title: "Lecturers & Committee",
+        href: "/lecturers",
+        icon: UsersRound,
+        roles: ["HOD"],
+      },
       {
         title: "Coordinators",
         href: "/coordinators",
@@ -331,6 +349,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const canSee = (item: NavItem) => {
     if (!currentUser) return false;
     if (item.roles && !item.roles.includes(currentUser.role)) return false;
+    if ((currentUser.role === "LECTURER" || currentUser.role === "COMMITTEE_MEMBER") && !item.limitedRoles?.includes(currentUser.role)) return false;
     return !item.permission || hasPermission(item.permission);
   };
 

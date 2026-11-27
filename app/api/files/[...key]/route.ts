@@ -12,7 +12,7 @@ interface RouteParams {
  * Railway bucket is private, so photos are read through the app.
  */
 export async function GET(_request: NextRequest, { params }: RouteParams) {
-  const auth = await requireApiUser();
+  const auth = await requireApiUser(undefined, { limitedRoles: ["LECTURER", "COMMITTEE_MEMBER"] });
   if (!auth.ok) return auth.response;
 
   const key = (await params).key.join("/");

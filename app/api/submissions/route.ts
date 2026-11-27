@@ -22,11 +22,11 @@ const SUBMISSION_STATUSES = [
 // GET /api/submissions - List submissions with filters
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireApiUser();
+    const auth = await requireApiUser(undefined, { limitedRoles: ["COMMITTEE_MEMBER"] });
     if (!auth.ok) return auth.response;
     if (
       (auth.user.role === "HOD" && !auth.user.departmentId) ||
-      (auth.user.role === "PROGRAMME_COORDINATOR" &&
+      ((auth.user.role === "PROGRAMME_COORDINATOR" || auth.user.role === "COMMITTEE_MEMBER") &&
         auth.user.programmeIds.length === 0) ||
       (auth.user.role === "DEAN" && !auth.user.schoolId)
     ) {
@@ -108,7 +108,8 @@ export async function GET(request: NextRequest) {
         }),
         ...(phaseNumber !== null && { currentPhase: phaseNumber }),
         ...(programmeId && { programmeId }),
-        ...(auth.user.role === "PROGRAMME_COORDINATOR" && {
+        // G2: coordinators and committee members see only their programmes.
+        ...((auth.user.role === "PROGRAMME_COORDINATOR" || auth.user.role === "COMMITTEE_MEMBER") && {
           programmeId: { in: auth.user.programmeIds },
         }),
         ...(departmentId && { programme: { departmentId } }),

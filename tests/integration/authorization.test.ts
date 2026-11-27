@@ -114,6 +114,12 @@ import { GET as readLeaders, PATCH as saveLeader } from "@/app/api/submissions/[
 import { POST as undoDelete } from "@/app/api/archive/undo/route";
 import { GET as listCopyTargets, POST as copySection } from "@/app/api/submissions/[id]/copy-section/route";
 import { POST as askHelper } from "@/app/api/submissions/[id]/assistant/route";
+import { GET as readAssignments, PATCH as decideAssignmentRoute, POST as assignCourseRoute } from "@/app/api/submissions/[id]/assignments/route";
+import { POST as addLecturer } from "@/app/api/lecturers/route";
+import { POST as nameCommitteeMember } from "@/app/api/committee/route";
+import { GET as myCourses } from "@/app/api/lecturer/courses/route";
+import { POST as markCourseReady } from "@/app/api/lecturer/courses/[assignmentId]/ready/route";
+import { PUT as saveCourseDescription } from "@/app/api/courses/[id]/description/route";
 import { GET as readDraftQuestions, POST as askDapRoute } from "@/app/api/submissions/[id]/questions/route";
 import { GET as readDapInbox } from "@/app/api/dap-questions/route";
 import { PATCH as answerDapQuestion } from "@/app/api/dap-questions/[id]/route";
@@ -7500,5 +7506,124 @@ describe("the AI helper (H7)", () => {
     const answer = await ask(ids.hod, { action: "explain-comment", commentId });
     expect([200, 503]).toContain(answer.status);
     expect((await prisma.submission.findUniqueOrThrow({ where: { id: submissionId }, select: { updatedAt: true } })).updatedAt).toEqual(before.updatedAt);
+  });
+});
+
+// Task G2: lecturers see only the courses their Head gives them; committee
+// members read and comment; only the Head accepts and submits.
+describe("lecturers and committee members (G2)", () => {
+  const cycleId = "g2-cycle";
+  const submissionId = "g2-submission";
+  const otherId = "g2-other";
+  const context = { params: Promise.resolve({ id: submissionId }) };
+  let lecturerId = "";
+  let memberId = "";
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.create({ data: { id: cycleId, name: "G2", createdById: ids.super } });
+    await prisma.submission.createMany({
+      data: [
+        { id: submissionId, title: "G2 Bulletin", programmeId: ids.programmeA, createdById: ids.hod, cycleId },
+        { id: otherId, title: "G2 Other", programmeId: ids.programmeB, createdById: ids.super, cycleId },
+      ],
+    });
+    await prepareDraftForSubmit(submissionId);
+  });
+
+  afterAll(async () => {
+    await prisma.activityLog.deleteMany({ where: { OR: [{ entityId: { in: [submissionId, otherId] } }, { actorId: { in: [lecturerId, memberId].filter(Boolean) } }] } });
+    await prisma.submission.deleteMany({ where: { id: { in: [submissionId, otherId] } } });
+    await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+    await prisma.mfaVerification.deleteMany({ where: { userId: { in: [lecturerId, memberId].filter(Boolean) } } });
+    await prisma.userProgramme.deleteMany({ where: { userId: { in: [lecturerId, memberId].filter(Boolean) } } });
+    await prisma.user.deleteMany({ where: { id: { in: [lecturerId, memberId].filter(Boolean) } } });
+  });
+
+  const json = (method: string, body: object) =>
+    new Request("http://localhost", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const signIn = async (userId: string) => {
+    await prisma.mfaVerification.createMany({ data: [{ userId, sessionId: `session-${userId}`, method: "AUTHENTICATOR" }], skipDuplicates: true });
+    authState.userId = userId;
+  };
+
+  it("lets the Head add a lecturer and give them a course; the lecturer sees that course only", async () => {
+    authState.userId = ids.hod;
+    expect((await addLecturer(json("POST", { email: "someone@gmail.com", firstName: "Ada", lastName: "Lecturer" }))).status).toBe(400);
+    const added = await addLecturer(json("POST", { email: "ada.lecturer@babcock.edu.ng", firstName: "Ada", lastName: "Lecturer" }));
+    expect(added.status).toBe(200);
+    lecturerId = (await added.json()).userId;
+    expect(await prisma.user.findUniqueOrThrow({ where: { id: lecturerId }, select: { role: true, departmentId: true } })).toEqual({
+      role: "LECTURER",
+      departmentId: ids.departmentA,
+    });
+
+    const course = await prisma.course.findFirstOrThrow({ where: { submissionId, code: "RDY 211" } });
+    const other = await prisma.course.findFirstOrThrow({ where: { submissionId, code: "RDY 212" } });
+    const assigned = await assignCourseRoute(json("POST", { courseId: course.id, lecturerId }), context);
+    expect(assigned.status).toBe(200);
+    expect((await assigned.json()).counts).toMatchObject({ ASSIGNED: 1, READY: 0, ACCEPTED: 0 });
+
+    await signIn(lecturerId);
+    // Nothing of the programme but their course.
+    expect((await getSubmission(new NextRequest(`http://localhost/api/submissions/${submissionId}`), context)).status).toBe(403);
+    expect((await listCourses(new NextRequest(`http://localhost/api/courses?submissionId=${submissionId}`))).status).toBe(403);
+    expect((await listSubmissions(new NextRequest("http://localhost/api/submissions"))).status).toBe(403);
+    const mine = await (await myCourses()).json();
+    expect(mine.courses.map((item: { course: { code: string } }) => item.course.code)).toEqual(["RDY 211"]);
+
+    const write = (courseId: string, outcomes: string[]) =>
+      saveCourseDescription(json("PUT", { learningOutcomes: outcomes, courseContent: "Topics of the course, in order." }), { params: Promise.resolve({ id: courseId }) });
+    expect((await write(other.id, ["Explain one"])).status).toBe(403);
+    expect((await write(course.id, ["Explain one"])).status).toBe(200);
+    const assignmentId = mine.courses[0].id;
+    const ready = () => markCourseReady(new Request("http://localhost", { method: "POST" }), { params: Promise.resolve({ assignmentId }) });
+    expect((await ready()).status).toBe(400); // fewer than three outcomes
+    expect((await write(course.id, ["Explain one", "Apply two", "Evaluate three"])).status).toBe(200);
+    expect((await ready()).status).toBe(200);
+    // With the Head now: the lecturer can't change it.
+    expect((await write(course.id, ["Explain one", "Apply two", "Evaluate four"])).status).toBe(403);
+
+    // V20: the Head decides before submitting; only the Head decides.
+    authState.userId = ids.hod;
+    const results = (await (await readChecks(new Request("http://localhost"), context)).json()).results as { rule: string; level: string }[];
+    expect(results.find((result) => result.rule === "V20")).toMatchObject({ level: "MUST" });
+    authState.userId = ids.coordinator;
+    expect((await decideAssignmentRoute(json("PATCH", { assignmentId, action: "accept" }), context)).status).toBe(403);
+    authState.userId = ids.hod;
+    expect((await decideAssignmentRoute(json("PATCH", { assignmentId, action: "return", note: "short" }), context)).status).toBe(400);
+    expect((await decideAssignmentRoute(json("PATCH", { assignmentId, action: "return", note: "Add the practical sessions to the content." }), context)).status).toBe(200);
+    await signIn(lecturerId);
+    expect((await myCourses().then((res) => res.json())).courses[0]).toMatchObject({ status: "RETURNED", note: "Add the practical sessions to the content.", canEdit: true });
+    expect((await ready()).status).toBe(200);
+    authState.userId = ids.hod;
+    const accepted = await decideAssignmentRoute(json("PATCH", { assignmentId, action: "accept" }), context);
+    expect((await accepted.json()).counts).toMatchObject({ ACCEPTED: 1 });
+    const after = (await (await readChecks(new Request("http://localhost"), context)).json()).results as { rule: string }[];
+    expect(after.some((result) => result.rule === "V20")).toBe(false);
+  });
+
+  it("lets a committee member read and comment on their programme, and change nothing", async () => {
+    authState.userId = ids.hod;
+    const named = await nameCommitteeMember(
+      json("POST", { email: "bo.committee@babcock.edu.ng", firstName: "Bo", lastName: "Committee", programmeIds: [ids.programmeA] }),
+    );
+    expect(named.status).toBe(200);
+    memberId = (await named.json()).userId;
+
+    await signIn(memberId);
+    expect((await getSubmission(new NextRequest(`http://localhost/api/submissions/${submissionId}`), context)).status).toBe(200);
+    expect((await getSubmission(new NextRequest(`http://localhost/api/submissions/${otherId}`), { params: Promise.resolve({ id: otherId }) })).status).toBe(403);
+    const listed = await (await listSubmissions(new NextRequest("http://localhost/api/submissions"))).json();
+    const listedIds = (Array.isArray(listed) ? listed : listed.submissions ?? listed.items).map((item: { id: string }) => item.id);
+    expect(listedIds).toContain(submissionId);
+    expect(listedIds).not.toContain(otherId);
+    expect((await createComment(new NextRequest(`http://localhost/api/submissions/${submissionId}/comments`, { method: "POST", body: JSON.stringify({ content: "Please name the employers you work with.", section: "overview", type: "SUGGESTION" }) }), context)).status).toBe(201);
+    const edited = await updateSubmission(
+      new NextRequest(`http://localhost/api/submissions/${submissionId}`, { method: "PUT", body: JSON.stringify({ content: { mission: "Changed by the committee." } }) }),
+      context,
+    );
+    expect(edited.status).toBe(403);
+    // Pages written for the older roles refuse them outright.
+    expect((await readAssignments(new Request("http://localhost"), context)).status).toBe(403);
   });
 });

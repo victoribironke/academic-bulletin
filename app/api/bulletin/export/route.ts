@@ -18,7 +18,7 @@ import { canExportBulletin } from "@/lib/bulletin/access";
 // GET /api/bulletin/export?level=...&format=docx|pdf&submissionId=...&programmeId=...&departmentId=...&schoolId=...
 export async function GET(request: Request) {
   try {
-    const auth = await requireApiUser();
+    const auth = await requireApiUser(undefined, { limitedRoles: ["COMMITTEE_MEMBER"] });
     if (!auth.ok) return auth.response;
 
     const { searchParams } = new URL(request.url);

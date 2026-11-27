@@ -19,6 +19,36 @@ import { getRoleDisplayName } from "@/lib/auth";
 import { UNIVERSITY_DOMAIN, isUniversityEmail } from "@/lib/sign-in-access";
 import { sendInvitation, type InvitationResult } from "@/lib/people/invitations";
 
+/** G2: the roles a Head names per programme. */
+export type ProgrammeRole = "PROGRAMME_COORDINATOR" | "COMMITTEE_MEMBER";
+const ROLE_WORDS: Record<
+  ProgrammeRole,
+  { one: string; short: string; many: string; work: string; become: string; elsewhere: string; does: string; named: string; removed: string }
+> = {
+  PROGRAMME_COORDINATOR: {
+    one: "programme coordinator",
+    short: "coordinator",
+    many: "coordinators",
+    work: "draft",
+    become: "coordinate a programme",
+    elsewhere: "already coordinates programmes in",
+    does: "They edit the whole programme; only the Head of Department submits it.",
+    named: "COORDINATOR_NAMED",
+    removed: "COORDINATOR_REMOVED",
+  },
+  COMMITTEE_MEMBER: {
+    one: "committee member",
+    short: "committee member",
+    many: "committee members",
+    work: "read and comment on",
+    become: "be a committee member",
+    elsewhere: "is already a committee member in",
+    does: "They read and comment on the whole programme; they edit nothing.",
+    named: "COMMITTEE_MEMBER_NAMED",
+    removed: "COMMITTEE_MEMBER_REMOVED",
+  },
+};
+
 export class CoordinatorError extends Error {
   constructor(
     message: string,
@@ -54,7 +84,7 @@ function departmentOf(head: ApiUser): string {
 const cleanName = (value: unknown) => (typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, NAME_MAX) : "");
 
 /** The department's programmes (new ones first) and who coordinates each. */
-export async function coordinatorsFor(head: ApiUser): Promise<DepartmentCoordinators> {
+export async function coordinatorsFor(head: ApiUser, role: ProgrammeRole = "PROGRAMME_COORDINATOR"): Promise<DepartmentCoordinators> {
   const departmentId = departmentOf(head);
   const department = await prisma.department.findUnique({ where: { id: departmentId }, select: { id: true, name: true } });
   if (!department) throw new CoordinatorError("Your department isn't on the platform.", 404);
@@ -66,7 +96,7 @@ export async function coordinatorsFor(head: ApiUser): Promise<DepartmentCoordina
       name: true,
       isNew: true,
       userAssignments: {
-        where: { user: { role: "PROGRAMME_COORDINATOR", isActive: true } },
+        where: { user: { role, isActive: true } },
         select: { user: { select: { id: true, firstName: true, lastName: true, email: true, invitedAt: true, firstSignInAt: true } } },
         orderBy: { createdAt: "asc" },
       },
@@ -101,22 +131,27 @@ export type NamedCoordinator = {
  * account, or more programmes for one of the department's coordinators.
  * A new (or switched-back-on, or never-invited) coordinator is invited.
  */
-export async function nameCoordinator(head: ApiUser, input: Record<string, unknown>): Promise<NamedCoordinator> {
+export async function nameCoordinator(
+  head: ApiUser,
+  input: Record<string, unknown>,
+  role: ProgrammeRole = "PROGRAMME_COORDINATOR",
+): Promise<NamedCoordinator> {
+  const words = ROLE_WORDS[role];
   const departmentId = departmentOf(head);
   const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
   if (!EMAIL.test(email) || !isUniversityEmail(email)) {
-    throw new CoordinatorError(`Use their ${UNIVERSITY_DOMAIN} address: coordinators sign in with it.`);
+    throw new CoordinatorError(`Use their ${UNIVERSITY_DOMAIN} address: ${words.many} sign in with it.`);
   }
   if (email === head.email.trim().toLowerCase()) {
     throw new CoordinatorError("You already draft and submit every programme in your department.");
   }
   const firstName = cleanName(input.firstName);
   const lastName = cleanName(input.lastName);
-  if (!firstName || !lastName) throw new CoordinatorError("Give the coordinator's first and last names.");
+  if (!firstName || !lastName) throw new CoordinatorError(`Give the ${words.short}'s first and last names.`);
   const programmeIds = Array.isArray(input.programmeIds)
     ? [...new Set(input.programmeIds.filter((id): id is string => typeof id === "string" && id.length > 0))]
     : [];
-  if (programmeIds.length === 0) throw new CoordinatorError("Choose at least one programme for them to draft.");
+  if (programmeIds.length === 0) throw new CoordinatorError(`Choose at least one programme for them to ${words.work}.`);
   const programmes = await prisma.programme.findMany({
     where: { id: { in: programmeIds }, departmentId, isHidden: false },
     select: { id: true, name: true },
@@ -139,15 +174,15 @@ export async function nameCoordinator(head: ApiUser, input: Record<string, unkno
       department: { select: { name: true } },
     },
   });
-  if (existing && existing.role !== "PROGRAMME_COORDINATOR") {
+  if (existing && existing.role !== role) {
     throw new CoordinatorError(
-      `${email} already has an account as ${getRoleDisplayName(existing.role)}. Ask DAP if they should coordinate a programme instead.`,
+      `${email} already has an account as ${getRoleDisplayName(existing.role)}. Ask DAP if they should ${words.become} instead.`,
       409,
     );
   }
   if (existing && existing.departmentId !== departmentId) {
     throw new CoordinatorError(
-      `${email} already coordinates programmes in ${existing.department?.name ?? "another department"}. Ask DAP to move them.`,
+      `${email} ${words.elsewhere} ${existing.department?.name ?? "another department"}. Ask DAP to move them.`,
       409,
     );
   }
@@ -170,7 +205,7 @@ export async function nameCoordinator(head: ApiUser, input: Record<string, unkno
           email,
           firstName,
           lastName,
-          role: "PROGRAMME_COORDINATOR",
+          role,
           schoolId: department.schoolId,
           departmentId,
           programmeAssignments: { create: programmeIds.map((programmeId) => ({ programmeId })) },
@@ -180,10 +215,10 @@ export async function nameCoordinator(head: ApiUser, input: Record<string, unkno
     await recordActivity(
       {
         actorId: head.id,
-        action: "COORDINATOR_NAMED",
+        action: words.named,
         entityType: "USER",
         entityId: userId,
-        description: `Named ${name} (${email}) programme coordinator for ${programmeNames.join(", ")}. They edit the whole programme; only the Head of Department submits it.`,
+        description: `Named ${name} (${email}) ${words.one} for ${programmeNames.join(", ")}. ${words.does}`,
         metadata: { email, programmeIds, created: !existing, switchedOn: Boolean(existing && !existing.isActive) },
       },
       tx,
@@ -204,7 +239,8 @@ export async function nameCoordinator(head: ApiUser, input: Record<string, unkno
  * Takes a coordinator off one programme. With no programme left, their
  * account is switched off until they are named again.
  */
-export async function removeCoordinator(head: ApiUser, userId: string, programme: unknown) {
+export async function removeCoordinator(head: ApiUser, userId: string, programme: unknown, role: ProgrammeRole = "PROGRAMME_COORDINATOR") {
+  const words = ROLE_WORDS[role];
   const departmentId = departmentOf(head);
   const programmeId = typeof programme === "string" ? programme : "";
   const assignment = await prisma.userProgramme.findFirst({
@@ -212,11 +248,11 @@ export async function removeCoordinator(head: ApiUser, userId: string, programme
       userId,
       programmeId,
       programme: { departmentId },
-      user: { role: "PROGRAMME_COORDINATOR", departmentId },
+      user: { role, departmentId },
     },
     select: { id: true, programme: { select: { name: true } }, user: { select: { firstName: true, lastName: true } } },
   });
-  if (!assignment) throw new CoordinatorError("That person no longer coordinates that programme.", 404);
+  if (!assignment) throw new CoordinatorError(`That person is no longer a ${words.one} of that programme.`, 404);
   const name = `${assignment.user.firstName} ${assignment.user.lastName}`;
   return prisma.$transaction(async (tx) => {
     await tx.userProgramme.delete({ where: { id: assignment.id } });
@@ -225,10 +261,10 @@ export async function removeCoordinator(head: ApiUser, userId: string, programme
     await recordActivity(
       {
         actorId: head.id,
-        action: "COORDINATOR_REMOVED",
+        action: words.removed,
         entityType: "USER",
         entityId: userId,
-        description: `Took ${name} off ${assignment.programme.name} as programme coordinator.${remaining === 0 ? " With no other programme, their account is switched off." : ""}`,
+        description: `Took ${name} off ${assignment.programme.name} as ${words.one}.${remaining === 0 ? " With no other programme, their account is switched off." : ""}`,
         metadata: { programmeId, switchedOff: remaining === 0 },
       },
       tx,

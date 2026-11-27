@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { canLecturerEditCourse, lecturerAssignment } from "@/lib/courses/assignments";
 import {
   canReadSubmission,
   getApiUser,
@@ -53,9 +54,14 @@ export async function GET(
       );
     }
 
-    const auth = await requireApiUser();
+    const auth = await requireApiUser(undefined, { limitedRoles: ["LECTURER", "COMMITTEE_MEMBER"] });
     if (!auth.ok) return auth.response;
-    if (!(await canReadSubmission(auth.user, description.course.submissionId))) {
+    // G2: a lecturer reads only the courses given to them.
+    const allowed =
+      auth.user.role === "LECTURER"
+        ? Boolean(await lecturerAssignment(auth.user.id, id))
+        : await canReadSubmission(auth.user, description.course.submissionId);
+    if (!allowed) {
       return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
     }
 
@@ -99,12 +105,19 @@ export async function PUT(
     }
 
     const user = await getApiUser();
-    const gate = await requireSubmissionWriteAccess(user, course.submissionId);
-    if (!gate.ok) {
-      return NextResponse.json(
-        { error: gate.message },
-        { status: gate.status },
-      );
+    // G2: a lecturer writes a course given to them, while it is with them.
+    if (user?.role === "LECTURER") {
+      if (!(await canLecturerEditCourse(user.id, course.id))) {
+        return NextResponse.json({ error: "This course isn't with you to edit now." }, { status: 403 });
+      }
+    } else {
+      const gate = await requireSubmissionWriteAccess(user, course.submissionId);
+      if (!gate.ok) {
+        return NextResponse.json(
+          { error: gate.message },
+          { status: gate.status },
+        );
+      }
     }
 
     // W16: a shared course's description is written by the department that

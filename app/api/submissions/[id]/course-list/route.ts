@@ -15,7 +15,7 @@ type RouteParams = { params: Promise<{ id: string }> };
 export async function GET(_request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
-    const auth = await requireApiUser();
+    const auth = await requireApiUser(undefined, { limitedRoles: ["COMMITTEE_MEMBER"] });
     if (!auth.ok) return auth.response;
     if (!(await canViewSubmission(auth.user, id))) {
       return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
