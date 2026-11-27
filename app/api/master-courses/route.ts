@@ -17,6 +17,12 @@ import { findSameCodeCourse, sameCodeMessage } from "@/lib/courses/code-key";
 import { pageResult, parsePagination } from "@/lib/pagination";
 import type { Prisma } from "@prisma/client";
 import { couldNot } from "@/lib/messages";
+import { registryScope } from "@/lib/courses/registry-scope";
+import { loadRegistryRows } from "@/lib/courses/registry-facets";
+import { matchesFilters, readFilters } from "@/lib/courses/registry-filters";
+
+/** K5's filters the database query above doesn't apply itself. */
+const K5_ONLY = ["school", "department", "programme", "source", "described", "grace"] as const;
 
 // Valid enum values
 const VALID_COURSE_TYPES = [
@@ -30,14 +36,6 @@ const VALID_COURSE_TYPES = [
 const VALID_OWNERSHIP = ["DEPARTMENT", "SCHOOL", "INSTITUTIONAL"];
 const VALID_LEVELS = [100, 200, 300, 400, 500, 600];
 
-/**
- * B5: a course Babcock offers is linked to a Babcock programme or has a
- * Babcock (BU-) code; the rest are reference courses from the national
- * curriculum only.
- */
-const OFFERED_COURSE: Prisma.MasterCourseWhereInput = {
-  OR: [{ programmeLinks: { some: {} } }, { code: { startsWith: "BU-" } }],
-};
 /** The course as one programme runs it (B14): its own units, semester and level where it has them. */
 function withProgrammeValues<
   T extends {
@@ -68,18 +66,11 @@ export async function GET(request: Request) {
     if (!auth.ok) return auth.response;
 
     const { searchParams } = new URL(request.url);
-    let departmentId = searchParams.get("departmentId");
-    let schoolId = searchParams.get("schoolId");
     const type = searchParams.get("type");
     const ownership = searchParams.get("ownership");
     const level = searchParams.get("level");
     const semester = searchParams.get("semester");
-    const discoverable = searchParams.get("discoverable");
-    // B5: "only" lists courses Babcock offers (linked to a programme, or a
-    // BU- code); "first" lists the national curriculum too, Babcock first.
     const offered = searchParams.get("offered");
-    // K0: the search term, under any of the names callers use.
-    const query = (searchParams.get("q") ?? searchParams.get("search") ?? searchParams.get("query"))?.trim();
     // `page` asks for one page of full rows; `fields=summary` asks for every
     // course with only the fields the course-code picker needs.
     const paginated = searchParams.has("page");
@@ -92,55 +83,10 @@ export async function GET(request: Request) {
           ?.programmeId ?? null)
       : null;
 
-    if (["HOD", "PROGRAMME_COORDINATOR"].includes(auth.user.role)) {
-      if (!auth.user.departmentId) {
-        return NextResponse.json(
-          { error: "Your account is not assigned to a department." },
-          { status: 403 },
-        );
-      }
-      departmentId = auth.user.departmentId;
-      schoolId = null;
-    } else if (auth.user.role === "DEAN") {
-      if (!auth.user.schoolId) {
-        return NextResponse.json(
-          { error: "Your account is not assigned to a school." },
-          { status: 403 },
-        );
-      }
-      departmentId = null;
-      schoolId = auth.user.schoolId;
-    }
-
-    const where: Record<string, unknown> = {};
-
-    // When the import dialog requests only discoverable courses, filter accordingly
-    if (discoverable === "true") where.discoverable = true;
-
-    if (departmentId || schoolId) {
-      const OR: Array<Record<string, unknown>> = [];
-
-      if (departmentId) {
-        OR.push({ ownerDeptId: departmentId });
-      }
-      if (schoolId) {
-        OR.push({ ownerSchoolId: schoolId });
-      }
-      OR.push({ ownership: "INSTITUTIONAL" });
-      OR.push({ type: "GENERAL" });
-
-      if (departmentId && !schoolId) {
-        const dept = await prisma.department.findUnique({
-          where: { id: departmentId },
-          select: { schoolId: true },
-        });
-        if (dept?.schoolId) {
-          OR.push({ ownerSchoolId: dept.schoolId });
-        }
-      }
-
-      where.OR = OR;
-    }
+    // K6: only what this person may see, with the search and "offered" choice.
+    const scope = await registryScope(auth.user, searchParams);
+    if (!scope.ok) return NextResponse.json({ error: scope.error }, { status: 403 });
+    const where: Record<string, unknown> = scope.where;
 
     if (type && VALID_COURSE_TYPES.includes(type)) where.type = type;
 
@@ -158,20 +104,11 @@ export async function GET(request: Request) {
       if (semNum !== undefined) where.semester = semNum;
     }
 
-    if (query) {
-      // "gst112" and "BU-GST112" find "GST 112" and "BU-GST 112" too.
-      const tidyCode = formatCourseCode(query);
-      const search: Prisma.MasterCourseWhereInput = {
-        OR: [
-          { code: { contains: query, mode: "insensitive" } },
-          ...(tidyCode && tidyCode !== query ? [{ code: { contains: tidyCode, mode: "insensitive" as const } }] : []),
-          { title: { contains: query, mode: "insensitive" } },
-        ],
-      };
-      where.AND = [search];
-    }
-    if (offered === "only") {
-      where.AND = [...((where.AND as Prisma.MasterCourseWhereInput[] | undefined) ?? []), OFFERED_COURSE];
+    // K5: school, department, programme, source, description and GRACE.
+    const extra = readFilters(searchParams);
+    if (K5_ONLY.some((key) => extra[key])) {
+      const rows = await loadRegistryRows(where);
+      where.id = { in: rows.filter((row) => matchesFilters(row, extra)).map((row) => row.id) };
     }
 
     const orderBy: Prisma.MasterCourseOrderByWithRelationInput[] = [

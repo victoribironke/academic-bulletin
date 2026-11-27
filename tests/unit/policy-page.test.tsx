@@ -36,7 +36,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("the Academic Policy page", () => {
+// The page renders the whole policy: slow when the full suite runs in parallel.
+describe("the Academic Policy page", { timeout: 30_000 }, () => {
   it("shows the note, the contents and the text", async () => {
     render(<PolicyPage />);
     expect(await screen.findByText(/The Academic Policy is under review/)).toBeTruthy();

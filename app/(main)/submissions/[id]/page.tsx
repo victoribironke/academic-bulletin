@@ -1,6 +1,4 @@
 "use client";
-import { COMMENT_TYPE_LABELS } from "@/lib/plain-words";
-import type { CommentType } from "@prisma/client";
 
 import { AskDap } from "@/components/submissions/ask-dap";
 import { rememberLastPlace } from "@/components/desk/continue-where-stopped";
@@ -57,7 +55,6 @@ import {
   RotateCcw,
   Undo2,
   MessageSquare,
-  Clock,
   Loader2,
   Plus,
   AlertCircle,
@@ -106,6 +103,7 @@ import { ProgrammeCountdown } from "@/components/calendar/countdown";
 import { ReadinessPanel } from "@/components/submissions/readiness-panel";
 import { GraduationNumbers } from "@/components/submissions/graduation-numbers";
 import { LeaderDetails } from "@/components/submissions/leader-details";
+import { CommentsList } from "@/components/submissions/comments-list";
 import type { LeaderRole, Leaders } from "@/lib/leaders";
 import { CarriedNote, CarriedTextProvider, DraftSummaryButton } from "@/components/submissions/carried-text";
 
@@ -271,13 +269,6 @@ const sections = [
   },
 ];
 
-
-const commentTypeColors: Record<string, string> = {
-  SUGGESTION: "bg-blue-100 text-blue-800",
-  ISSUE: "bg-red-100 text-red-800",
-  QUESTION: "bg-yellow-100 text-yellow-800",
-  APPROVAL: "bg-green-100 text-green-800",
-};
 
 const GRACE_PILLAR_LABELS: Record<string, string> = {
   G: "Global Relevance",
@@ -1262,10 +1253,6 @@ export default function SubmissionDetailPage({
     );
   }
 
-  const sectionComments = submission.comments.filter(
-    (c) => c.section === activeSection,
-  );
-
   const currentSection = sections.find((s) => s.key === activeSection);
   const SectionIcon = currentSection?.icon || FileText;
 
@@ -1627,7 +1614,6 @@ export default function SubmissionDetailPage({
                               </SelectItem>
                               <SelectItem value="ISSUE">Issue</SelectItem>
                               <SelectItem value="QUESTION">Question</SelectItem>
-                              <SelectItem value="APPROVAL">Approval</SelectItem>
                             </SelectContent>
                           </Select>
                           <Button
@@ -1645,59 +1631,15 @@ export default function SubmissionDetailPage({
                       </div>
                     )}
 
-                    {/* Comments List */}
-                    <div className="space-y-3">
-                      {sectionComments.length === 0 ? (
-                        <div className="text-center py-8 text-muted-foreground text-sm">
-                          No comments for this section
-                        </div>
-                      ) : (
-                        sectionComments.map((comment) => (
-                          <div
-                            key={comment.id}
-                            className={`p-3 rounded-lg border ${comment.status === "RESOLVED" ? "opacity-50" : ""
-                              }`}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium text-sm">
-                                  {comment.author.firstName}{" "}
-                                  {comment.author.lastName}
-                                </span>
-                                <Badge
-                                  variant="secondary"
-                                  className={`text-xs ${commentTypeColors[comment.type]
-                                    }`}
-                                >
-                                  {COMMENT_TYPE_LABELS[comment.type as CommentType] ?? comment.type}
-                                </Badge>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 text-xs"
-                                onClick={() =>
-                                  handleResolveComment(
-                                    comment.id,
-                                    comment.status,
-                                  )
-                                }
-                              >
-                                {comment.status === "OPEN"
-                                  ? "Resolve"
-                                  : "Reopen"}
-                              </Button>
-                            </div>
-                            <p className="text-sm mt-1">{comment.content}</p>
-                            <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-                              <Clock className="h-3 w-3" />
-                              {formatDate(comment.createdAt)}
-                              <span>• Phase {comment.phase}</span>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
+                    {/* G7: comments in one place, with filters and decision notes. */}
+                    <CommentsList
+                      comments={submission.comments}
+                      decisions={submission.phaseTransitions ?? []}
+                      sections={sections.map((section) => ({ key: section.key, title: section.title }))}
+                      activeSection={activeSection}
+                      canResolve={canComment || canEdit}
+                      onResolve={handleResolveComment}
+                    />
                   </div>
                 </SheetContent>
               </Sheet>

@@ -1,5 +1,7 @@
 "use client";
 import { COURSE_TYPE_LABELS, OWNERSHIP_LABELS, REGISTRY_NAME, SHOW_IN_SEARCH, courseTypeLabel } from "@/lib/plain-words";
+import { RegistryFilterSelects } from "@/components/courses/registry-filters";
+import type { FacetChoice, FacetKey, RegistryFilters } from "@/lib/courses/registry-filters";
 
 import { UrlSearchTerm } from "@/components/shared/url-search-term";
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
@@ -178,8 +180,9 @@ export function MasterCourseManager({
     ownerDeptId: "",
   });
   const [search, setSearch] = useState("");
-  const [filterType, setFilterType] = useState("all");
-  const [filterLevel, setFilterLevel] = useState("all");
+  // K5: every Registry filter, with counts from the server.
+  const [filters, setFilters] = useState<RegistryFilters>({});
+  const [facets, setFacets] = useState<Partial<Record<FacetKey, FacetChoice[]>> | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [isFetchingPage, setIsFetchingPage] = useState(false);
@@ -289,9 +292,16 @@ export function MasterCourseManager({
     const params = new URLSearchParams({ page: String(page) });
     if (departmentId) params.set("departmentId", departmentId);
     if (debouncedSearch) params.set("q", debouncedSearch);
-    if (filterType !== "all") params.set("type", filterType);
-    if (filterLevel !== "all") params.set("level", filterLevel);
+    for (const [key, value] of Object.entries(filters)) if (value && value !== "all") params.set(key, value);
+    const facetParams = new URLSearchParams(params);
+    facetParams.delete("page");
 
+    fetch(`/api/master-courses/facets?${facetParams}`, { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { facets: Record<FacetKey, FacetChoice[]> } | null) => {
+        if (data) setFacets(data.facets);
+      })
+      .catch(() => undefined);
     fetch(`/api/master-courses?${params}`, { signal: controller.signal })
       .then((res) => (res.ok ? res.json() : null))
       .then((data: PageResult<MasterCourse> | null) => {
@@ -309,7 +319,7 @@ export function MasterCourseManager({
         }
       });
     return () => controller.abort();
-  }, [departmentId, page, debouncedSearch, filterType, filterLevel, reloadKey]);
+  }, [departmentId, page, debouncedSearch, filters, reloadKey]);
 
   const handleCreateCourse = async () => {
     setIsCreating(true);
@@ -726,7 +736,7 @@ export function MasterCourseManager({
   if (isLoading) return <TableSkeleton columns={6} />;
 
   const filtersActive =
-    search.trim() !== "" || filterType !== "all" || filterLevel !== "all";
+    search.trim() !== "" || Object.values(filters).some((value) => value && value !== "all");
 
   return (
     <div className="space-y-4">
@@ -741,46 +751,14 @@ export function MasterCourseManager({
         }}
         searchPlaceholder="Search code or title"
         filters={
-          <>
-            <Select
-              value={filterType}
-              onValueChange={(value) => {
-                setFilterType(value);
-                goToPage(1);
-              }}
-            >
-              <SelectTrigger className="w-full bg-card sm:w-40" aria-label="Course type">
-                <SelectValue placeholder="All types" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All types</SelectItem>
-                {COURSE_TYPES.map((t) => (
-                  <SelectItem key={t.value} value={t.value}>
-                    {t.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={filterLevel}
-              onValueChange={(value) => {
-                setFilterLevel(value);
-                goToPage(1);
-              }}
-            >
-              <SelectTrigger className="w-full bg-card sm:w-36" aria-label="Level">
-                <SelectValue placeholder="All levels" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All levels</SelectItem>
-                {LEVELS.map((l) => (
-                  <SelectItem key={l} value={l.toString()}>
-                    {l} level
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </>
+          <RegistryFilterSelects
+            facets={facets}
+            filters={filters}
+            onChange={(key, value) => {
+              setFilters((current) => ({ ...current, [key]: value }));
+              goToPage(1);
+            }}
+          />
         }
         actions={
         canManageRegistry && (
