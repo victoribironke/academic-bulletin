@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { SaveStatus, type SaveState } from "@/components/shared/save-status";
+import { offerUndo } from "@/lib/undo-toast";
 import { DynamicTable, Column } from "./dynamic-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -468,6 +469,7 @@ export function StaffTable({
         }
       }
 
+      const removedStaff: string[] = [];
       for (const originalId of originalStaffIds) {
         if (!currentStaffIds.has(originalId)) {
           const res = await fetch(`/api/staff/${originalId}`, {
@@ -479,6 +481,7 @@ export function StaffTable({
               ...(deleteReasons.current.length > 0 && { reason: deleteReasons.current.join("; ") }),
             }),
           });
+          if (res.ok) removedStaff.push(originalId);
           if (!res.ok) {
             errors.push(
               await responseError(res, "Failed to delete a removed staff member."),
@@ -515,7 +518,14 @@ export function StaffTable({
           description: errors.join(" "),
         });
       } else {
-        if (!silent) toast.success("All staff saved successfully");
+        if (!silent && removedStaff.length === 0) toast.success("All staff saved successfully");
+        // U3: an "Undo" link for 10 seconds puts removed staff back.
+        offerUndo(
+          removedStaff.length === 1 ? "Removed 1 staff member" : `Removed ${removedStaff.length} staff members`,
+          "STAFF",
+          removedStaff,
+          () => fetchStaff(),
+        );
         markDirty(false);
         setSaveState("saved");
         setSavedAt(new Date());

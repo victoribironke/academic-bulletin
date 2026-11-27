@@ -111,6 +111,8 @@ import { GET as listElectiveGroups, POST as addElectiveGroup } from "@/app/api/s
 import { DELETE as removeElectiveGroup, PATCH as changeElectiveGroup } from "@/app/api/submissions/[id]/elective-groups/[groupId]/route";
 import { GET as readCreditSummary } from "@/app/api/submissions/[id]/credit-summary/route";
 import { GET as readLeaders, PATCH as saveLeader } from "@/app/api/submissions/[id]/leaders/route";
+import { POST as undoDelete } from "@/app/api/archive/undo/route";
+import { GET as listCopyTargets, POST as copySection } from "@/app/api/submissions/[id]/copy-section/route";
 import { GET as readDraftQuestions, POST as askDapRoute } from "@/app/api/submissions/[id]/questions/route";
 import { GET as readDapInbox } from "@/app/api/dap-questions/route";
 import { PATCH as answerDapQuestion } from "@/app/api/dap-questions/[id]/route";
@@ -7330,5 +7332,133 @@ describe("two people editing the same field (G3)", () => {
     // "Keep my version": the Head's mission replaces the other.
     expect((await save(ids.hod, { content: { mission: "The Head's mission." }, previous: { mission: "The first mission." }, force: true })).status).toBe(200);
     expect(await stored()).toEqual({ mission: "The Head's mission.", vision: "The Head's vision." });
+  });
+});
+
+// Task U3: an "Undo" link after a delete puts back what the person just
+// deleted; older deletions are restored from the Archive by DAP.
+describe("Undo after a delete (U3)", () => {
+  const cycleId = "u3-cycle";
+  const submissionId = "u3-submission";
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.create({ data: { id: cycleId, name: "U3", createdById: ids.super } });
+    await prisma.submission.create({
+      data: { id: submissionId, title: "U3 Bulletin", programmeId: ids.programmeA, createdById: ids.hod, cycleId },
+    });
+  });
+
+  afterAll(async () => {
+    await prisma.archivedRecord.deleteMany({ where: { entityType: "COURSE_ROW", label: { contains: "U3T" } } });
+    await prisma.activityLog.deleteMany({ where: { entityId: submissionId } });
+    await prisma.submission.deleteMany({ where: { id: submissionId } });
+    await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+  });
+
+  const remove = (courseIds: string[]) => {
+    authState.userId = ids.hod;
+    return deleteCourseRows(
+      new NextRequest("http://localhost/api/courses/bulk", {
+        method: "DELETE",
+        body: JSON.stringify({ submissionId, ids: courseIds, confirm: "DELETE" }),
+      }),
+    );
+  };
+  const undo = (userId: string, entityIds: string[], entityType = "COURSE_ROW") => {
+    authState.userId = userId;
+    return undoDelete(new Request("http://localhost", { method: "POST", body: JSON.stringify({ entityType, entityIds }) }));
+  };
+
+  it("puts back the person's own just-deleted rows, and nothing else", async () => {
+    const [first, second] = await Promise.all(
+      ["U3T 101", "U3T 102"].map((code, index) =>
+        prisma.course.create({ data: { submissionId, code, title: `Undo course ${index + 1}`, units: 2, level: 100, semester: index + 1 } }),
+      ),
+    );
+    expect((await remove([first.id, second.id])).status).toBe(200);
+    expect(await prisma.course.count({ where: { submissionId } })).toBe(0);
+
+    // Someone else can't undo the Head's delete; only Undoable kinds are accepted.
+    expect((await undo(ids.coordinator, [first.id])).status).toBe(409);
+    expect((await undo(ids.hod, [first.id], "SCHOOL")).status).toBe(400);
+
+    const undone = await undo(ids.hod, [first.id]);
+    expect(undone.status).toBe(200);
+    expect(await undone.json()).toMatchObject({ restored: 1 });
+    expect(await prisma.course.findUnique({ where: { id: first.id }, select: { code: true } })).toEqual({ code: "U3T 101" });
+
+    // After two minutes the link is gone: DAP restores from the Archive.
+    await prisma.archivedRecord.updateMany({ where: { entityId: second.id }, data: { archivedAt: new Date(Date.now() - 5 * 60 * 1000) } });
+    expect((await undo(ids.hod, [second.id])).status).toBe(409);
+    expect(await prisma.course.count({ where: { id: second.id } })).toBe(0);
+  });
+});
+
+// Task G8: a department with several programmes copies a section's words to
+// its other programmes, then adjusts each.
+describe("copying a section to the department's other programmes (G8)", () => {
+  const cycleId = "g8-cycle";
+  const sourceId = "g8-source";
+  const siblingId = "g8-sibling";
+  const outsideId = "g8-outside";
+  const siblingProgramme = "g8-programme-a2";
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.create({ data: { id: cycleId, name: "G8", createdById: ids.super } });
+    await prisma.programme.create({ data: { id: siblingProgramme, name: "Test Programme A2", code: "TPA2", departmentId: ids.departmentA } });
+    await prisma.submission.createMany({
+      data: [
+        { id: sourceId, title: "G8 Source", programmeId: ids.programmeA, createdById: ids.hod, cycleId },
+        { id: siblingId, title: "G8 Sibling", programmeId: siblingProgramme, createdById: ids.hod, cycleId },
+        { id: outsideId, title: "G8 Outside", programmeId: ids.programmeB, createdById: ids.super, cycleId },
+      ],
+    });
+    await prisma.submissionContent.createMany({
+      data: [
+        { submissionId: sourceId, mission: "Our shared mission.", vision: "Our shared vision.", objectives: ["Teach well"], totalUnits: 160 },
+        { submissionId: siblingId, mission: "An older mission.", totalUnits: 150, carriedFields: ["mission", "utmeRequirements"] },
+      ],
+    });
+  });
+
+  afterAll(async () => {
+    await prisma.activityLog.deleteMany({ where: { entityId: { in: [sourceId, siblingId, outsideId] } } });
+    await prisma.submission.deleteMany({ where: { id: { in: [sourceId, siblingId, outsideId] } } });
+    await prisma.programme.deleteMany({ where: { id: siblingProgramme } });
+    await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+  });
+
+  const context = { params: Promise.resolve({ id: sourceId }) };
+  const copy = (body: object) => {
+    authState.userId = ids.hod;
+    return copySection(new Request("http://localhost", { method: "POST", body: JSON.stringify(body) }), context);
+  };
+
+  it("lists the department's other programmes and copies only the section's words", async () => {
+    authState.userId = ids.hod;
+    const listed = await (await listCopyTargets(new Request("http://localhost/?section=overview"), context)).json();
+    expect(listed.programmes).toEqual([{ id: siblingId, name: "Test Programme A2", hasWords: true, canWrite: true }]);
+
+    expect((await copy({ section: "staff", targetIds: [siblingId] })).status).toBe(400);
+    expect((await copy({ section: "overview", targetIds: [outsideId] })).status).toBe(400);
+    expect((await copy({ section: "admission", targetIds: [siblingId] })).status).toBe(400); // nothing written yet
+
+    const copied = await copy({ section: "overview", targetIds: [siblingId] });
+    expect(copied.status).toBe(200);
+    expect(await copied.json()).toEqual({ copied: ["Test Programme A2"] });
+    expect(
+      await prisma.submissionContent.findUniqueOrThrow({
+        where: { submissionId: siblingId },
+        select: { mission: true, vision: true, objectives: true, totalUnits: true, carriedFields: true },
+      }),
+    ).toEqual({
+      mission: "Our shared mission.",
+      vision: "Our shared vision.",
+      objectives: ["Teach well"],
+      // Programme numbers are not copied; the copied field is no longer carried text.
+      totalUnits: 150,
+      carriedFields: ["utmeRequirements"],
+    });
+    expect(await prisma.activityLog.count({ where: { entityId: siblingId, action: "SECTION_COPIED" } })).toBe(1);
   });
 });

@@ -101,6 +101,8 @@ import { ReadinessPanel } from "@/components/submissions/readiness-panel";
 import { GraduationNumbers } from "@/components/submissions/graduation-numbers";
 import { LeaderDetails } from "@/components/submissions/leader-details";
 import { CommentsList } from "@/components/submissions/comments-list";
+import { CopySection } from "@/components/submissions/copy-section";
+import { COPYABLE_SECTIONS } from "@/lib/submissions/copy-section";
 import { SaveStatus } from "@/components/shared/save-status";
 import { useOnline } from "@/hooks/use-online";
 import { changedSince, conflictSnapshot } from "@/lib/submissions/edit-conflicts";
@@ -1724,7 +1726,16 @@ export default function SubmissionDetailPage({
                     </p>
                   </div>
                   {/* H6: a question about this section goes to the school's DAP officer. */}
-                  <div className="sm:max-w-sm">
+                  <div className="flex flex-col items-start gap-2 sm:max-w-sm sm:items-end">
+                    {/* G8: a department with several programmes copies a section's words. */}
+                    {canEdit && COPYABLE_SECTIONS[activeSection] && (
+                      <CopySection
+                        key={`copy-${activeSection}`}
+                        submissionId={id}
+                        section={activeSection}
+                        beforeCopy={async () => (hasChanges ? handleSave() : true)}
+                      />
+                    )}
                     <AskDap
                       key={activeSection}
                       submissionId={id}

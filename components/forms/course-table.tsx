@@ -55,6 +55,7 @@ import { OptionFamilyNotice, announceOptionsChanged, type OptionFamilySummary } 
 import { ElectiveGroupsPanel, type ElectiveGroupView } from "@/components/courses/elective-groups-panel";
 import { CreditSummaryTable } from "@/components/courses/credit-summary-table";
 import { SaveStatus, type SaveState } from "@/components/shared/save-status";
+import { offerUndo } from "@/lib/undo-toast";
 import { creditSummary, hoursHint, unitsFromHours } from "@/lib/courses/credit-summary";
 import { deleteNeedsReason } from "@/lib/delete-reason";
 import { TableToolbar } from "@/components/shared/table-toolbar";
@@ -822,6 +823,16 @@ export function CourseTable({
           deleteReasons.current = [];
           const removed = await res.json().catch(() => ({}));
           if (removed.optionsNote) optionNotes.add(removed.optionsNote);
+          // U3: an "Undo" link for 10 seconds puts the rows back.
+          offerUndo(
+            removedIds.length === 1 ? "Deleted 1 course row" : `Deleted ${removedIds.length} course rows`,
+            "COURSE_ROW",
+            removedIds,
+            () => {
+              void fetchData();
+              window.dispatchEvent(new CustomEvent("bulletin:courses-changed", { detail: { submissionId } }));
+            },
+          );
         } else {
           const data = await res.json().catch(() => ({}));
           errors.push(data.error ?? `Failed to delete ${removedIds.length === 1 ? "a removed course" : `${removedIds.length} removed courses`}`);

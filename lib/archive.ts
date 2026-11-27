@@ -538,3 +538,36 @@ export async function removeArchivedRecord(
   });
   return { ok: true, label: record.label };
 }
+
+/** Task U3: how long after deleting something the person can undo it themselves. */
+export const UNDO_WINDOW_SECONDS = 120;
+/** U3: the records a Head deletes in a draft, which they can undo themselves. */
+export const UNDOABLE_TYPES: readonly ArchivableType[] = ["COURSE_ROW", "STAFF"];
+
+/**
+ * Task U3: puts back records this person deleted in the last two minutes
+ * (the Undo link shows for 10 seconds). Anything older is restored from the
+ * Archive by an administrator.
+ */
+export async function undoRecentArchive(
+  actorId: string,
+  entityType: ArchivableType,
+  entityIds: string[],
+): Promise<{ restored: number; errors: string[] }> {
+  const since = new Date(Date.now() - UNDO_WINDOW_SECONDS * 1000);
+  const records = await prisma.archivedRecord.findMany({
+    where: { archivedById: actorId, entityType, entityId: { in: entityIds }, archivedAt: { gte: since } },
+    orderBy: { archivedAt: "desc" },
+    select: { id: true, entityId: true },
+  });
+  const latest = new Map<string, string>();
+  for (const record of records) if (!latest.has(record.entityId)) latest.set(record.entityId, record.id);
+  let restored = 0;
+  const errors: string[] = [];
+  for (const archiveId of latest.values()) {
+    const result = await restoreArchivedRecord(archiveId, actorId);
+    if (result.ok) restored += 1;
+    else errors.push(result.error);
+  }
+  return { restored, errors };
+}
