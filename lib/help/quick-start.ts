@@ -30,7 +30,7 @@ function departmentSteps(submitOpens: string | null, coordinator = false): strin
   return [
     "Your **Dashboard** shows **Your deadline** for Departmental Drafting, the next checkpoint and your programmes. Open a programme there or from **Submissions**.",
     `Work through the eight sections in order: ${list(DRAFT_SECTION_TITLES)}.`,
-    "Your work saves as you type, and **All changes saved** shows when it has. **Save draft** saves at once.",
+    "Your work saves as you type, and **Saved at** with the time shows when it has. If two people change the same box, the second is asked which version to keep. If the connection drops, your changes stay on this device and are sent when you're back online.",
     "**Course Structure** starts filled in from the 2023-2027 bulletin: check it level by level. The grey rows with a lock are the General Education block. Every student takes them, and only the General Education desk can change them.",
     coordinator
       ? "When every section is complete, tell your Head of Department: only the Head submits the programme to the School. Until then you can keep editing."

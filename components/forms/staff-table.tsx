@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { SaveStatus, type SaveState } from "@/components/shared/save-status";
 import { DynamicTable, Column } from "./dynamic-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +15,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Save, Users, Camera, Trash2, Info, RefreshCw, Upload } from "lucide-react";
+import { Loader2, Users, Camera, Trash2, Info, RefreshCw, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { BulkImportDialog } from "@/components/imports/bulk-import-dialog";
 import {
@@ -271,9 +272,13 @@ export function StaffTable({
           });
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [, setIsSaving] = useState(false);
   // True when the table has edits that haven't been saved yet.
   const [isDirty, setIsDirty] = useState(false);
+  // G3 and U2: where the saving stands.
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [saveNote, setSaveNote] = useState<string | null>(null);
   const isDirtyRef = useRef(false);
   const markDirty = (dirty: boolean) => {
     isDirtyRef.current = dirty;
@@ -378,7 +383,12 @@ export function StaffTable({
     isNew: true,
   });
 
-  const saveStaff = async () => {
+  const saveStaff = async (silent = false) => {
+    // U2: offline, the rows wait here and are sent when the connection returns.
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setSaveState("offline");
+      return;
+    }
     const errors: string[] = [];
     const createdMap = new Map<number, string>();
     const allStaff = [
@@ -393,6 +403,10 @@ export function StaffTable({
     ];
     const validationErrors = validateStaffEntryRows(allStaff);
     if (validationErrors.length > 0) {
+      // G3: a row still being typed waits until it is complete.
+      setSaveState("incomplete");
+      setSaveNote(validationErrors[0].message);
+      if (silent) return;
       toast.error(validationErrors[0].message, {
         description:
           validationErrors.length > 1
@@ -403,6 +417,7 @@ export function StaffTable({
     }
 
     setIsSaving(true);
+    setSaveState("saving");
     try {
       const currentStaffIds = new Set<string>();
 
@@ -495,23 +510,52 @@ export function StaffTable({
 
       if (errors.length > 0) {
         markDirty(true);
+        setSaveState("error");
         toast.error("Some staff entries were not saved.", {
           description: errors.join(" "),
         });
       } else {
-        toast.success("All staff saved successfully");
+        if (!silent) toast.success("All staff saved successfully");
         markDirty(false);
+        setSaveState("saved");
+        setSavedAt(new Date());
         deleteReasons.current = [];
         // G4: the section list refreshes its ticks (staff belong to the department).
         window.dispatchEvent(new CustomEvent("bulletin:section-saved", { detail: { departmentId } }));
       }
     } catch (error) {
       console.error("Failed to save staff:", error);
-      toast.error("Failed to save staff. Your changes are still in the editor.");
+      setSaveState(typeof navigator !== "undefined" && !navigator.onLine ? "offline" : "error");
+      if (!silent) toast.error("Failed to save staff. Your changes are still in the editor.");
     } finally {
       setIsSaving(false);
     }
   };
+
+  // G3: save 3 seconds after the last change; U2: and again when back online
+  // or after a failed save.
+  const autoSaveRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    autoSaveRef.current = () => {
+      if (isDirtyRef.current && !disabled) void saveStaff(true);
+    };
+  });
+  const staffVersion = JSON.stringify([academicStaff, adjunctStaff, nonAcademicStaff]);
+  useEffect(() => {
+    if (!isDirty || disabled) return;
+    const timer = window.setTimeout(() => autoSaveRef.current(), 3000);
+    return () => window.clearTimeout(timer);
+  }, [isDirty, disabled, staffVersion]);
+  useEffect(() => {
+    const retry = () => autoSaveRef.current();
+    window.addEventListener("online", retry);
+    return () => window.removeEventListener("online", retry);
+  }, []);
+  useEffect(() => {
+    if (saveState !== "error") return;
+    const timer = window.setTimeout(() => autoSaveRef.current(), 15_000);
+    return () => window.clearTimeout(timer);
+  }, [saveState]);
 
   // Image upload state
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
@@ -637,11 +681,6 @@ export function StaffTable({
         </div>
         {!disabled && (
           <div className="flex flex-wrap items-center gap-2">
-            {isDirty && (
-              <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
-                Unsaved changes
-              </span>
-            )}
             <Button variant="outline" onClick={handleManualRefresh} disabled={isRefreshing}>
               <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
               Refresh
@@ -663,14 +702,12 @@ export function StaffTable({
               <Camera className="h-4 w-4 mr-2" />
               Manage Photos
             </Button>
-            <Button onClick={saveStaff} disabled={isSaving || !isDirty}>
-              {isSaving ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Save className="h-4 w-4 mr-2" />
-              )}
-              Save All
-            </Button>
+            {/* G3: the staff list saves as you type. */}
+            <SaveStatus
+              state={isDirty && saveState !== "saving" && saveState !== "offline" && saveState !== "error" && saveState !== "incomplete" ? "pending" : saveState}
+              savedAt={savedAt}
+              note={saveNote ?? undefined}
+            />
           </div>
         )}
       </CardHeader>

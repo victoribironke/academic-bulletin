@@ -48,7 +48,6 @@ import {
 } from "@/components/ui/sheet";
 import {
   ArrowLeft,
-  Save,
   Send,
   CheckCircle,
   XCircle,
@@ -66,8 +65,6 @@ import {
   Building,
   Target,
   ClipboardList,
-  Cloud,
-  CloudOff,
   ShieldCheck,
   AlertTriangle,
   Camera,
@@ -104,6 +101,9 @@ import { ReadinessPanel } from "@/components/submissions/readiness-panel";
 import { GraduationNumbers } from "@/components/submissions/graduation-numbers";
 import { LeaderDetails } from "@/components/submissions/leader-details";
 import { CommentsList } from "@/components/submissions/comments-list";
+import { SaveStatus } from "@/components/shared/save-status";
+import { useOnline } from "@/hooks/use-online";
+import { changedSince, conflictSnapshot } from "@/lib/submissions/edit-conflicts";
 import type { LeaderRole, Leaders } from "@/lib/leaders";
 import { CarriedNote, CarriedTextProvider, DraftSummaryButton } from "@/components/submissions/carried-text";
 
@@ -557,11 +557,27 @@ export default function SubmissionDetailPage({
   const [commentType, setCommentType] = useState<string>("SUGGESTION");
   const [isAddingComment, setIsAddingComment] = useState(false);
 
-  // Auto-save state
+  // Auto-save state (G3: one way to save; U2: never lost)
   const [autoSaveStatus, setAutoSaveStatus] = useState<
     "idle" | "saving" | "saved" | "error"
   >("idle");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const online = useOnline();
+  // A failed or offline save is tried again: when the connection returns, and every 15 seconds.
+  const [retryTick, setRetryTick] = useState(0);
+  // G3: what this page last saw on the server, field by field.
+  const snapshotRef = useRef<Record<string, string> | null>(null);
+  const [conflict, setConflict] = useState<{ labels: string[]; by: string | null; at: string | null } | null>(null);
+  useEffect(() => {
+    const retry = () => setRetryTick((value) => value + 1);
+    window.addEventListener("online", retry);
+    return () => window.removeEventListener("online", retry);
+  }, []);
+  useEffect(() => {
+    if (autoSaveStatus !== "error" || conflict) return;
+    const timer = window.setTimeout(() => setRetryTick((value) => value + 1), 15_000);
+    return () => window.clearTimeout(timer);
+  }, [autoSaveStatus, conflict, retryTick]);
   // G4: the section list's marks, refreshed after a save, when comments
   // change, and on moving to another section.
   // G1: remember the last section opened, for "Continue where you stopped".
@@ -651,6 +667,7 @@ export default function SubmissionDetailPage({
     } catch { /* corrupt data – ignore */ }
 
     const src = draft || data.content || {};
+    snapshotRef.current = conflictSnapshot(data.content ?? null);
 
     // E4: the school's and department's records come first.
     setDeanImageUrl(leadersRef.current?.dean.imageUrl || src.programmeInfo?.deanImageUrl || data.content?.programmeInfo?.deanImageUrl || "");
@@ -826,7 +843,9 @@ export default function SubmissionDetailPage({
 
   // Auto-save effect - debounced save after 3 seconds of no changes
   useEffect(() => {
-    if (!hasChanges || !canEdit || !submission) return;
+    if (!hasChanges || !canEdit || !submission || conflict) return;
+    // U2: offline, the change waits on this device (the backup above).
+    if (!navigator.onLine) return;
 
     if (autoSaveTimeoutRef.current) {
       clearTimeout(autoSaveTimeoutRef.current);
@@ -836,22 +855,26 @@ export default function SubmissionDetailPage({
       setAutoSaveStatus("saving");
       try {
         const contentToSave = buildContentPayload();
+        const previous = snapshotRef.current ? changedSince(contentToSave, snapshotRef.current) : undefined;
 
         const response = await fetch(`/api/submissions/${id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: contentToSave }),
+          body: JSON.stringify({ content: contentToSave, previous }),
         });
 
         if (response.ok) {
           setHasChanges(false);
           setAutoSaveStatus("saved");
           setLastSavedAt(new Date());
+          snapshotRef.current = conflictSnapshot(contentToSave);
           setSubmission((prev) =>
             prev ? { ...prev, content: { ...prev.content, ...contentToSave } } : prev,
           );
           localStorage.removeItem(`submission-draft-${id}`);
         } else {
+          const refusal = await response.json().catch(() => ({}));
+          if (refusal.code === "EDIT_CONFLICT") setConflict({ labels: refusal.labels ?? [], by: refusal.by ?? null, at: refusal.at ?? null });
           setAutoSaveStatus("error");
         }
       } catch (err) {
@@ -865,38 +888,45 @@ export default function SubmissionDetailPage({
         clearTimeout(autoSaveTimeoutRef.current);
       }
     };
-  }, [hasChanges, canEdit, submission, id, buildContentPayload]);
+  }, [hasChanges, canEdit, submission, id, buildContentPayload, conflict, retryTick]);
 
-  const handleSave = async (): Promise<boolean> => {
+  const handleSave = async (force = false): Promise<boolean> => {
     if (!submission) return false;
     setIsSaving(true);
 
     try {
       const contentToSave = buildContentPayload();
+      const previous = snapshotRef.current ? changedSince(contentToSave, snapshotRef.current) : undefined;
 
       const response = await fetch(`/api/submissions/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: contentToSave }),
+        body: JSON.stringify({ content: contentToSave, previous, ...(force && { force: true }) }),
       });
 
       if (response.ok) {
         setHasChanges(false);
         setAutoSaveStatus("saved");
         setLastSavedAt(new Date());
+        snapshotRef.current = conflictSnapshot(contentToSave);
+        setConflict(null);
         setSubmission((prev) =>
           prev ? { ...prev, content: { ...prev.content, ...contentToSave } } : prev,
         );
         localStorage.removeItem(`submission-draft-${id}`);
-        toast.success("Draft saved successfully");
         return true;
       } else {
-        toast.error("Failed to save draft");
+        const refusal = await response.json().catch(() => ({}));
+        if (refusal.code === "EDIT_CONFLICT") {
+          setConflict({ labels: refusal.labels ?? [], by: refusal.by ?? null, at: refusal.at ?? null });
+        } else {
+          toast.error("Your changes couldn't be saved yet", { description: refusal.error ?? "They are kept on this device." });
+        }
         return false;
       }
     } catch (err) {
       console.error("Failed to save:", err);
-      toast.error("Failed to save draft");
+      toast.error("Your changes couldn't be saved yet", { description: "They are kept on this device." });
       return false;
     } finally {
       setIsSaving(false);
@@ -1400,54 +1430,27 @@ export default function SubmissionDetailPage({
       <div className="sticky top-14 z-10 -mx-1 rounded-lg border bg-card/95 px-3 py-2.5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/85">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-2">
-              {canEdit && sectionSavesSeparately && (
-                <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <Save className="size-4" />
-                  This section has its own Save button below.
-                </span>
-              )}
+              {/* G3: everything saves as you type; this says where it stands. */}
               {canEdit && !sectionSavesSeparately && (
-                <Button onClick={handleSave} disabled={!hasChanges || isSaving}>
-                  {isSaving ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="mr-2 h-4 w-4" />
-                  )}
-                  Save draft
-                </Button>
-              )}
-              {/* Auto-save status indicator */}
-              {canEdit && (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  {autoSaveStatus === "saving" && (
-                    <>
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      <span>Saving...</span>
-                    </>
-                  )}
-                  {autoSaveStatus === "saved" && (
-                    <>
-                      <Cloud className="h-3 w-3 text-green-600" />
-                      <span className="text-green-600">
-                        All changes saved
-                        {lastSavedAt && (
-                          <span className="ml-1 text-muted-foreground">
-                            ({formatTime(lastSavedAt)})
-                          </span>
-                        )}
-                      </span>
-                    </>
-                  )}
-                  {autoSaveStatus === "error" && (
-                    <>
-                      <CloudOff className="h-3 w-3 text-red-600" />
-                      <span className="text-red-600">Save failed</span>
-                    </>
-                  )}
-                  {autoSaveStatus === "idle" && hasChanges && (
-                    <span className="text-amber-600">Unsaved changes</span>
-                  )}
-                </div>
+                <SaveStatus
+                  state={
+                    conflict
+                      ? "error"
+                      : !online && hasChanges
+                        ? "offline"
+                        : autoSaveStatus === "saving"
+                          ? "saving"
+                          : autoSaveStatus === "error"
+                            ? "error"
+                            : hasChanges
+                              ? "pending"
+                              : autoSaveStatus === "saved"
+                                ? "saved"
+                                : "idle"
+                  }
+                  savedAt={lastSavedAt}
+                  note={conflict ? "Not saved: someone else changed this too" : undefined}
+                />
               )}
               {canSubmit && (
                 <div className="flex flex-col items-start gap-1">
@@ -2729,6 +2732,43 @@ export default function SubmissionDetailPage({
         </DialogContent>
       </Dialog>
       {/* D4: Submit on a phase you don't own is an override. */}
+      {/* G3: two people changed the same field; the second chooses. */}
+      <Dialog open={conflict !== null} onOpenChange={() => undefined}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Someone else changed this too</DialogTitle>
+            <DialogDescription>
+              {conflict?.by ? `${conflict.by} saved` : "Someone else saved"} {conflict?.labels.join(", ") || "a field you changed"}
+              {conflict?.at ? ` at ${formatTime(conflict.at)}` : ""} while you were editing. Your version is kept on this device until you choose.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                try {
+                  localStorage.removeItem(`submission-draft-${id}`);
+                } catch {
+                  /* nothing kept */
+                }
+                window.location.reload();
+              }}
+            >
+              Load their version
+            </Button>
+            <Button
+              onClick={async () => {
+                if (await handleSave(true)) toast.success("Your version is saved");
+              }}
+              disabled={isSaving}
+            >
+              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Keep my version
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={submitOverrideOpen} onOpenChange={(open) => !isTransitioning && setSubmitOverrideOpen(open)}>
         <DialogContent>
           <DialogHeader>

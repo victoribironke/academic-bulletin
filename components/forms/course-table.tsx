@@ -35,7 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Save, BookOpen, Import, History, Upload, Lock } from "lucide-react";
+import { Loader2, BookOpen, Import, History, Upload, Lock } from "lucide-react";
 import { GENERAL_EDUCATION_LABEL } from "@/lib/courses/general-education";
 import {
   MAX_COURSE_UNITS,
@@ -54,6 +54,7 @@ import { CourseListConfirmation } from "@/components/forms/course-list-confirmat
 import { OptionFamilyNotice, announceOptionsChanged, type OptionFamilySummary } from "@/components/courses/option-family-notice";
 import { ElectiveGroupsPanel, type ElectiveGroupView } from "@/components/courses/elective-groups-panel";
 import { CreditSummaryTable } from "@/components/courses/credit-summary-table";
+import { SaveStatus, type SaveState } from "@/components/shared/save-status";
 import { creditSummary, hoursHint, unitsFromHours } from "@/lib/courses/credit-summary";
 import { deleteNeedsReason } from "@/lib/delete-reason";
 import { TableToolbar } from "@/components/shared/table-toolbar";
@@ -189,8 +190,11 @@ export function CourseTable({
     new Set(),
   );
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  const [, setIsSaving] = useState(false);
   const [activeLevel, setActiveLevel] = useState("100");
+  // G3 and U2: where the saving stands.
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
   // W3: the draft's named elective groups.
   const [electiveGroups, setElectiveGroups] = useState<ElectiveGroupView[]>([]);
   const loadElectiveGroups = useCallback(async () => {
@@ -697,7 +701,13 @@ export function CourseTable({
 
   const saveCourses = async (silent = false) => {
     if (isSavingRef.current) return;
+    // U2: offline, the rows wait here and are sent when the connection returns.
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setSaveState("offline");
+      return;
+    }
     isSavingRef.current = true;
+    setSaveState("saving");
     if (!silent) setIsSaving(true);
     const errors: string[] = [];
     // W18: where a change was also made in the other B.Agric. options.
@@ -824,9 +834,12 @@ export function CourseTable({
         announceOptionsChanged(submissionId);
       }
       if (errors.length > 0) {
+        setSaveState("error");
         toast.error(`Some courses failed to save: ${errors.join("; ")}`);
       } else {
         setIsDirty(false);
+        setSaveState("saved");
+        setSavedAt(new Date());
         void loadElectiveGroups();
         if (!silent) toast.success("All courses saved successfully");
         window.dispatchEvent(
@@ -867,6 +880,7 @@ export function CourseTable({
       }
     } catch (error) {
       console.error("Failed to save courses:", error);
+      setSaveState(typeof navigator !== "undefined" && !navigator.onLine ? "offline" : "error");
       if (!silent) toast.error("Failed to save courses. Your changes are still in the editor.");
     } finally {
       setIsSaving(false);
@@ -884,7 +898,7 @@ export function CourseTable({
 
     autoSaveTimerRef.current = setTimeout(() => {
       saveCourses(true);
-    }, 5000);
+    }, 3000);
 
     return () => {
       if (autoSaveTimerRef.current) {
@@ -893,6 +907,24 @@ export function CourseTable({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDirty, coursesByLevel, disabled, isLoading]);
+
+  // U2: unsent rows go when the connection returns, and a failed save is tried again.
+  const retrySaveRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    retrySaveRef.current = () => {
+      if (isDirty && !disabled) void saveCourses(true);
+    };
+  });
+  useEffect(() => {
+    const retry = () => retrySaveRef.current();
+    window.addEventListener("online", retry);
+    return () => window.removeEventListener("online", retry);
+  }, []);
+  useEffect(() => {
+    if (saveState !== "error") return;
+    const timer = window.setTimeout(() => retrySaveRef.current(), 15_000);
+    return () => window.clearTimeout(timer);
+  }, [saveState]);
 
   // Calculate totals
   // W4: the credit summary, built from the rows as they stand (saved or not).
@@ -982,14 +1014,8 @@ export function CourseTable({
               <Import className="h-4 w-4 mr-2" />
               Select from Registry
             </Button>
-            <Button onClick={() => saveCourses(false)} disabled={isSaving}>
-              {isSaving ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Save className="h-4 w-4 mr-2" />
-              )}
-              Save All
-            </Button>
+            {/* G3: the courses save as you type. */}
+            <SaveStatus state={isDirty && saveState !== "saving" && saveState !== "offline" && saveState !== "error" ? "pending" : saveState} savedAt={savedAt} />
           </div>
         )}
       </CardHeader>

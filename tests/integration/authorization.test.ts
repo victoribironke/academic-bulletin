@@ -5182,7 +5182,7 @@ describe("Priority 1 proof on a fresh draft", () => {
   });
 
   it("takes it through every phase with no one clearing two gates in a row", async () => {
-    const course = await prisma.course.findFirstOrThrow({ where: { submissionId: draftId } });
+    const course = await prisma.course.findFirstOrThrow({ where: { submissionId: draftId, code: "RDY 101" } });
 
     expect((await act(ids.dean, "APPROVE")).status).toBe(200); // 2 -> 3
     expect((await act(ids.admin, "APPROVE")).status).toBe(200); // 3 -> 4
@@ -7274,5 +7274,61 @@ describe("the Dean and Head of Department, entered once (E4, Q4)", () => {
       level: "MUST",
       message: "Add the Head of Department's photo.",
     });
+  });
+});
+
+// Task G3: when two people edit the same field, the second is warned and
+// chooses; nobody's words are lost silently.
+describe("two people editing the same field (G3)", () => {
+  const cycleId = "g3-cycle";
+  const submissionId = "g3-submission";
+  const context = { params: Promise.resolve({ id: submissionId }) };
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.create({ data: { id: cycleId, name: "G3", createdById: ids.super } });
+    await prisma.submission.create({
+      data: { id: submissionId, title: "G3 Bulletin", programmeId: ids.programmeA, createdById: ids.hod, cycleId },
+    });
+    await prisma.submissionContent.create({ data: { submissionId, mission: "The first mission.", vision: "The first vision." } });
+  });
+
+  afterAll(async () => {
+    await prisma.activityLog.deleteMany({ where: { entityId: submissionId } });
+    await prisma.submission.deleteMany({ where: { id: submissionId } });
+    await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+  });
+
+  const save = (userId: string, body: object) => {
+    authState.userId = userId;
+    return updateSubmission(
+      new NextRequest(`http://localhost/api/submissions/${submissionId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+      context,
+    );
+  };
+  const stored = () => prisma.submissionContent.findUniqueOrThrow({ where: { submissionId }, select: { mission: true, vision: true } });
+
+  it("refuses to overwrite a field someone else saved since, until the person chooses", async () => {
+    // The coordinator saves a new mission first.
+    expect((await save(ids.coordinator, { content: { mission: "The coordinator's mission." }, previous: { mission: "The first mission." } })).status).toBe(200);
+
+    // The Head, who still saw the first mission, saves theirs: refused, with the field and who.
+    const refused = await save(ids.hod, {
+      content: { mission: "The Head's mission.", vision: "The first vision." },
+      previous: { mission: "The first mission." },
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({ code: "EDIT_CONFLICT", fields: ["mission"], labels: ["Mission"], by: "Programme Coordinator" });
+    expect((await stored()).mission).toBe("The coordinator's mission.");
+
+    // A field nobody else touched saves as usual.
+    expect((await save(ids.hod, { content: { vision: "The Head's vision." }, previous: { vision: "The first vision." } })).status).toBe(200);
+
+    // "Keep my version": the Head's mission replaces the other.
+    expect((await save(ids.hod, { content: { mission: "The Head's mission." }, previous: { mission: "The first mission." }, force: true })).status).toBe(200);
+    expect(await stored()).toEqual({ mission: "The Head's mission.", vision: "The Head's vision." });
   });
 });

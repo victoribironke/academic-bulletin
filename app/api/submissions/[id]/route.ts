@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { CONFLICT_FIELDS, editConflicts } from "@/lib/submissions/edit-conflicts";
 import {
   canReadSubmission,
   canViewSubmission,
@@ -291,6 +292,31 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         { error: minimumCgpaRuleMessage(content.minimumCGPA), code: "CGPA_OUT_OF_RANGE" },
         { status: 400 },
       );
+    }
+
+    // G3: someone else saved a field this save would overwrite since this
+    // page last saw it. The person decides (resend with force: true).
+    if (content && body.previous && body.force !== true) {
+      const saved = await prisma.submissionContent.findUnique({ where: { submissionId: id } });
+      const clashes = editConflicts(body.previous, saved as Record<string, unknown> | null, content);
+      if (clashes.length > 0) {
+        const other = await prisma.activityLog.findFirst({
+          where: { entityId: id, action: "SUBMISSION_SAVED", NOT: { actorId: user!.id } },
+          orderBy: { createdAt: "desc" },
+          select: { createdAt: true, actor: { select: { firstName: true, lastName: true } } },
+        });
+        return NextResponse.json(
+          {
+            error: `Someone else changed ${clashes.map((key) => CONFLICT_FIELDS[key]).join(", ")} while you were editing.`,
+            code: "EDIT_CONFLICT",
+            fields: clashes,
+            labels: clashes.map((key) => CONFLICT_FIELDS[key]),
+            by: other?.actor ? `${other.actor.firstName} ${other.actor.lastName}`.trim() : null,
+            at: other?.createdAt?.toISOString() ?? null,
+          },
+          { status: 409 },
+        );
+      }
     }
 
     // Update submission
