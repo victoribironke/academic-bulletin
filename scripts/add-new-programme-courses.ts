@@ -151,7 +151,10 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
-});
+main()
+  // The database pool would keep the process open: end it when the work is done.
+  .then(() => process.exit(process.exitCode ?? 0))
+  .catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  });
