@@ -417,6 +417,7 @@ model User {
   // Review phases this user owns by name, beyond what their role grants
   phaseOwnerships         PhaseOwner[]
   lecturerAssignments     CourseAssignment[]       @relation("LecturerAssignments")
+  graceExemptions         GraceExemption[]         @relation("GraceExemptions")
 
   @@map("users")
 }
@@ -661,15 +662,30 @@ model Course {
   electiveGroupId String? // W3: the named group an elective belongs to
 
   // Relations
-  submission    Submission         @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  masterCourse  MasterCourse?      @relation(fields: [masterCourseId], references: [id], onDelete: SetNull)
-  electiveGroup ElectiveGroup?     @relation(fields: [electiveGroupId], references: [id], onDelete: SetNull)
-  description   CourseDescription?
-  assignment    CourseAssignment?
+  submission     Submission         @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  masterCourse   MasterCourse?      @relation(fields: [masterCourseId], references: [id], onDelete: SetNull)
+  electiveGroup  ElectiveGroup?     @relation(fields: [electiveGroupId], references: [id], onDelete: SetNull)
+  description    CourseDescription?
+  assignment     CourseAssignment?
+  graceExemption GraceExemption?
 
   @@unique([code, submissionId])
   @@unique([title, submissionId])
   @@map("courses")
+}
+
+/// F4: DAP lets a course past the GRACE gate, with a reason kept on the record.
+model GraceExemption {
+  id          String   @id @default(cuid())
+  courseId    String   @unique
+  reason      String
+  grantedById String?
+  createdAt   DateTime @default(now())
+
+  course    Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  grantedBy User?  @relation("GraceExemptions", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@map("grace_exemptions")
 }
 
 /// G2: a course in a draft given to a lecturer, who writes its description

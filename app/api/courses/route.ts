@@ -3,7 +3,8 @@ import { carryAdded, carryMessage } from "@/lib/programmes/option-families";
 import prisma from "@/lib/prisma";
 import { GROUP_RULE_MESSAGE, HOURS_RULE_MESSAGE, readElectiveGroup, readHours } from "@/lib/courses/hours-and-groups";
 import {
-  formatCourseTitle,
+  cleanCourseTitle,
+  fixedTitleNote,
   formatCourseCode,
   isValidCourseCode,
 } from "@/lib/validation/name-format";
@@ -64,6 +65,8 @@ export async function GET(request: Request) {
     const courses = await prisma.course.findMany({
       where,
       include: {
+        // F4: DAP's exemption from the GRACE gate, with its reason.
+        graceExemption: { select: { reason: true } },
         description: {
           select: {
             id: true,
@@ -178,7 +181,9 @@ export async function POST(request: Request) {
 
     // Format course code and title
     const formattedCode = formatCourseCode(code);
-    const formattedTitle = formatCourseTitle(title);
+    // V15 (fixed for you): acronyms and Roman numerals kept, a code typed inside the title removed.
+    const formattedTitle = cleanCourseTitle(title, formattedCode ?? undefined);
+    const fixedForYou = fixedTitleNote(formattedCode ?? code, title, formattedTitle);
 
     // Validate level
     const validLevels = [100, 200, 300, 400, 500, 600];
@@ -313,7 +318,7 @@ export async function POST(request: Request) {
     // W18: a B.Agric. option's shared levels reach the other options.
     const options = await carryAdded(user!, submissionId, [course]);
 
-    return NextResponse.json({ ...course, description, optionsNote: carryMessage(options) }, { status: 201 });
+    return NextResponse.json({ ...course, description, optionsNote: carryMessage(options), fixedForYou }, { status: 201 });
   } catch (error) {
     console.error("Failed to create course:", error);
     return NextResponse.json(

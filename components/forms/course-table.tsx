@@ -713,6 +713,8 @@ export function CourseTable({
     const errors: string[] = [];
     // W18: where a change was also made in the other B.Agric. options.
     const optionNotes = new Set<string>();
+    // V15: titles the save tidied (acronyms, Roman numerals, a code typed inside).
+    const fixedNotes = new Set<string>();
     // Track newly-created course IDs so we can patch local state without refetching
     const createdMap = new Map<string, { id: string; code: string; level: number }>();
     try {
@@ -754,6 +756,7 @@ export function CourseTable({
             } else {
               const created = await res.json();
               if (created.optionsNote) optionNotes.add(created.optionsNote);
+              if (created.fixedForYou) fixedNotes.add(created.fixedForYou);
               createdMap.set(course.code, { id: created.id, code: course.code, level });
               currentCourseIds.add(created.id);
 
@@ -800,6 +803,7 @@ export function CourseTable({
             } else {
               const updated = await res.json().catch(() => ({}));
               if (updated.optionsNote) optionNotes.add(updated.optionsNote);
+              if (updated.fixedForYou) fixedNotes.add(updated.fixedForYou);
             }
           }
         }
@@ -839,6 +843,10 @@ export function CourseTable({
         }
       }
 
+      if (fixedNotes.size > 0) {
+        toast.info("Fixed for you", { description: [...fixedNotes].join(" ") });
+        void fetchData();
+      }
       if (optionNotes.size > 0) {
         // Shown even for an autosave: the change reached other drafts.
         toast.info("Shared with the other options", { description: [...optionNotes].join(" ") });

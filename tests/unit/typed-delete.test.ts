@@ -44,6 +44,8 @@ describe("every delete route asks for DELETE", () => {
     "app/api/users/[id]/sign-in-exception/route.ts":
       "ends a time-boxed sign-in exception early, like deactivating someone",
     "app/api/users/[id]/mfa/route.ts": "resets two-step verification; asks for the person's email instead",
+    "app/api/courses/[id]/grace-exemption/route.ts":
+      "takes back DAP's exemption from the GRACE gate (F4): a logged decision DAP can make again, not a record removed",
   };
 
   it("finds every route with a DELETE handler and checks it", () => {

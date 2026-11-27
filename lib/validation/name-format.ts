@@ -384,3 +384,10 @@ export function isValidCourseCode(code: string): boolean {
   if (!code) return false;
   return COURSE_CODE_PATTERN.test(formatCourseCode(code));
 }
+
+/** V15: what the tidy-up changed in a title, said once to the person; null when nothing changed. */
+export function fixedTitleNote(code: string, typed: string, saved: string): string | null {
+  const before = typed.trim().replace(/\s+/g, " ");
+  if (!before || before === saved) return null;
+  return `${code}: "${before}" is saved as "${saved}".`;
+}

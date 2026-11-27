@@ -515,6 +515,7 @@ export async function getCourseGraceBlockers(
       code: true,
       title: true,
       masterCourse: { select: { type: true, ownership: true } },
+      graceExemption: { select: { id: true } },
       description: {
         select: {
           courseContent: true,
@@ -540,6 +541,8 @@ export async function getCourseGraceBlockers(
     // F4: General Education courses are checked at the General Education
     // desk, not in the Head of Department's gate.
     if (isGeneralEducationCourse(course)) continue;
+    // F4: DAP has let this course past the gate, with a reason on the record.
+    if (course.graceExemption) continue;
     const description = course.description;
     if (!description?.courseContent?.trim()) {
       blockers.missing.push(course.code);

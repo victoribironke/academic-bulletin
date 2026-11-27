@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type DraftCourse, type DraftData, creditNumbers, runRules } from "@/lib/checks/rules";
+import { type DraftCourse, type DraftData, POLICY, creditNumbers, runRules } from "@/lib/checks/rules";
 import { GENERAL_EDUCATION_BLOCK } from "@/lib/courses/general-education";
 
 // Task F1: the checks of Appendix A, run on one draft.
@@ -137,6 +137,16 @@ describe("the rules engine (F1)", () => {
     };
     expect(runRules(draft({ leaders })).find((finding) => finding.rule === "V6")?.message).toBe("Add the Head of Department's title and name.");
     expect(runRules(draft({ leaders: { ...leaders, hod: { title: "Dr.", name: "Bo Head", imageUrl: "/api/files/h.jpg" } } })).some((finding) => finding.rule === "V6")).toBe(false);
+  });
+
+  it("carries DAP's 38 approved semester loads from package file 03 (W9, F6)", () => {
+    expect(POLICY.approvedLoadExceptions).toHaveLength(38);
+    for (const item of POLICY.approvedLoadExceptions) {
+      expect(item.programme.trim()).not.toBe("");
+      expect([1, 2]).toContain(item.semester);
+      expect(item.level % 100).toBe(0);
+    }
+    expect(POLICY.approvedLoadExceptions).toContainEqual(expect.objectContaining({ programme: "Chemistry", level: 400, semester: 2 }));
   });
 
   it("works out the credit numbers the app writes (W4, W5)", () => {

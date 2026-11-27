@@ -99,7 +99,8 @@ describe("Clinics (H8)", () => {
 
     const logged = await prisma.activityLog.findMany({ where: { actorId: ids.admin, action: "CALENDAR_CLINIC_ADDED" }, select: { description: true } });
     expect(logged).toHaveLength(2);
-    expect(logged[0].description).toContain("every Tuesday, 2:00 pm to 2:30 pm");
+    // Two rows written within the same moment: their order isn't fixed.
+    expect(logged.some((row) => row.description.includes("every Tuesday, 2:00 pm to 2:30 pm"))).toBe(true);
     expect(logged.some((row) => row.description.includes("secret"))).toBe(false);
   });
 

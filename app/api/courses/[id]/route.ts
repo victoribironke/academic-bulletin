@@ -10,6 +10,8 @@ import {
 } from "@/lib/courses/course-rules";
 import {
   formatCourseTitle,
+  cleanCourseTitle,
+  fixedTitleNote,
   formatCourseCode,
   isValidCourseCode,
 } from "@/lib/validation/name-format";
@@ -198,7 +200,13 @@ export async function PATCH(
     // Build update data with formatting
     const updateData: Record<string, unknown> = {};
     if (code !== undefined) updateData.code = formatCourseCode(code);
-    if (title !== undefined) updateData.title = formatCourseTitle(title);
+    // V15 (fixed for you): acronyms and Roman numerals kept, a code typed inside the title removed.
+    let fixedForYou: string | null = null;
+    if (title !== undefined) {
+      const ownCode = typeof updateData.code === "string" ? updateData.code : existing.code;
+      updateData.title = cleanCourseTitle(String(title), ownCode);
+      fixedForYou = fixedTitleNote(ownCode, String(title), String(updateData.title));
+    }
     if (units !== undefined) {
       if (!isValidCourseUnits(units)) {
         return NextResponse.json({ error: UNITS_RULE_MESSAGE }, { status: 400 });
@@ -266,7 +274,7 @@ export async function PATCH(
       coalesceWithinMinutes: AUTOSAVE_COALESCE_MINUTES,
     });
 
-    return NextResponse.json({ ...course, optionsNote: carryMessage(options) });
+    return NextResponse.json({ ...course, optionsNote: carryMessage(options), fixedForYou });
   } catch (error) {
     console.error("Failed to update course:", error);
     return NextResponse.json(

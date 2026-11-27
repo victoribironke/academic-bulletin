@@ -1,8 +1,281 @@
 {
-  "about": "Task F6 (decision DEC12): the Academic Policy's limits the checks use, kept here rather than in code. approvedLoadExceptions are DAP's approved semesters outside the credit range (rule W9, package file 03): { programme, level, semester, reason }.",
-  "semesterCredits": { "min": 16, "max": 24 },
-  "cgpa": { "min": 2.0, "max": 5.0 },
+  "about": "Task F6 (decision DEC12): the Academic Policy limits the checks use, kept here rather than in code. approvedLoadExceptions are the programme semesters outside 16 to 24 credits in the 2023-2027 bulletin, from package file 03 (sheet Semester loads, rule W9): { programme, level, semester, credits, reason }. The check skips them for that programme.",
+  "semesterCredits": {
+    "min": 16,
+    "max": 24
+  },
+  "cgpa": {
+    "min": 2,
+    "max": 5
+  },
   "summaryOfChangesMinWords": 50,
   "learningOutcomesMin": 3,
-  "approvedLoadExceptions": []
+  "approvedLoadExceptions": [
+    {
+      "programme": "Chemistry",
+      "level": 400,
+      "semester": 2,
+      "credits": 15,
+      "reason": "Below 16 (check SIWES or industrial training semester)"
+    },
+    {
+      "programme": "Civil Engineering",
+      "level": 500,
+      "semester": 1,
+      "credits": 26,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "Computer Engineering",
+      "level": 200,
+      "semester": 2,
+      "credits": 14,
+      "reason": "Below 16 (check SIWES or industrial training semester)"
+    },
+    {
+      "programme": "Computer Engineering",
+      "level": 400,
+      "semester": 2,
+      "credits": 10,
+      "reason": "Below 16 (check SIWES or industrial training semester)"
+    },
+    {
+      "programme": "Cybersecurity",
+      "level": 400,
+      "semester": 2,
+      "credits": 27,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "Educational Management",
+      "level": 200,
+      "semester": 1,
+      "credits": 15,
+      "reason": "Below 16 (check SIWES or industrial training semester)"
+    },
+    {
+      "programme": "Educational Management",
+      "level": 200,
+      "semester": 2,
+      "credits": 15,
+      "reason": "Below 16 (check SIWES or industrial training semester)"
+    },
+    {
+      "programme": "Educational Management",
+      "level": 300,
+      "semester": 2,
+      "credits": 15,
+      "reason": "Below 16 (check SIWES or industrial training semester)"
+    },
+    {
+      "programme": "Electrical and Electronics Engineering",
+      "level": 400,
+      "semester": 2,
+      "credits": 10,
+      "reason": "Below 16 (check SIWES or industrial training semester)"
+    },
+    {
+      "programme": "Electrical and Electronics Engineering",
+      "level": 500,
+      "semester": 2,
+      "credits": 25,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "English Studies",
+      "level": 400,
+      "semester": 1,
+      "credits": 33,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "English Studies",
+      "level": 400,
+      "semester": 2,
+      "credits": 33,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "Estate Management",
+      "level": 400,
+      "semester": 2,
+      "credits": 6,
+      "reason": "Below 16 (check SIWES or industrial training semester)"
+    },
+    {
+      "programme": "French and Foreign Studies",
+      "level": 300,
+      "semester": 1,
+      "credits": 15,
+      "reason": "Below 16 (check SIWES or industrial training semester)"
+    },
+    {
+      "programme": "French and Foreign Studies",
+      "level": 400,
+      "semester": 2,
+      "credits": 13,
+      "reason": "Below 16 (check SIWES or industrial training semester)"
+    },
+    {
+      "programme": "Guidance and Counselling",
+      "level": 100,
+      "semester": 2,
+      "credits": 12,
+      "reason": "Below 16 (check SIWES or industrial training semester)"
+    },
+    {
+      "programme": "Information Resources Management",
+      "level": 100,
+      "semester": 1,
+      "credits": 13,
+      "reason": "Below 16 (check SIWES or industrial training semester)"
+    },
+    {
+      "programme": "Information Resources Management",
+      "level": 200,
+      "semester": 1,
+      "credits": 26,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "Information Resources Management",
+      "level": 200,
+      "semester": 2,
+      "credits": 5,
+      "reason": "Below 16 (check SIWES or industrial training semester)"
+    },
+    {
+      "programme": "Information Technology",
+      "level": 400,
+      "semester": 1,
+      "credits": 34,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "Law",
+      "level": 100,
+      "semester": 1,
+      "credits": 15,
+      "reason": "Below 16 (check SIWES or industrial training semester)"
+    },
+    {
+      "programme": "Law",
+      "level": 300,
+      "semester": 1,
+      "credits": 30,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "Law",
+      "level": 300,
+      "semester": 2,
+      "credits": 33,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "Law",
+      "level": 400,
+      "semester": 1,
+      "credits": 35,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "Law",
+      "level": 400,
+      "semester": 2,
+      "credits": 39,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "Law",
+      "level": 500,
+      "semester": 1,
+      "credits": 28,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "Law",
+      "level": 500,
+      "semester": 2,
+      "credits": 34,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "Mass Communication",
+      "level": 200,
+      "semester": 1,
+      "credits": 30,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "Mass Communication",
+      "level": 200,
+      "semester": 2,
+      "credits": 30,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "Mass Communication",
+      "level": 300,
+      "semester": 1,
+      "credits": 30,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "Mass Communication",
+      "level": 300,
+      "semester": 2,
+      "credits": 29,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "Mass Communication",
+      "level": 400,
+      "semester": 1,
+      "credits": 25,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "Mechanical Engineering",
+      "level": 400,
+      "semester": 2,
+      "credits": 12,
+      "reason": "Below 16 (check SIWES or industrial training semester)"
+    },
+    {
+      "programme": "Mechanical Engineering",
+      "level": 500,
+      "semester": 2,
+      "credits": 26,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "Medical Laboratory Science",
+      "level": 500,
+      "semester": 1,
+      "credits": 54,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "Medical Laboratory Science",
+      "level": 500,
+      "semester": 2,
+      "credits": 31,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "Music",
+      "level": 400,
+      "semester": 2,
+      "credits": 26,
+      "reason": "Above 24 (may include electives or options counted together)"
+    },
+    {
+      "programme": "Software Engineering",
+      "level": 400,
+      "semester": 2,
+      "credits": 15,
+      "reason": "Below 16 (check SIWES or industrial training semester)"
+    }
+  ]
 }

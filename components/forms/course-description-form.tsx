@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { GraceExemption } from "@/components/courses/grace-exemption";
+import { useUser } from "@/contexts/user-context";
 import { AiFirstDraft } from "@/components/courses/ai-first-draft";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -197,6 +199,8 @@ interface Course {
   descriptionAccess?: "OWNER" | "LOCAL" | "LOCKED";
   sharedOwner?: string | null;
   sharedWithProgrammes?: number;
+  /** F4: DAP's exemption from the GRACE gate. */
+  graceExemption?: { reason: string } | null;
 }
 
 /** W16: who writes a course's description, in a sentence. */
@@ -269,6 +273,7 @@ export function CourseDescriptionForm({
   submissionId,
   disabled = false,
 }: CourseDescriptionFormProps) {
+  const { currentUser } = useUser();
   const [courses, setCourses] = useState<CourseWithDescription[]>([]);
   const [descriptions, setDescriptions] = useState<
     Record<string, CourseDescription>
@@ -1018,6 +1023,17 @@ export function CourseDescriptionForm({
                             )}
 
                             <div className="space-y-6 pt-2">
+                              {/* F4: DAP's exemption from the GRACE gate, with its reason. */}
+                              <GraceExemption
+                                courseId={course.id}
+                                reason={course.graceExemption?.reason ?? null}
+                                canGrant={currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN"}
+                                onChanged={(reason) =>
+                                  setCourses((prev) =>
+                                    prev.map((item) => (item.id === course.id ? { ...item, graceExemption: reason ? { reason } : null } : item)),
+                                  )
+                                }
+                              />
                               {/* B11: an AI first draft for a course still without its text. */}
                               {!readOnly &&
                                 (!desc.courseContent?.trim() || desc.learningOutcomes.filter((item) => item.trim()).length < 3) && (

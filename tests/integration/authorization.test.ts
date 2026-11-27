@@ -121,6 +121,7 @@ import { GET as myCourses } from "@/app/api/lecturer/courses/route";
 import { POST as markCourseReady } from "@/app/api/lecturer/courses/[assignmentId]/ready/route";
 import { PUT as saveCourseDescription } from "@/app/api/courses/[id]/description/route";
 import { POST as aiFirstDraft } from "@/app/api/courses/[id]/ai-draft/route";
+import { DELETE as takeBackExemption, POST as grantExemption } from "@/app/api/courses/[id]/grace-exemption/route";
 import { GET as readDraftQuestions, POST as askDapRoute } from "@/app/api/submissions/[id]/questions/route";
 import { GET as readDapInbox } from "@/app/api/dap-questions/route";
 import { PATCH as answerDapQuestion } from "@/app/api/dap-questions/[id]/route";
@@ -7640,5 +7641,87 @@ describe("lecturers and committee members (G2)", () => {
     expect(edited.status).toBe(403);
     // Pages written for the older roles refuse them outright.
     expect((await readAssignments(new Request("http://localhost"), context)).status).toBe(403);
+  });
+});
+
+// Task F4: DAP can let a course past the GRACE gate with a reason. V15:
+// titles are tidied on save and the person is told what changed.
+describe("DAP's GRACE exemption (F4) and titles fixed for you (V15)", () => {
+  const cycleId = "f4-cycle";
+  const submissionId = "f4-submission";
+  const context = { params: Promise.resolve({ id: submissionId }) };
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.create({ data: { id: cycleId, name: "F4", createdById: ids.super } });
+    await prisma.submission.create({
+      data: { id: submissionId, title: "F4 Bulletin", programmeId: ids.programmeA, createdById: ids.hod, cycleId },
+    });
+    await prepareDraftForSubmit(submissionId);
+  });
+
+  afterAll(async () => {
+    await prisma.activityLog.deleteMany({ where: { entityId: submissionId } });
+    await prisma.submission.deleteMany({ where: { id: submissionId } });
+    await prisma.reviewCycle.deleteMany({ where: { id: cycleId } });
+  });
+
+  const submit = () => {
+    authState.userId = ids.hod;
+    return transitionSubmission(
+      new NextRequest(`http://localhost/api/submissions/${submissionId}/transition`, { method: "POST", body: JSON.stringify({ action: "SUBMIT" }) }),
+      context,
+    );
+  };
+
+  it("lets a course DAP exempts past the GRACE gate, with the reason logged", async () => {
+    const course = await prisma.course.findFirstOrThrow({ where: { submissionId, code: "RDY 101" } });
+    await prisma.courseDescription.update({ where: { courseId: course.id }, data: { graceStatus: "NEEDS_REVISION", gracePass: false } });
+    expect(await (await submit()).json()).toMatchObject({ code: "GRACE_COMPLIANCE_REQUIRED" });
+
+    const exempt = (userId: string, reason: string) => {
+      authState.userId = userId;
+      return grantExemption(new Request("http://localhost", { method: "POST", body: JSON.stringify({ reason }) }), { params: Promise.resolve({ id: course.id }) });
+    };
+    const reason = "Senate approved this course's wording in 2023; GRACE review deferred.";
+    expect((await exempt(ids.hod, reason)).status).toBe(403);
+    expect((await exempt(ids.admin, "too short")).status).toBe(400);
+    expect((await exempt(ids.admin, reason)).status).toBe(200);
+    expect(await prisma.activityLog.count({ where: { entityId: submissionId, action: "GRACE_EXEMPTION_GRANTED" } })).toBe(1);
+    expect((await submit()).status).toBe(200);
+
+    authState.userId = ids.admin;
+    expect((await takeBackExemption(new Request("http://localhost", { method: "DELETE" }), { params: Promise.resolve({ id: course.id }) })).status).toBe(200);
+    expect(await prisma.graceExemption.count({ where: { courseId: course.id } })).toBe(0);
+  });
+
+  it("tidies a title on save and says what it changed", async () => {
+    const draft = "f4-titles";
+    await prisma.submission.create({
+      data: { id: draft, title: "F4 Titles", programmeId: ids.programmeA, createdById: ids.hod, cycleId: "f4-cycle-2" },
+    }).catch(async () => {
+      await prisma.reviewCycle.create({ data: { id: "f4-cycle-2", name: "F4 two", createdById: ids.super } });
+      await prisma.submission.create({ data: { id: draft, title: "F4 Titles", programmeId: ids.programmeA, createdById: ids.hod, cycleId: "f4-cycle-2" } });
+    });
+    try {
+      authState.userId = ids.hod;
+      const created = await createCourseRow(
+        new NextRequest("http://localhost/api/courses", {
+          method: "POST",
+          body: JSON.stringify({ submissionId: draft, code: "ttl 201", title: "TTL 201: advanced ict for economists ii", units: 3, level: 200, semester: 1 }),
+        }),
+      );
+      expect(created.status).toBe(201);
+      const body = await created.json();
+      expect(body.title).toBe("Advanced ICT for Economists II");
+      expect(body.fixedForYou).toBe('TTL 201: "TTL 201: advanced ict for economists ii" is saved as "Advanced ICT for Economists II".');
+      const same = await updateCourseRow(
+        new NextRequest(`http://localhost/api/courses/${body.id}`, { method: "PATCH", body: JSON.stringify({ title: "Advanced ICT for Economists II" }) }),
+        { params: Promise.resolve({ id: body.id }) },
+      );
+      expect((await same.json()).fixedForYou).toBeNull();
+    } finally {
+      await prisma.submission.deleteMany({ where: { id: draft } });
+      await prisma.reviewCycle.deleteMany({ where: { id: "f4-cycle-2" } });
+    }
   });
 });

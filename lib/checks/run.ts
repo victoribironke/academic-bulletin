@@ -13,7 +13,7 @@ import { getCourseGraceBlockers } from "@/lib/courses/grace-compliance";
 import { generalEducationBlockFor, isGeneralEducationCourse, programmeLevels } from "@/lib/courses/general-education";
 import { legacyReadinessIssues } from "@/lib/submissions/submit-readiness";
 import { resolveLeaders } from "@/lib/leaders";
-import { type DraftData, type Finding, type SectionKey, runRules } from "@/lib/checks/rules";
+import { type DraftData, type Finding, POLICY, type SectionKey, runRules } from "@/lib/checks/rules";
 
 export type CheckResult = Finding & {
   accepted: { reason: string; by: string | null; at: string } | null;
@@ -141,6 +141,10 @@ export async function loadDraftData(submissionId: string): Promise<DraftData> {
     courseListConfirmed: confirmed.has(draft.id),
     graceBlocked: blocked,
     electiveGroups: draft.electiveGroups,
+    // W9 and F6: DAP's approved semesters outside 16 to 24 credits for this programme (package file 03).
+    approvedLoadExceptions: POLICY.approvedLoadExceptions
+      .filter((item) => item.programme.trim().toLowerCase() === draft.programme.name.trim().toLowerCase())
+      .map((item) => ({ level: item.level, semester: item.semester })),
     assignments: draft.courseAssignments.map((assignment) => ({ code: assignment.course.code, status: assignment.status })),
     leaders: resolveLeaders(
       draft.programme.department.school,
