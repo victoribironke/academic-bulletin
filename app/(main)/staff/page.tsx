@@ -1,6 +1,7 @@
 "use client";
 
 import { UrlSearchTerm } from "@/components/shared/url-search-term";
+import { useLowData } from "@/components/layout/low-data-toggle";
 import { useState, useEffect, Suspense } from "react";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableCard, TableToolbar } from "@/components/shared/table-toolbar";
@@ -87,6 +88,7 @@ const STAFF_TYPE_LABELS: Record<string, string> = {
 };
 
 export default function StaffPage() {
+  const lowData = useLowData();
   const router = useRouter();
   const { hasPermission } = usePermission();
   const { currentUser, isLoading: userLoading } = useUser();
@@ -306,7 +308,8 @@ export default function StaffPage() {
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <Avatar className="size-9">
-                      <AvatarImage src={s.imageUrl || ""} alt="" />
+                      {/* U4: with "Low data" on, initials instead of the photo. */}
+                      {!lowData && <AvatarImage src={s.imageUrl || ""} alt="" />}
                       <AvatarFallback className="bg-primary/10 text-xs font-medium text-primary">
                         {s.firstName[0]}
                         {s.surname[0]}

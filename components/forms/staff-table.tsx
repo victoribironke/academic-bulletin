@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { StoredPhoto } from "@/components/shared/stored-photo";
 import { SaveStatus, type SaveState } from "@/components/shared/save-status";
 import { offerUndo } from "@/lib/undo-toast";
 import { DynamicTable, Column } from "./dynamic-table";
@@ -853,8 +854,7 @@ export function StaffTable({
                 >
                   <div className="flex items-center gap-3">
                     {staff.imageUrl ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img
+                      <StoredPhoto
                         src={staff.imageUrl}
                         alt={staff.surname}
                         className="h-10 w-10 rounded-full object-cover border"
@@ -890,8 +890,7 @@ export function StaffTable({
 
               <div className="flex justify-center">
                 {imageStaff.imageUrl ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
+                  <StoredPhoto
                     src={imageStaff.imageUrl}
                     alt={`${imageStaff.surname} photo`}
                     className="h-48 w-36 rounded-lg object-cover border"

@@ -1,6 +1,7 @@
 "use client";
 
 import { AskDap } from "@/components/submissions/ask-dap";
+import { StoredPhoto } from "@/components/shared/stored-photo";
 import { rememberLastPlace } from "@/components/desk/continue-where-stopped";
 import { SectionMarkIcon, sectionMarkWords, useSectionMarks } from "@/components/submissions/section-marks";
 import { useState, useEffect, use, useCallback, useRef } from "react";
@@ -1834,8 +1835,7 @@ export default function SubmissionDetailPage({
                       <Label>Dean&apos;s Photo</Label>
                       <div className="flex items-start gap-4">
                         {deanImageUrl ? (
-                          /* eslint-disable-next-line @next/next/no-img-element */
-                          <img
+                          <StoredPhoto
                             src={deanImageUrl}
                             alt="Dean"
                             className="h-36 w-28 rounded-lg object-cover border"
@@ -1906,8 +1906,7 @@ export default function SubmissionDetailPage({
                       <Label>HOD&apos;s Photo</Label>
                       <div className="flex items-start gap-4">
                         {hodImageUrl ? (
-                          /* eslint-disable-next-line @next/next/no-img-element */
-                          <img
+                          <StoredPhoto
                             src={hodImageUrl}
                             alt="HOD"
                             className="h-36 w-28 rounded-lg object-cover border"

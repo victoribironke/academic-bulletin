@@ -138,3 +138,16 @@ describe("accessibility of the R2 screens (U5)", () => {
     expect(await problems(container)).toEqual([]);
   });
 });
+
+describe("Low data (U4)", () => {
+  it("doesn't download a stored photo while Low data is on, and shows it on request", async () => {
+    const { StoredPhoto } = await import("@/components/shared/stored-photo");
+    const { fireEvent } = await import("@testing-library/react");
+    localStorage.setItem("abrs-low-data", "on");
+    const { container } = render(<StoredPhoto src="/api/files/staff/a.jpg" alt="Ada Example" className="size-10" />);
+    expect(container.querySelector("img")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show the photo: Ada Example" }));
+    expect(container.querySelector("img")?.getAttribute("src")).toBe("/api/files/staff/a.jpg");
+    localStorage.removeItem("abrs-low-data");
+  });
+});

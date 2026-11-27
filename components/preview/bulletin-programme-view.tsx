@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { StoredPhoto } from "@/components/shared/stored-photo";
 import { Separator } from "@/components/ui/separator";
 import { cleanText, departmentLabel } from "@/lib/bulletin/document-utils";
 import { SafeRichText } from "@/components/shared/safe-rich-text";
@@ -78,8 +79,7 @@ export function BulletinProgrammeView({
           {leaderCards.map((card) => (
             <figure key={card.role} className="text-center">
               {card.imageUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={card.imageUrl} alt={card.printed ? `${card.printed}, ${card.label}` : card.label} className="h-32 w-48 object-contain rounded-md mx-auto shadow-sm" />
+                <StoredPhoto src={card.imageUrl} alt={card.printed ? `${card.printed}, ${card.label}` : card.label} className="h-32 w-48 object-contain rounded-md mx-auto shadow-sm" />
               )}
               <figcaption className="mt-3">
                 {card.printed && <span className="block font-semibold">{card.printed}</span>}

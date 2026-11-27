@@ -16,6 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useUser } from "@/contexts/user-context";
 import { HelpButton } from "@/components/layout/help-button";
+import { LowDataToggle } from "@/components/layout/low-data-toggle";
 import { WelcomeTour } from "@/components/help/welcome-tour";
 
 const SEGMENT_LABELS: Record<string, string> = {
@@ -112,6 +113,8 @@ export function SiteHeader() {
         <div className="ml-auto flex items-center gap-2">
           {/* K4: search everything, or press Ctrl or Cmd + K. */}
           <SearchCommand />
+          {/* U4: hide photos on a slow or costly connection. */}
+          <LowDataToggle />
           <HelpButton />
           <WelcomeTour />
         </div>
