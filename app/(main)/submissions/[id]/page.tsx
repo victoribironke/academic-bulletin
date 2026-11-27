@@ -105,6 +105,8 @@ import { useConfirmDelete } from "@/components/shared/typed-delete-dialog";
 import { ProgrammeCountdown } from "@/components/calendar/countdown";
 import { ReadinessPanel } from "@/components/submissions/readiness-panel";
 import { GraduationNumbers } from "@/components/submissions/graduation-numbers";
+import { LeaderDetails } from "@/components/submissions/leader-details";
+import type { LeaderRole, Leaders } from "@/lib/leaders";
 import { CarriedNote, CarriedTextProvider, DraftSummaryButton } from "@/components/submissions/carried-text";
 
 interface Submission {
@@ -474,6 +476,43 @@ export default function SubmissionDetailPage({
   // Form state for structured sections
   const [deanImageUrl, setDeanImageUrl] = useState("");
   const [hodImageUrl, setHodImageUrl] = useState("");
+  // E4: the Dean and Head as the school and department records keep them.
+  const [leaders, setLeaders] = useState<Leaders | null>(null);
+  const leadersRef = useRef<Leaders | null>(null);
+  const [leaderPlaces, setLeaderPlaces] = useState<{ school: string; department: string } | null>(null);
+  const applyLeaders = useCallback((next: Leaders) => {
+    leadersRef.current = next;
+    setLeaders(next);
+    setDeanImageUrl(next.dean.imageUrl ?? "");
+    setHodImageUrl(next.hod.imageUrl ?? "");
+  }, []);
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    fetch(`/api/submissions/${id}/leaders`)
+      .then(async (res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        applyLeaders(data.leaders);
+        setLeaderPlaces({ school: data.school, department: data.department });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [id, applyLeaders]);
+  const saveLeaderPhoto = useCallback(
+    async (role: LeaderRole, imageUrl: string | null) => {
+      const res = await fetch(`/api/submissions/${id}/leaders`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role, imageUrl }),
+      }).catch(() => null);
+      if (res?.ok) applyLeaders((await res.json()).leaders);
+      else toast.error("Couldn't keep the photo for the other programmes", { description: "It is still saved on this programme." });
+    },
+    [id, applyLeaders],
+  );
   const [philosophy, setPhilosophy] = useState("");
   const [mission, setMission] = useState("");
   const [vision, setVision] = useState("");
@@ -622,8 +661,9 @@ export default function SubmissionDetailPage({
 
     const src = draft || data.content || {};
 
-    setDeanImageUrl(src.programmeInfo?.deanImageUrl || data.content?.programmeInfo?.deanImageUrl || "");
-    setHodImageUrl(src.programmeInfo?.hodImageUrl || data.content?.programmeInfo?.hodImageUrl || "");
+    // E4: the school's and department's records come first.
+    setDeanImageUrl(leadersRef.current?.dean.imageUrl || src.programmeInfo?.deanImageUrl || data.content?.programmeInfo?.deanImageUrl || "");
+    setHodImageUrl(leadersRef.current?.hod.imageUrl || src.programmeInfo?.hodImageUrl || data.content?.programmeInfo?.hodImageUrl || "");
     setPhilosophy(src.philosophy ?? data.content?.philosophy ?? "");
     setMission(src.mission ?? data.content?.mission ?? "");
     setVision(src.vision ?? data.content?.vision ?? "");
@@ -712,6 +752,8 @@ export default function SubmissionDetailPage({
         const data = await res.json();
         setUrl(data.imageUrl);
         setHasChanges(true);
+        // E4: one photo for every programme in the school or department.
+        void saveLeaderPhoto(role, data.imageUrl);
         setImageVerificationFeedback({
           role,
           status: "success",
@@ -1182,14 +1224,16 @@ export default function SubmissionDetailPage({
     setHasChanges(true);
   };
   const removePhoto = async (who: "Dean" | "Head of Department", clear: () => void) => {
+    const where = who === "Dean" ? leaderPlaces?.school : leaderPlaces?.department;
     const confirmed = await confirmDelete({
       title: `Remove the ${who}'s photo?`,
-      description: "It is removed from this programme's page when the page saves. You can upload it again.",
+      description: `It is removed from every programme in ${where ?? (who === "Dean" ? "the school" : "the department")}. You can upload it again.`,
       actionLabel: "Remove photo",
     });
     if (!confirmed) return;
     clear();
     setHasChanges(true);
+    void saveLeaderPhoto(who === "Dean" ? "dean" : "hod", null);
   };
 
   if (isLoading) {
@@ -1841,6 +1885,18 @@ export default function SubmissionDetailPage({
                       </div>
                     </div>
 
+                    {leaders && (
+                      <LeaderDetails
+                        key={`dean|${leaders.dean.title}|${leaders.dean.name}`}
+                        submissionId={submission.id}
+                        role="dean"
+                        leader={leaders.dean}
+                        place={leaderPlaces?.school ?? "the school"}
+                        canEdit={canEdit}
+                        onSaved={applyLeaders}
+                      />
+                    )}
+
                     <Separator />
 
                     {/* HOD Photo */}
@@ -1902,6 +1958,17 @@ export default function SubmissionDetailPage({
                         )}
                       </div>
                     </div>
+                    {leaders && (
+                      <LeaderDetails
+                        key={`hod|${leaders.hod.title}|${leaders.hod.name}`}
+                        submissionId={submission.id}
+                        role="hod"
+                        leader={leaders.hod}
+                        place={leaderPlaces?.department ?? "the department"}
+                        canEdit={canEdit}
+                        onSaved={applyLeaders}
+                      />
+                    )}
                   </div>
                 )}
 

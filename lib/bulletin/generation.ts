@@ -16,6 +16,7 @@ import {
 import { NOT_IN_ARCHIVED_CYCLE } from "@/lib/cycles/archive";
 import { COURSE_OWNER_SELECT, type ProgrammePlace, isOwnedElsewhere } from "@/lib/courses/shared-courses";
 import { isGeneralEducationCourse } from "@/lib/courses/general-education";
+import { type Leaders, resolveLeaders } from "@/lib/leaders";
 
 // Types
 export type ExportLevel = "department" | "school" | "institution";
@@ -72,6 +73,8 @@ export interface BulletinProgramme {
   schoolCode: string;
   submissionStatus?: string;
   courses: BulletinCourse[];
+  /** E4 and Q4: the Dean and Head of Department, printed with their photos. */
+  leaders?: Leaders;
   /** W3: named elective groups; the totals count what a student chooses. */
   electiveGroups?: { id: string; name: string; chooseUnits: number }[];
   staff: BulletinStaff[];
@@ -262,6 +265,8 @@ export async function generateDepartmentBulletin(
     courses: formattedCourses,
     electiveGroups: submission?.electiveGroups ?? [],
     staff: formattedStaff,
+    // E4 and Q4: the Dean and Head from the school and department records.
+    leaders: resolveLeaders(programme.department.school, programme.department, submission?.content?.programmeInfo),
     content: submission?.content
       ? {
           deanImageUrl: (submission.content.programmeInfo as any)?.deanImageUrl || undefined,
@@ -397,6 +402,8 @@ export async function generateSchoolBulletin(
         courses: formattedCourses,
         electiveGroups: submission?.electiveGroups ?? [],
         staff: formattedStaff,
+        // E4 and Q4: the Dean and Head from the school and department records.
+        leaders: resolveLeaders(school, dept, submission?.content?.programmeInfo),
         content: submission?.content
           ? {
               deanImageUrl: (submission.content.programmeInfo as any)?.deanImageUrl || undefined,
@@ -531,6 +538,8 @@ export async function generateInstitutionBulletin(): Promise<BulletinData> {
           courses: formattedCourses,
           electiveGroups: submission?.electiveGroups ?? [],
           staff: formattedStaff,
+          // E4 and Q4: the Dean and Head from the school and department records.
+          leaders: resolveLeaders(school, dept, submission?.content?.programmeInfo),
           content: submission?.content
             ? {
                 deanImageUrl: (submission.content.programmeInfo as any)?.deanImageUrl || undefined,

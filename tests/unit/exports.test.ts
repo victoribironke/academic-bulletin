@@ -128,6 +128,21 @@ describe("bulletin exports", () => {
     );
     expect(xml).toContain("CSC 101: Introduction to Computing (3 units, Core; 45 lecture hours, 0 practical hours)");
     expect(xml).toContain("At the end of this course, students should be able to:");
+    // Q4: the title and full name under the Dean's and Head's places.
+    const withLeaders = await JSZip.loadAsync(
+      await generateBulletinDocx({
+        ...withRules,
+        programmes: [
+          {
+            ...withRules.programmes[0],
+            leaders: { dean: { title: "Prof.", name: "Ada Dean", imageUrl: null }, hod: { title: "Dr.", name: "Bo Head", imageUrl: null } },
+          },
+        ],
+      }),
+    ).then((zip) => zip.file("word/document.xml")!.async("string"));
+    expect(withLeaders).toContain("Prof. Ada Dean");
+    expect(withLeaders).toContain("Dr. Bo Head");
+    expect(withLeaders.indexOf("Prof. Ada Dean")).toBeLessThan(withLeaders.indexOf("Head of Department"));
     expect((await generateBulletinPdf(withRules)).subarray(0, 4).toString()).toBe("%PDF");
   });
 

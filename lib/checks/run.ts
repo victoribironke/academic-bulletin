@@ -12,6 +12,7 @@ import { confirmedCourseLists } from "@/lib/courses/course-list";
 import { getCourseGraceBlockers } from "@/lib/courses/grace-compliance";
 import { generalEducationBlockFor, isGeneralEducationCourse, programmeLevels } from "@/lib/courses/general-education";
 import { legacyReadinessIssues } from "@/lib/submissions/submit-readiness";
+import { resolveLeaders } from "@/lib/leaders";
 import { type DraftData, type Finding, type SectionKey, runRules } from "@/lib/checks/rules";
 
 export type CheckResult = Finding & {
@@ -45,7 +46,24 @@ export async function loadDraftData(submissionId: string): Promise<DraftData> {
     select: {
       id: true,
       currentPhase: true,
-      programme: { select: { code: true, name: true, duration: true, isNew: true, ...PROGRAMME_PLACE_SELECT } },
+      programme: {
+        select: {
+          code: true,
+          name: true,
+          duration: true,
+          isNew: true,
+          ...PROGRAMME_PLACE_SELECT,
+          department: {
+            select: {
+              schoolId: true,
+              hodTitle: true,
+              hodName: true,
+              hodImageUrl: true,
+              school: { select: { deanTitle: true, deanName: true, deanImageUrl: true } },
+            },
+          },
+        },
+      },
       content: true,
       courses: {
         select: {
@@ -122,6 +140,11 @@ export async function loadDraftData(submissionId: string): Promise<DraftData> {
     courseListConfirmed: confirmed.has(draft.id),
     graceBlocked: blocked,
     electiveGroups: draft.electiveGroups,
+    leaders: resolveLeaders(
+      draft.programme.department.school,
+      draft.programme.department,
+      (draft.content as { programmeInfo?: unknown } | null)?.programmeInfo,
+    ),
   };
 }
 

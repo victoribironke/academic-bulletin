@@ -130,6 +130,15 @@ describe("the rules engine (F1)", () => {
     expect(loose).toMatchObject({ level: "CHECK", items: ["ECO 401", "ECO 411"] });
   });
 
+  it("asks for the Dean's and Head's title, name and photo from the records (V6, E4)", () => {
+    const leaders = {
+      dean: { title: "Prof.", name: "Ada Dean", imageUrl: "/api/files/d.jpg" },
+      hod: { title: null, name: null, imageUrl: "/api/files/h.jpg" },
+    };
+    expect(runRules(draft({ leaders })).find((finding) => finding.rule === "V6")?.message).toBe("Add the Head of Department's title and name.");
+    expect(runRules(draft({ leaders: { ...leaders, hod: { title: "Dr.", name: "Bo Head", imageUrl: "/api/files/h.jpg" } } })).some((finding) => finding.rule === "V6")).toBe(false);
+  });
+
   it("works out the credit numbers the app writes (W4, W5)", () => {
     const numbers = creditNumbers([
       course("GST 111", 100, 1, 2, { generalEducation: true }),

@@ -20,6 +20,7 @@ import {
   WidthType,
 } from "docx";
 import { courseSemesterLabel, courseSemesterOrder } from "@/lib/courses/course-rules";
+import { LEADER_ROLE_LABEL, leaderName } from "@/lib/leaders";
 import { CREDIT_SUMMARY_HEADERS, OUTCOMES_LEAD, courseHeading, creditSummaryRows, graduationNumbersLine, programmeCreditSummary } from "@/lib/bulletin/course-layout";
 import type {
   BulletinCourse,
@@ -193,9 +194,13 @@ async function fetchImage(url?: string): Promise<EmbeddedImage | null> {
 
 async function loadStaffPhotos(data: BulletinData): Promise<Map<string, EmbeddedImage>> {
   const entries = await Promise.all(
-    data.programmes.flatMap((programme) =>
-      programme.staff.map(async (staff) => [staff.id, await fetchImage(staff.imageUrl)] as const),
-    ),
+    data.programmes.flatMap((programme) => [
+      ...programme.staff.map(async (staff) => [staff.id, await fetchImage(staff.imageUrl)] as const),
+      // E4 and Q4: the Dean's and Head's photos, keyed by programme.
+      ...(["dean", "hod"] as const).map(
+        async (role) => [`${role}:${programme.id}`, await fetchImage(programme.leaders?.[role].imageUrl ?? undefined)] as const,
+      ),
+    ]),
   );
   return new Map(
     entries.filter((entry): entry is readonly [string, EmbeddedImage] => Boolean(entry[1])),
@@ -309,8 +314,38 @@ function staffTable(members: BulletinStaff[], photos: Map<string, EmbeddedImage>
   });
 }
 
+/** Q4: the Dean's and Head's photos, with the title and full name under each. */
+function leaderElements(programme: BulletinProgramme, photos: Map<string, EmbeddedImage>): DocElement[] {
+  const elements: DocElement[] = [];
+  for (const role of ["dean", "hod"] as const) {
+    const leader = programme.leaders?.[role];
+    const printed = leader ? leaderName(leader) : null;
+    const photo = photos.get(`${role}:${programme.id}`);
+    if (!photo && !printed) continue;
+    if (photo) {
+      elements.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 120, after: 60 },
+          children: [
+            new ImageRun({
+              data: photo.data,
+              type: photo.type,
+              transformation: { width: 96, height: 120 },
+              altText: { title: printed ?? LEADER_ROLE_LABEL[role], description: `Portrait of the ${LEADER_ROLE_LABEL[role]}`, name: role },
+            }),
+          ],
+        }),
+      );
+    }
+    if (printed) elements.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0 }, children: [new TextRun({ text: printed, bold: true, color: NAVY })] }));
+    elements.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 160 }, children: [new TextRun({ text: LEADER_ROLE_LABEL[role], color: TEXT })] }));
+  }
+  return elements;
+}
+
 function staffSection(programme: BulletinProgramme, photos: Map<string, EmbeddedImage>): DocElement[] {
-  const elements: DocElement[] = [heading(sectionTitle("Staff Directory"), 1, true)];
+  const elements: DocElement[] = [heading(sectionTitle("Staff Directory"), 1, true), ...leaderElements(programme, photos)];
   const groups = [
     ["Academic Staff", "ACADEMIC"],
     ["Adjunct Academic Staff", "ADJUNCT"],

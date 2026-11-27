@@ -117,12 +117,16 @@ enum GraceStatus {
 // ============================================================================
 
 model School {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  code        String   @unique
-  description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  name         String   @unique
+  code         String   @unique
+  description  String?
+  // E4: the Dean's title, name and photo, kept once for every programme in the school.
+  deanTitle    String?
+  deanName     String?
+  deanImageUrl String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // Relations
   departments   Department[]
@@ -137,6 +141,10 @@ model Department {
   name        String
   code        String   @unique
   description String?
+  // E4: the Head of Department's title, name and photo, kept once for every programme in the department.
+  hodTitle    String?
+  hodName     String?
+  hodImageUrl String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

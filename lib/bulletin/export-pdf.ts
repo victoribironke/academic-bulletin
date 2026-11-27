@@ -1,5 +1,6 @@
 import PDFDocument from "pdfkit";
 import { courseSemesterLabel, courseSemesterOrder } from "@/lib/courses/course-rules";
+import { LEADER_ROLE_LABEL, leaderName } from "@/lib/leaders";
 import { CREDIT_SUMMARY_HEADERS, OUTCOMES_LEAD, courseHeading, creditSummaryRows, graduationNumbersLine, programmeCreditSummary } from "@/lib/bulletin/course-layout";
 import type {
   BulletinCourse,
@@ -162,9 +163,13 @@ async function fetchPhoto(url?: string): Promise<Buffer | null> {
 
 async function loadStaffPhotos(data: BulletinData): Promise<Map<string, Buffer>> {
   const entries = await Promise.all(
-    data.programmes.flatMap((programme) =>
-      programme.staff.map(async (staff) => [staff.id, await fetchPhoto(staff.imageUrl)] as const),
-    ),
+    data.programmes.flatMap((programme) => [
+      ...programme.staff.map(async (staff) => [staff.id, await fetchPhoto(staff.imageUrl)] as const),
+      // E4 and Q4: the Dean's and Head's photos, keyed by programme.
+      ...(["dean", "hod"] as const).map(
+        async (role) => [`${role}:${programme.id}`, await fetchPhoto(programme.leaders?.[role].imageUrl ?? undefined)] as const,
+      ),
+    ]),
   );
   return new Map(
     entries.filter((entry): entry is readonly [string, Buffer] => Boolean(entry[1])),
@@ -310,6 +315,7 @@ function drawStaffSection(
   photos: Map<string, Buffer>,
 ) {
   sectionHeading(doc, sectionTitle("Staff Directory"));
+  drawLeaders(doc, programme, photos);
   const groups = [
     ["Academic Staff", "ACADEMIC"],
     ["Adjunct Academic Staff", "ADJUNCT"],
@@ -321,6 +327,32 @@ function drawStaffSection(
     if (members.length === 0) bodyText(doc, "No staff listed in this category.", { italic: true });
     else drawStaffTable(doc, members, photos);
   }
+}
+
+/** Q4: the Dean's and Head's photos, with the title and full name under each. */
+function drawLeaders(doc: PdfDoc, programme: BulletinProgramme, photos: Map<string, Buffer>) {
+  const cards = (["dean", "hod"] as const)
+    .map((role) => ({ role, leader: programme.leaders?.[role], photo: photos.get(`${role}:${programme.id}`) }))
+    .filter((card) => card.photo || (card.leader && leaderName(card.leader)));
+  if (cards.length === 0) return;
+  ensureSpace(doc, 170);
+  const top = doc.y;
+  const columnWidth = contentWidth(doc) / 2;
+  cards.forEach((card, index) => {
+    const x = MARGIN + index * columnWidth;
+    if (card.photo) {
+      try {
+        doc.image(card.photo, x + columnWidth / 2 - 45, top, { fit: [90, 110], align: "center", valign: "center" });
+      } catch {
+        // An unreadable photo is left out without breaking the bulletin.
+      }
+    }
+    const printed = card.leader ? leaderName(card.leader) : null;
+    doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(10.5).text(pdfSafeText(printed ?? ""), x, top + 116, { width: columnWidth, align: "center" });
+    doc.fillColor(TEXT).font("Helvetica").fontSize(9.5).text(LEADER_ROLE_LABEL[card.role], x, top + 132, { width: columnWidth, align: "center" });
+  });
+  doc.y = top + 156;
+  resetX(doc);
 }
 
 /** W14: the university's vision and mission open every programme page. */

@@ -6,6 +6,7 @@ import { cleanText, departmentLabel } from "@/lib/bulletin/document-utils";
 import { SafeRichText } from "@/components/shared/safe-rich-text";
 import { BulletinProgramme, BulletinCourse } from "@/lib/bulletin/generation";
 import { CreditSummaryTable } from "@/components/courses/credit-summary-table";
+import { LEADER_ROLE_LABEL, leaderName } from "@/lib/leaders";
 import { OUTCOMES_LEAD, courseHeading, graduationNumbersLine, programmeCreditSummary } from "@/lib/bulletin/course-layout";
 
 interface BulletinProgrammeViewProps {
@@ -20,6 +21,17 @@ export function BulletinProgrammeView({
   const nonAcademicStaff = programme.staff.filter(
     (s) => s.type === "NON_ACADEMIC",
   );
+  // E4 and Q4: the Dean and Head, from the records (older drafts: their own photos).
+  const leaders = programme.leaders ?? {
+    dean: { title: null, name: null, imageUrl: programme.content?.deanImageUrl ?? null },
+    hod: { title: null, name: null, imageUrl: programme.content?.hodImageUrl ?? null },
+  };
+  const leaderCards = (["dean", "hod"] as const).map((role) => ({
+    role,
+    label: LEADER_ROLE_LABEL[role],
+    imageUrl: leaders[role].imageUrl,
+    printed: leaderName(leaders[role]),
+  }));
   // W4 and W5: the same figures the checks and the exports use.
   const credits = programmeCreditSummary(programme);
   const numbersLine = graduationNumbersLine(credits);
@@ -60,23 +72,21 @@ export function BulletinProgrammeView({
 
       <Separator />
 
-      {/* Deans & HODs Profile */}
-      {(programme.content?.deanImageUrl || programme.content?.hodImageUrl) && (
-        <section className="flex justify-center gap-12 my-6">
-          {programme.content.deanImageUrl && (
-            <div className="text-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={programme.content.deanImageUrl} alt="Dean" className="h-32 w-48 object-contain rounded-md mx-auto shadow-sm" />
-              <p className="mt-3 font-semibold text-lg">Dean</p>
-            </div>
-          )}
-          {programme.content.hodImageUrl && (
-            <div className="text-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={programme.content.hodImageUrl} alt="Head of Department" className="h-32 w-48 object-contain rounded-md mx-auto shadow-sm" />
-              <p className="mt-3 font-semibold text-lg">Head of Department</p>
-            </div>
-          )}
+      {/* Deans & HODs: the photo with the title and full name under it (E4, Q4). */}
+      {leaderCards.some((card) => card.imageUrl || card.printed) && (
+        <section className="flex flex-wrap justify-center gap-12 my-6">
+          {leaderCards.map((card) => (
+            <figure key={card.role} className="text-center">
+              {card.imageUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={card.imageUrl} alt={card.printed ? `${card.printed}, ${card.label}` : card.label} className="h-32 w-48 object-contain rounded-md mx-auto shadow-sm" />
+              )}
+              <figcaption className="mt-3">
+                {card.printed && <span className="block font-semibold">{card.printed}</span>}
+                <span className={card.printed ? "text-sm text-muted-foreground" : "font-semibold text-lg"}>{card.label}</span>
+              </figcaption>
+            </figure>
+          ))}
         </section>
       )}
 

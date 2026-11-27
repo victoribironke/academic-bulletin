@@ -110,6 +110,7 @@ import { GET as readChecks, POST as acceptCheck } from "@/app/api/submissions/[i
 import { GET as listElectiveGroups, POST as addElectiveGroup } from "@/app/api/submissions/[id]/elective-groups/route";
 import { DELETE as removeElectiveGroup, PATCH as changeElectiveGroup } from "@/app/api/submissions/[id]/elective-groups/[groupId]/route";
 import { GET as readCreditSummary } from "@/app/api/submissions/[id]/credit-summary/route";
+import { GET as readLeaders, PATCH as saveLeader } from "@/app/api/submissions/[id]/leaders/route";
 import { GET as readDraftQuestions, POST as askDapRoute } from "@/app/api/submissions/[id]/questions/route";
 import { GET as readDapInbox } from "@/app/api/dap-questions/route";
 import { PATCH as answerDapQuestion } from "@/app/api/dap-questions/[id]/route";
@@ -430,9 +431,18 @@ async function prepareDraftForSubmit(
 ) {
   const { programme } = await prisma.submission.findUniqueOrThrow({
     where: { id: submissionId },
-    select: { programme: { select: { departmentId: true } } },
+    select: { programme: { select: { departmentId: true, department: { select: { schoolId: true } } } } },
   });
   const departmentId = programme.departmentId;
+  // E4: the Dean and the Head, kept on the school and department records (V6).
+  await prisma.school.update({
+    where: { id: programme.department.schoolId },
+    data: { deanTitle: "Prof.", deanName: "Dean Example", deanImageUrl: "/api/files/schools/dean.jpg" },
+  });
+  await prisma.department.update({
+    where: { id: departmentId },
+    data: { hodTitle: "Dr.", hodName: "Head Example", hodImageUrl: "/api/files/departments/hod.jpg" },
+  });
   const staffId = departmentId === ids.departmentA ? "ready-staff-a" : `ready-staff-${departmentId}`;
   await prisma.staff.upsert({
     where: { id: staffId },
@@ -2886,11 +2896,10 @@ describe("submit validators", () => {
   it("refuses an empty draft with every reason at once", async () => {
     expect(await refusalCodes()).toEqual(
       expect.arrayContaining([
-        // F1: every level is empty, the General Education block and both photos are missing.
+        // F1: every level is empty and the General Education block is missing.
         "V2:100",
         "V2:400",
         "V5",
-        "V6",
         "V26",
         "MISSING_PHILOSOPHY",
         "MISSING_MISSION",
@@ -7191,5 +7200,79 @@ describe("contact hours, elective groups and the credit numbers (W2 to W5)", () 
     // Ungrouped electives are a "Please check" and count in full again.
     expect((await rulesNow()).find((result) => result.rule === "V25")).toMatchObject({ level: "CHECK" });
     expect((await credits()).totals.total).toBe(before);
+  });
+});
+
+// Task E4: the Dean and Head of Department are entered once, on the school
+// and the department, and every programme there shows them (Q4: with the
+// title and full name under the photo).
+describe("the Dean and Head of Department, entered once (E4, Q4)", () => {
+  const cycleId = "e4-cycle";
+  const firstId = "e4-first";
+  const secondId = "e4-second";
+  const otherCycleId = "e4-cycle-2";
+
+  beforeAll(async () => {
+    await prisma.reviewCycle.createMany({
+      data: [
+        { id: cycleId, name: "E4", createdById: ids.super },
+        { id: otherCycleId, name: "E4 second", createdById: ids.super },
+      ],
+    });
+    await prisma.submission.createMany({
+      data: [
+        { id: firstId, title: "E4 First", programmeId: ids.programmeA, createdById: ids.hod, cycleId },
+        { id: secondId, title: "E4 Second", programmeId: ids.programmeA, createdById: ids.hod, cycleId: otherCycleId },
+      ],
+    });
+  });
+
+  afterAll(async () => {
+    await prisma.activityLog.deleteMany({ where: { action: "LEADER_UPDATED" } });
+    await prisma.submission.deleteMany({ where: { id: { in: [firstId, secondId] } } });
+    await prisma.reviewCycle.deleteMany({ where: { id: { in: [cycleId, otherCycleId] } } });
+  });
+
+  const read = async (id: string, userId = ids.hod) => {
+    authState.userId = userId;
+    const response = await readLeaders(new Request("http://localhost"), { params: Promise.resolve({ id }) });
+    expect(response.status).toBe(200);
+    return (await response.json()).leaders;
+  };
+  const save = (id: string, body: object, userId = ids.hod) => {
+    authState.userId = userId;
+    return saveLeader(new Request("http://localhost", { method: "PATCH", body: JSON.stringify(body) }), { params: Promise.resolve({ id }) });
+  };
+
+  it("saves the Dean's and Head's title, name and photo once for every programme there", async () => {
+    await prisma.school.update({ where: { id: ids.schoolA }, data: { deanTitle: null, deanName: null, deanImageUrl: null } });
+    await prisma.department.update({ where: { id: ids.departmentA }, data: { hodTitle: null, hodName: null, hodImageUrl: null } });
+    // An older draft's own photo is shown while the record has none.
+    await prisma.submissionContent.create({ data: { submissionId: secondId, programmeInfo: { deanImageUrl: "/api/files/submissions/e4-second/dean.jpg" } } });
+    expect((await read(secondId)).dean).toEqual({ title: null, name: null, imageUrl: "/api/files/submissions/e4-second/dean.jpg" });
+
+    expect((await save(firstId, { role: "chair", name: "x" })).status).toBe(400);
+    expect((await save(firstId, { role: "dean", imageUrl: "https://example.com/photo.jpg" })).status).toBe(400);
+    expect((await save(firstId, { role: "dean", title: "x".repeat(41) })).status).toBe(400);
+    // Only someone who may edit the draft changes them.
+    expect((await save(firstId, { role: "dean", name: "Ada Dean" }, ids.dean)).status).toBe(403);
+
+    expect((await save(firstId, { role: "dean", title: "Prof.", name: "  Ada   Dean ", imageUrl: "/api/files/schools/a/dean.jpg?v=1" })).status).toBe(200);
+    expect((await save(firstId, { role: "hod", title: "Dr.", name: "Bo Head" })).status).toBe(200);
+
+    // The other programme of the school shows the same Dean, photo included.
+    expect(await read(secondId)).toEqual({
+      dean: { title: "Prof.", name: "Ada Dean", imageUrl: "/api/files/schools/a/dean.jpg?v=1" },
+      hod: { title: "Dr.", name: "Bo Head", imageUrl: null },
+    });
+    expect(await prisma.activityLog.count({ where: { action: "LEADER_UPDATED", entityId: { in: [ids.schoolA, ids.departmentA] } } })).toBe(2);
+
+    // V6 asks only for what is still missing.
+    authState.userId = ids.hod;
+    const checks = await (await readChecks(new Request("http://localhost"), { params: Promise.resolve({ id: firstId }) })).json();
+    expect(checks.results.find((result: { rule: string }) => result.rule === "V6")).toMatchObject({
+      level: "MUST",
+      message: "Add the Head of Department's photo.",
+    });
   });
 });

@@ -12,6 +12,7 @@ import { generalEducationBlockFor, isGeneralEducationFamily, programmeLevels } f
 import { admissionWordingProblems } from "@/lib/bulletin/admission-wording";
 import { carriedIssues } from "@/lib/bulletin/carried-fields";
 import { type CreditGroup, creditSummary, unitsFromHours } from "@/lib/courses/credit-summary";
+import { type Leaders, leaderGaps } from "@/lib/leaders";
 
 export type CheckLevel = "MUST" | "CHECK" | "FIXED";
 
@@ -70,6 +71,8 @@ export type DraftData = {
   approvedLoadExceptions?: { level: number; semester: number }[];
   /** W3: the draft's named elective groups. */
   electiveGroups?: CreditGroup[];
+  /** E4: the Dean and Head of Department as the school and department records give them. */
+  leaders?: Leaders;
 };
 
 const text = (value: unknown) => (typeof value === "string" ? value.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim() : "");
@@ -193,10 +196,13 @@ export function runRules(data: DraftData): Finding[] {
   }
 
   // V6: the Dean's and the Head's photos.
+  // E4: from the school's and department's records when the draft has them.
   const info = (content.programmeInfo ?? {}) as { deanImageUrl?: string; hodImageUrl?: string };
-  const photos = [!info.deanImageUrl && "the Dean's photo", !info.hodImageUrl && "the Head of Department's photo"].filter(Boolean) as string[];
-  if (photos.length) {
-    add({ rule: "V6", level: "MUST", section: "deans_hods", key: "V6", message: `Add ${photos.join(" and ")}.` });
+  const gaps = data.leaders
+    ? leaderGaps(data.leaders)
+    : ([!info.deanImageUrl && "the Dean's photo", !info.hodImageUrl && "the Head of Department's photo"].filter(Boolean) as string[]);
+  if (gaps.length) {
+    add({ rule: "V6", level: "MUST", section: "deans_hods", key: "V6", message: `Add ${gaps.join(" and ")}.` });
   }
 
   // V7: Direct Entry and Transfer wording isn't the UTME wording (W13).
