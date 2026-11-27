@@ -42,6 +42,18 @@ describe("the agent's message (T3, T6)", () => {
     expect(written.writtenBy).toBe("AI");
   });
 
+  it("lets the AI write only the opening: the links and figures follow as built", async () => {
+    const ai = vi.fn(async () => "Good morning, Dr. Okafor. CP1 is in 7 days, and Economics is well on its way: confirming the course list is the next step.");
+    const written = await writeMessage(facts, decision, { ai });
+    expect(written.writtenBy).toBe("AI");
+    expect(written.body).toMatch(/^Good morning, Dr\. Okafor\. CP1 is in 7 days, and Economics/);
+    expect(written.body).toContain("Open it: https://academicplanning.app/submissions/s1?section=courses");
+    expect(written.body).toContain("Directorate of Academic Planning");
+    // The opening may not add a link or a figure of its own.
+    const sneaky = vi.fn(async () => "Good morning. See https://example.com/x for 45 tips.");
+    expect((await writeMessage(facts, decision, { ai: sneaky })).fallback).toMatch(/links not in the facts|numbers not in the facts/);
+  });
+
   it("falls back to the template when the AI adds a number or a link, fails, or takes over 10 seconds", async () => {
     const invents = vi.fn(async () => "Good morning. You have 45 courses left. https://academicplanning.app/submissions/s1?section=courses");
     expect((await writeMessage(facts, decision, { ai: invents })).writtenBy).toBe("TEMPLATE");
