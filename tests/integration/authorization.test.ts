@@ -120,6 +120,7 @@ import { POST as nameCommitteeMember } from "@/app/api/committee/route";
 import { GET as myCourses } from "@/app/api/lecturer/courses/route";
 import { POST as markCourseReady } from "@/app/api/lecturer/courses/[assignmentId]/ready/route";
 import { PUT as saveCourseDescription } from "@/app/api/courses/[id]/description/route";
+import { POST as aiFirstDraft } from "@/app/api/courses/[id]/ai-draft/route";
 import { GET as readDraftQuestions, POST as askDapRoute } from "@/app/api/submissions/[id]/questions/route";
 import { GET as readDapInbox } from "@/app/api/dap-questions/route";
 import { PATCH as answerDapQuestion } from "@/app/api/dap-questions/[id]/route";
@@ -7600,6 +7601,20 @@ describe("lecturers and committee members (G2)", () => {
     expect((await accepted.json()).counts).toMatchObject({ ACCEPTED: 1 });
     const after = (await (await readChecks(new Request("http://localhost"), context)).json()).results as { rule: string }[];
     expect(after.some((result) => result.rule === "V20")).toBe(false);
+  });
+
+  it("offers an AI first draft only to whoever may write the course (B11)", async () => {
+    const course = await prisma.course.findFirstOrThrow({ where: { submissionId, code: "RDY 212" } });
+    const draft = () => aiFirstDraft(new Request("http://localhost", { method: "POST" }), { params: Promise.resolve({ id: course.id }) });
+    await signIn(lecturerId);
+    expect((await draft()).status).toBe(403); // not their course
+    authState.userId = ids.dean;
+    expect((await draft()).status).toBe(403); // can't edit the draft at Phase 1
+    authState.userId = ids.hod;
+    const before = await prisma.courseDescription.findUnique({ where: { courseId: course.id }, select: { courseContent: true } });
+    // Without the AI service (as in tests) it says so; either way nothing is saved.
+    expect([200, 503]).toContain((await draft()).status);
+    expect(await prisma.courseDescription.findUnique({ where: { courseId: course.id }, select: { courseContent: true } })).toEqual(before);
   });
 
   it("lets a committee member read and comment on their programme, and change nothing", async () => {

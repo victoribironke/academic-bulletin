@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { AiFirstDraft } from "@/components/courses/ai-first-draft";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1017,6 +1018,17 @@ export function CourseDescriptionForm({
                             )}
 
                             <div className="space-y-6 pt-2">
+                              {/* B11: an AI first draft for a course still without its text. */}
+                              {!readOnly &&
+                                (!desc.courseContent?.trim() || desc.learningOutcomes.filter((item) => item.trim()).length < 3) && (
+                                  <AiFirstDraft
+                                    courseId={course.id}
+                                    onUse={(outcomes, content) => {
+                                      updateDescription(course.id, "learningOutcomes", outcomes);
+                                      updateDescription(course.id, "courseContent", content);
+                                    }}
+                                  />
+                                )}
                               {/* Learning Outcomes */}
                               <div className="space-y-2">
                                 <label className="text-sm font-semibold">

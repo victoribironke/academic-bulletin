@@ -781,6 +781,9 @@ export function handlePracticeRequest(state: PracticeState, viewer: PracticeView
         if (method === "PATCH" || method === "PUT") return changeCourse(state, viewer, id, body);
         if (method === "DELETE") return removeCourses(state, viewer, [id]);
       }
+      if (sub === "ai-draft") {
+        return refuse(state, 409, "The AI first draft works on your real programme's courses, not in the practice one.", { code: "PRACTICE" });
+      }
       if (sub === "description") {
         const description = state.descriptions.find((item) => item.courseId === id);
         if (method === "GET") return ok(state, description ? descriptionOut(description) : null);

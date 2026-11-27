@@ -18,6 +18,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { TRY_AGAIN } from "@/lib/messages";
+import { AiFirstDraft } from "@/components/courses/ai-first-draft";
 
 type Status = "ASSIGNED" | "READY" | "ACCEPTED" | "RETURNED";
 type Item = {
@@ -128,6 +129,16 @@ function CourseCard({ item, onChanged }: { item: Item; onChanged: () => void }) 
           <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-sm dark:border-amber-500/40 dark:bg-amber-500/10">
             Your Head&apos;s note: {item.note}
           </p>
+        )}
+        {/* B11: an AI first draft while the course has no text yet. */}
+        {item.canEdit && (!content.trim() || lines.length < 3) && (
+          <AiFirstDraft
+            courseId={item.course.id}
+            onUse={(draftOutcomes, draftContent) => {
+              setOutcomes(draftOutcomes.join("\n"));
+              setContent(draftContent);
+            }}
+          />
         )}
         <div className="space-y-1">
           <Label htmlFor={`${item.id}-outcomes`}>At the end of this course, students should be able to: (one per line, at least three)</Label>
