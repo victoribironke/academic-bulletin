@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { staysWithinFacts, templateMessage, writeMessage, type DeskFacts } from "@/lib/agent/write";
+import { factProblems, staysWithinFacts, templateMessage, writeMessage, type DeskFacts } from "@/lib/agent/write";
 
 const facts: DeskFacts = {
   deskKey: "HOD:u1",
@@ -64,6 +64,18 @@ describe("the agent's message (T3, T6)", () => {
     expect(staysWithinFacts("CP1 in 7 days https://academicplanning.app/dashboard", template, facts)).toBe(true);
     expect(staysWithinFacts("CP1 in 8 days https://academicplanning.app/dashboard", template, facts)).toBe(false);
     expect(staysWithinFacts("CP1 in 7 days, no link", template, facts)).toBe(false);
+    // A link at the end of a sentence keeps its full stop out of the link.
+    expect(staysWithinFacts("CP1 is in 7 days: https://academicplanning.app/dashboard.", template, facts)).toBe(true);
+    expect(factProblems("CP1 in 9 days https://example.org/x", template, facts)).toEqual([
+      "numbers not in the facts: 9",
+      "links not in the facts: https://example.org/x",
+    ]);
+  });
+
+  it("says why the template was used (for DAP's samples)", async () => {
+    expect((await writeMessage(facts, decision, { ai: null })).fallback).toBe("no AI key on this site");
+    const invents = async () => "Good morning. CP1 is in 99 days. https://academicplanning.app/dashboard";
+    expect((await writeMessage(facts, decision, { ai: invents })).fallback).toMatch(/numbers not in the facts: 99/);
   });
 });
 

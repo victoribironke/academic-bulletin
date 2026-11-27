@@ -34,7 +34,13 @@ export type DeskFacts = {
   askLink: string;
 };
 
-export type WrittenMessage = { subject: string; body: string; writtenBy: "AI" | "TEMPLATE" };
+export type WrittenMessage = {
+  subject: string;
+  body: string;
+  writtenBy: "AI" | "TEMPLATE";
+  /** Why the template was used instead of the AI's text (samples and DAP's view; not stored). */
+  fallback?: string;
+};
 
 const sentence = (reason: string, facts: DeskFacts) => {
   const checkpoint = reason.match(/^(\S+) in (\d+) days?$/);
@@ -84,14 +90,28 @@ export function templateMessage(facts: DeskFacts, decision: Pick<DeskDecision, "
 const NUMBER = /\d+(?:[.,]\d+)?/g;
 const LINK = /https?:\/\/[^\s)]+/g;
 
-/** True when the AI's text uses only numbers and links the facts already have (T6). */
-export function staysWithinFacts(text: string, template: WrittenMessage, facts: DeskFacts): boolean {
+/** A link as written in prose: a full stop or comma after it isn't part of it. */
+const cleanLink = (link: string) => link.replace(/[.,;:!?'"’”]+$/, "");
+
+/** What in the AI's text isn't in the facts (T6): numbers, links, or no link at all. */
+export function factProblems(text: string, template: WrittenMessage, facts: DeskFacts): string[] {
   const known = `${template.subject}\n${template.body}\n${JSON.stringify(facts)}`;
   const knownNumbers = new Set(known.match(NUMBER) ?? []);
-  const knownLinks = new Set(known.match(LINK) ?? []);
+  const knownLinks = new Set((known.match(LINK) ?? []).map(cleanLink));
   const numbers = text.match(NUMBER) ?? [];
-  const links = text.match(LINK) ?? [];
-  return numbers.every((value) => knownNumbers.has(value)) && links.every((link) => knownLinks.has(link)) && links.length > 0;
+  const links = (text.match(LINK) ?? []).map(cleanLink);
+  const problems: string[] = [];
+  const strayNumbers = [...new Set(numbers.filter((value) => !knownNumbers.has(value)))];
+  if (strayNumbers.length) problems.push(`numbers not in the facts: ${strayNumbers.join(", ")}`);
+  const strayLinks = [...new Set(links.filter((link) => !knownLinks.has(link)))];
+  if (strayLinks.length) problems.push(`links not in the facts: ${strayLinks.join(", ")}`);
+  if (links.length === 0) problems.push("no link to the programme");
+  return problems;
+}
+
+/** True when the AI's text uses only numbers and links the facts already have (T6). */
+export function staysWithinFacts(text: string, template: WrittenMessage, facts: DeskFacts): boolean {
+  return factProblems(text, template, facts).length === 0;
 }
 
 type AiCall = (prompt: string, signal: AbortSignal) => Promise<string>;
@@ -128,7 +148,8 @@ export async function writeMessage(
 ): Promise<WrittenMessage> {
   const template = templateMessage(facts, decision);
   const ai = options.ai === undefined ? defaultAi : options.ai;
-  if (options.useAi === false || !ai) return template;
+  if (options.useAi === false) return template;
+  if (!ai) return { ...template, fallback: "no AI key on this site" };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), AGENT_SETTINGS.limits.aiTimeoutMs);
   try {
@@ -141,10 +162,16 @@ export async function writeMessage(
       ai(prompt, controller.signal),
       new Promise<string>((_, reject) => controller.signal.addEventListener("abort", () => reject(new Error("timeout")))),
     ]);
-    if (!text || !staysWithinFacts(text, template, facts)) return template;
+    if (!text) return { ...template, fallback: "the AI returned nothing" };
+    const problems = factProblems(text, template, facts);
+    if (problems.length) return { ...template, fallback: `the AI's text was set aside: ${problems.join("; ")}` };
     return { subject: template.subject, body: text, writtenBy: "AI" };
-  } catch {
-    return template;
+  } catch (error) {
+    const timedOut = controller.signal.aborted;
+    return {
+      ...template,
+      fallback: timedOut ? "the AI didn't answer within the time limit" : `the AI call failed: ${error instanceof Error ? error.message.slice(0, 160) : "unknown error"}`,
+    };
   } finally {
     clearTimeout(timer);
   }
