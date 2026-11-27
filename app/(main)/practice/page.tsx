@@ -9,7 +9,7 @@
 import { Suspense, useEffect, useState, useSyncExternalStore } from "react";
 import { FlaskConical, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
-import SubmissionDetailPage from "@/app/(main)/submissions/[id]/page";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { TableSkeleton } from "@/components/shared/states";
 import { useUser } from "@/contexts/user-context";
@@ -23,6 +23,10 @@ import {
 import { PRACTICE_IDS } from "@/lib/practice/ids";
 
 const PARAMS = Promise.resolve({ id: PRACTICE_IDS.draft });
+// U4 and S3: the draft screen loads once the practice is ready.
+const SubmissionDetailPage = dynamic(() => import("@/app/(main)/submissions/[id]/page"), {
+  loading: () => <TableSkeleton columns={4} />,
+});
 
 export default function PracticePage() {
   const { currentUser } = useUser();

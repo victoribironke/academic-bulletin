@@ -1,0 +1,44 @@
+# Tasks S3 and U5: the automated checks on every change. Each push to main
+# (and any pull request) is type-checked, linted and unit tested, including
+# the accessibility check (axe, WCAG 2.2 AA) on the R2 screens; then built,
+# and every page's JavaScript is checked against its size budget and
+# 2 seconds on a slow mobile connection (config/performance-budget.json).
+# The database tests run locally with their own Postgres (npm test).
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@v2
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Type check
+        run: npx tsc --noEmit -p .
+      - name: Lint
+        run: npx eslint . --quiet
+      - name: Unit tests, including the accessibility check (U5)
+        run: npx vitest run tests/unit
+      - name: Build
+        run: npx next build --webpack
+      - name: Page budgets on a slow mobile connection (S3)
+        run: node scripts/check-page-budgets.mjs --report

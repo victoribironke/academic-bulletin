@@ -1,0 +1,11 @@
+{
+  "_about": "Task S3 and U4: each page's JavaScript (gzipped) must load in under 2 seconds on a slow mobile connection. Raise a budget only with a reason.",
+  "slowMobile": { "bytesPerSecond": 200000, "roundTrips": 4, "roundTripMs": 150, "maxSeconds": 2.0 },
+  "defaultKb": 320,
+  "routesKb": {
+    "(main)/submissions/[id]": 300,
+    "(main)/dashboard": 250,
+    "(main)/master-courses": 280,
+    "(main)/submissions": 250
+  }
+}

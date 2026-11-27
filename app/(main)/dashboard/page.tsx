@@ -3,18 +3,15 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { SubmissionStatus } from "@prisma/client";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import dynamic from "next/dynamic";
+
+// U4 and S3: the charts' library loads after the page shows.
+const ChartLoading = () => <div className="h-[260px] animate-pulse rounded-md bg-muted/40" aria-hidden="true" />;
+const PhaseBarChart = dynamic(() => import("@/components/dashboard/dashboard-charts").then((m) => m.PhaseBarChart), {
+  ssr: false,
+  loading: ChartLoading,
+});
+const StatusPie = dynamic(() => import("@/components/dashboard/dashboard-charts").then((m) => m.StatusPie), { ssr: false });
 import {
   ArrowRight,
   BookOpen,
@@ -398,41 +395,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             {hasSubmissions ? (
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={stats.phaseDistribution} margin={{ left: -20, right: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                  <XAxis
-                    dataKey="phase"
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
-                  />
-                  <YAxis
-                    allowDecimals={false}
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
-                  />
-                  <Tooltip
-                    cursor={{ fill: "var(--muted)" }}
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.length) return null;
-                      const d = payload[0].payload as { phase: number; count: number };
-                      return (
-                        <div className="rounded-md border bg-popover px-3 py-2 text-sm shadow-md">
-                          <p className="font-medium">
-                            Phase {d.phase}: {PHASE_NAMES[d.phase]}
-                          </p>
-                          <p className="text-muted-foreground">
-                            {d.count} submission{d.count === 1 ? "" : "s"}
-                          </p>
-                        </div>
-                      );
-                    }}
-                  />
-                  <Bar dataKey="count" fill="var(--primary)" radius={[4, 4, 0, 0]} maxBarSize={36} />
-                </BarChart>
-              </ResponsiveContainer>
+              <PhaseBarChart data={stats.phaseDistribution} />
             ) : (
               <EmptyState
                 icon={FileText}
@@ -453,26 +416,7 @@ export default function DashboardPage() {
             {hasSubmissions ? (
               <div className="flex flex-col items-center gap-4 sm:flex-row lg:flex-col xl:flex-row">
                 <div className="h-[180px] w-[180px] shrink-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={statusData.filter((d) => d.value > 0)}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius={55}
-                        outerRadius={85}
-                        paddingAngle={2}
-                        strokeWidth={0}
-                      >
-                        {statusData
-                          .filter((d) => d.value > 0)
-                          .map((d) => (
-                            <Cell key={d.name} fill={d.color} />
-                          ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  <StatusPie data={statusData.filter((d) => d.value > 0)} />
                 </div>
                 <ul className="w-full space-y-2 text-sm">
                   {statusData.map((d) => (

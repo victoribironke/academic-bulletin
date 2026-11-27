@@ -6,15 +6,9 @@ import { SectionMarkIcon, sectionMarkWords, useSectionMarks } from "@/components
 import { useState, useEffect, use, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+import type { ComponentProps } from "react";
 import { useUser, usePermission } from "@/contexts/user-context";
-import {
-  RichTextEditor,
-  RichTextViewer,
-} from "@/components/editor/rich-text-editor";
-import { StaffTable } from "@/components/forms/staff-table";
-import { CourseTable } from "@/components/forms/course-table";
-import { CourseDescriptionForm } from "@/components/forms/course-description-form";
-import { BulletinPreview } from "@/components/preview/bulletin-preview";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -102,13 +96,28 @@ import { GraduationNumbers } from "@/components/submissions/graduation-numbers";
 import { LeaderDetails } from "@/components/submissions/leader-details";
 import { CommentsList } from "@/components/submissions/comments-list";
 import { CopySection } from "@/components/submissions/copy-section";
-import { AiHelper } from "@/components/submissions/ai-helper";
 import { COPYABLE_SECTIONS } from "@/lib/submissions/copy-section";
 import { SaveStatus } from "@/components/shared/save-status";
 import { useOnline } from "@/hooks/use-online";
 import { changedSince, conflictSnapshot } from "@/lib/submissions/edit-conflicts";
 import type { LeaderRole, Leaders } from "@/lib/leaders";
 import { CarriedNote, CarriedTextProvider, DraftSummaryButton } from "@/components/submissions/carried-text";
+
+
+// U4 and S3: the section editors load when a section opens, so the page
+// shows quickly on a slow connection.
+const SectionLoading = () => <div className="h-40 animate-pulse rounded-lg border bg-muted/40" aria-hidden="true" />;
+const StaffTable = dynamic(() => import("@/components/forms/staff-table").then((m) => m.StaffTable), { loading: SectionLoading });
+const CourseTable = dynamic(() => import("@/components/forms/course-table").then((m) => m.CourseTable), { loading: SectionLoading });
+const CourseDescriptionForm = dynamic(
+  () => import("@/components/forms/course-description-form").then((m) => m.CourseDescriptionForm),
+  { loading: SectionLoading },
+);
+const RichTextEditor = dynamic(() => import("@/components/editor/rich-text-editor").then((m) => m.RichTextEditor), { loading: SectionLoading });
+const RichTextViewer = dynamic(() => import("@/components/editor/rich-text-editor").then((m) => m.RichTextViewer));
+const BulletinPreview = dynamic(() => import("@/components/preview/bulletin-preview").then((m) => m.BulletinPreview));
+type BulletinPreviewProps = ComponentProps<typeof import("@/components/preview/bulletin-preview").BulletinPreview>;
+const AiHelper = dynamic(() => import("@/components/submissions/ai-helper").then((m) => m.AiHelper));
 
 interface Submission {
   id: string;
@@ -1514,11 +1523,7 @@ export default function SubmissionDetailPage({
                 )}
               {/* Preview button - available to all viewers */}
               <BulletinPreview
-                submission={
-                  submission as Parameters<
-                    typeof BulletinPreview
-                  >[0]["submission"]
-                }
+                submission={submission as BulletinPreviewProps["submission"]}
                 departmentId={submission.programme.department.id}
               />
             </div>
