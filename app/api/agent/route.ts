@@ -163,12 +163,29 @@ export async function POST(request: Request) {
       case "samples": {
         const date = isDateKey(body.date) ? body.date : dateKeyAt(await calendarNow());
         const plan = await planDay(date);
-        const chosen = plan.slice(0, AGENT_SETTINGS.limits.samplesPerRun);
+        // DAP may name the desks to sample (deskKeys); otherwise the desks the
+        // agent writes to that day come first.
+        const wanted = Array.isArray(body.deskKeys)
+          ? new Set(body.deskKeys.filter((key): key is string => typeof key === "string"))
+          : null;
+        const pool = wanted
+          ? plan.filter((item) => wanted.has(item.facts.deskKey))
+          : [...plan.filter((item) => item.decision.write), ...plan.filter((item) => !item.decision.write)];
+        const chosen = pool.slice(0, AGENT_SETTINGS.limits.samplesPerRun);
         const samples = [];
         for (const item of chosen) {
           const decision = item.decision.write ? item.decision : { reasons: ["Monday summary"], mentions: [] };
           const written = await writeMessage(item.facts, decision);
-          samples.push({ recipient: item.facts.recipient.name, department: item.facts.department, reasons: decision.reasons, ...written });
+          samples.push({
+            deskKey: item.facts.deskKey,
+            recipient: item.facts.recipient.name,
+            department: item.facts.department,
+            status: item.facts.status.label,
+            reasons: [...decision.reasons, ...decision.mentions],
+            cc: item.cc.map((person) => person.name),
+            date,
+            ...written,
+          });
         }
         return NextResponse.json({ samples });
       }
