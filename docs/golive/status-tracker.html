@@ -147,8 +147,8 @@ footer { font-size: 0.86rem; color: var(--muted); display: grid; gap: 0.4rem; bo
     <p class="lede">Every task in the work order, release by release: what is live on academicplanning.app, what is built and waiting to run, and what each remaining task is waiting on.</p>
     <div class="meta">
       <span class="deadline">R0 launch due Wednesday, November 25, 6:00 pm WAT <strong id="countdown"></strong></span>
-      <span>Updated Friday, November 27, 2026, 7:00 am WAT</span>
-      <span>Live code: <span class="mono">6bfce2f</span></span>
+      <span>Updated Friday, November 27, 2026, 11:30 am WAT</span>
+      <span>Live code: <span class="mono">901b2ec</span></span>
     </div>
     <div class="legend" aria-label="What the statuses mean">
       <span><b class="pill s-live">Live</b> built and working on the live site</span>
@@ -360,36 +360,36 @@ const GROUPS = [
   ]},
   { key: "r2", code: "R2", short: "Fri, Dec 11", name: "Quality checks", date: "Friday, December 11, 2026", sub: "Submissions open on Monday, December 14.", items: [
     ["B11", "Fill the missing descriptions", "CODE+DAP", "todo", "", ""],
-    ["E4", "Shared facts entered once", "CODE+DAP", "todo", "", ""],
-    ["F1", "Rules engine", "CODE", "todo", "Basic Submit checks exist today (units, required fields, CGPA range).", ""],
-    ["F2", "Readiness panel", "CODE", "todo", "", ""],
-    ["F3", "Firm gates", "CODE", "todo", "", ""],
-    ["F4", "GRACE gate", "CODE+DAP", "partly", "The GRACE gate at Submit and at every approval is live, with a logged override.", "DAP exemptions with a reason; General Education checked at its own desk"],
-    ["F6", "Credit arithmetic from the Academic Policy", "CODE+DAP", "todo", "", ""],
+    ["E4", "Shared facts entered once", "CODE+DAP", "live", "Live since November 27: the Dean's title, name and photo are kept on the school and the Head's on the department; changing them from any draft updates every programme there (logged). A draft's own earlier photo shows only while the record has none.", ""],
+    ["F1", "Rules engine", "CODE", "live", "Live since November 27: the Appendix A checks run on the server with a number, level, section, field and plain message (V1 to V8, V10 to V14, V16 to V19, V21 to V26), plus the required-content checks.", "V9 (AI check, R3), V15 (titles fixed for you), V20 (with G2 lecturers)"],
+    ["F2", "Readiness panel", "CODE", "live", "Live since November 27 on every programme: what is open by section with counts, \"Fix this\" opens the section, a \"Please check\" can be accepted with a reason (kept and logged) and taken back; green when nothing must be fixed. On live the Economics test record shows 13 to fix.", ""],
+    ["F3", "Firm gates", "CODE", "live", "Live since November 27: Submit needs every Must fix to pass, on the server; Approve at each later phase needs them too and no open comments. A Super Administrator can approve past them with a written reason, flagged on the record (D4).", ""],
+    ["F4", "GRACE gate", "CODE+DAP", "partly", "The GRACE gate at Submit and at every approval is live, with a logged override. Since November 27 General Education courses are left out of the Head's gate (checked at the General Education desk).", "DAP exemptions with a reason"],
+    ["F6", "Credit arithmetic from the Academic Policy", "CODE+DAP", "partly", "Live since November 27: 16 to 24 credits a semester, CGPA 2.00 to 5.00, 50-word Summary of Changes and three outcomes come from a settings file (config/academic-policy.json), not code.", "DAP's approved load exceptions from file 03 (OneDrive file still unreadable here)"],
     ["G2", "Lecturer accounts", "CODE", "todo", "", ""],
-    ["G3", "One way to save", "CODE", "todo", "", ""],
-    ["G7", "Comments in one place", "CODE", "todo", "", ""],
+    ["G3", "One way to save", "CODE", "live", "Live since November 27: no Save buttons; the sections, Course Structure and Staff Directory save as you type and show \"Saved at\" with the time. If someone else saved the same box meanwhile, the second person chooses which version to keep.", ""],
+    ["G7", "Comments in one place", "CODE", "live", "Live since November 27: the Comments panel shows this section's comments or all of them, filtered by open or resolved, section and author; approval and return notes are listed apart as decision notes, never open comments.", ""],
     ["G8", "Departments with several programmes", "CODE", "todo", "", ""],
     ["H5", "Short videos", "DAP+CODE", "dap", "", "DAP records them; they get placed in the app"],
     ["H7", "AI helper panel", "CODE", "todo", "", ""],
-    ["K5", "Search filters", "CODE", "todo", "", ""],
-    ["Q4", "Names under photos", "CODE", "todo", "", ""],
+    ["K5", "Search filters", "CODE", "live", "Live since November 27 on the Course Registry: level, semester, school, department, programme, course type, owner, source, has a description and GRACE checked, each choice with its count.", ""],
+    ["Q4", "Names under photos", "CODE", "live", "Live since November 27: the preview, Word and PDF print the Dean's and Head's photos with the title and full name under each (the exports had no photos before).", ""],
     ["Q5", "True-to-print preview", "CODE", "todo", "", ""],
     ["S3", "Speed checks on every change", "CODE", "todo", "", ""],
-    ["U2", "Work is never lost", "CODE", "todo", "", ""],
+    ["U2", "Work is never lost", "CODE", "live", "Live since November 27: changes are kept on the device; offline, a calm banner says so and they are sent when the connection returns; a failed save is retried every 15 seconds.", ""],
     ["U3", "Undo and the Archive", "CODE", "partly", "Deleted items go to the Archive and can be restored.", "The 10-second Undo link"],
     ["U4", "Phones, tablets and slow connections", "CODE", "todo", "", ""],
     ["U5", "Usable by everyone (WCAG 2.2 AA)", "CODE", "todo", "", ""],
-    ["W2", "Rule: units match contact hours", "CODE", "todo", "", ""],
-    ["W3", "Rule: electives in named groups", "CODE", "todo", "", ""],
-    ["W4", "Rule: credit summary built by the app", "CODE", "todo", "", ""],
-    ["W5", "Rule: graduation numbers written by the app", "CODE", "todo", "", ""],
+    ["W2", "Rule: units match contact hours", "CODE", "live", "Live since November 27: lecture and practical hours on every course (also on Registry rows); a gentle \"Please check\" (V23) when units differ from lecture/15 + practical/45; projects and placements exempt.", ""],
+    ["W3", "Rule: electives in named groups", "CODE", "live", "Live since November 27: named elective groups with \"choose N units\"; the totals count that number. V25 must-fix for an empty or short group; electives outside a group are a \"Please check\".", ""],
+    ["W4", "Rule: credit summary built by the app", "CODE", "live", "Live since November 27: General Education, Departmental, Non-departmental and Total by level, on Course Structure, in the preview and in Word and PDF. Nobody types it.", ""],
+    ["W5", "Rule: graduation numbers written by the app", "CODE", "live", "Live since November 27: the three minimum-credit numbers come from the Course Structure, shown in Graduation Requirements (with a one-click fix when the stated total differs) and printed in the bulletin.", ""],
     ["W6", "Rule: CGPA of at least 2.00", "CODE", "live", "2.00 to 5.00 on save and on Submit; new drafts start at 2.00.", ""],
-    ["W7", "Rule: final-year project", "CODE", "todo", "", ""],
-    ["W8", "Rule: industrial training semesters", "CODE", "todo", "", ""],
-    ["W9", "Rule: 16 to 24 credits a semester", "CODE", "partly", "The Registry Report already flags semesters outside 16 to 24 (B8).", "The warning inside drafts; DAP's approved exceptions from file 03"],
-    ["W10", "Rule: course numbers match level and semester", "CODE", "todo", "", ""],
-    ["W15", "Rule: course description layout", "CODE", "todo", "", "With Q5"],
+    ["W7", "Rule: final-year project", "CODE", "live", "Live since November 27: a \"Please check\" (V24) when the final level has no project course.", ""],
+    ["W8", "Rule: industrial training semesters", "CODE", "live", "Live since November 27: SIWES, internship, practicum and similar semesters are recognised and skipped by the 16 to 24 credit check.", ""],
+    ["W9", "Rule: 16 to 24 credits a semester", "CODE", "partly", "The Registry Report flags semesters outside 16 to 24 (B8); since November 27 drafts show it as a \"Please check\" (V3), counting elective groups by what students choose.", "DAP's approved exceptions from file 03"],
+    ["W10", "Rule: course numbers match level and semester", "CODE", "live", "Live since November 27: a \"Please check\" (V22) when a course's level or semester doesn't match its number; the Head can accept it with a reason.", ""],
+    ["W15", "Rule: course description layout", "CODE", "live", "Live since November 27 in the preview, Word and PDF: \"CODE: Title (N units, Core; lecture hours, practical hours)\", then \"At the end of this course, students should be able to:\", the outcomes, then the content.", ""],
   ]},
   { key: "r3", code: "R3", short: "Fri, Jan 8, 2027", name: "Oversight", date: "Friday, January 8, 2027", sub: "Deans review as programmes arrive.", items: [
     ["B12", "Registry changes after sign-off", "CODE", "todo", "", ""],
