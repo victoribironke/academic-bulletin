@@ -10,7 +10,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Eye, Printer, Download, FileText } from "lucide-react";
+import { Loader2, Eye, Printer, Download, FileText, BookOpen } from "lucide-react";
 import { BulletinData } from "@/lib/bulletin/generation";
 import { BulletinProgrammeView } from "@/components/preview/bulletin-programme-view";
 
@@ -55,6 +55,32 @@ export function BulletinPreview({ submission }: BulletinPreviewProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exportingFormat, setExportingFormat] = useState<string | null>(null);
+  // Q5: the A4 pages exactly as the PDF prints them (cover, running
+  // headers, the DAP layout), opened in a new tab; the dialog keeps the
+  // quick view. The app's security policy allows no embedded frames.
+  const [openingPages, setOpeningPages] = useState(false);
+  const openPages = async () => {
+    // Opened now, while the click counts, so the browser doesn't block it.
+    const tab = window.open("", "_blank");
+    setOpeningPages(true);
+    try {
+      const params = new URLSearchParams({ submissionId: submission.id, format: "pdf" });
+      const response = await fetch(`/api/bulletin/export?${params}`);
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error || "The A4 pages couldn't be made.");
+      }
+      const url = URL.createObjectURL(await response.blob());
+      if (tab) tab.location.href = url;
+      else window.location.assign(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (reason) {
+      tab?.close();
+      alert(reason instanceof Error ? reason.message : "The A4 pages couldn't be made.");
+    } finally {
+      setOpeningPages(false);
+    }
+  };
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -164,6 +190,10 @@ export function BulletinPreview({ submission }: BulletinPreviewProps) {
           <div className="flex items-center justify-between">
             <DialogTitle>Bulletin Preview</DialogTitle>
             <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => void openPages()} disabled={openingPages}>
+                {openingPages ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <BookOpen className="h-4 w-4 mr-1" />}
+                A4 pages, as printed
+              </Button>
               <Button variant="outline" size="sm" onClick={handlePrint}>
                 <Printer className="h-4 w-4 mr-1" />
                 Print

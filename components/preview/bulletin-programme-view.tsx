@@ -187,11 +187,25 @@ export function BulletinProgrammeView({
 
       <Separator />
 
-      {/* Programme Philosophy */}
+      {/* W14 and Q5: the department's vision, mission and philosophy, in that order, then the objectives and unique features. */}
       <section>
         <h2 className="text-lg font-bold mb-3 border-b pb-1">
-          PHILOSOPHY AND OBJECTIVES
+          VISION, MISSION, PHILOSOPHY AND OBJECTIVES
         </h2>
+
+        {programme.content?.vision && (
+          <div className="mb-4">
+            <h3 className="font-semibold mb-2">Vision</h3>
+            <p className="text-justify">{programme.content.vision}</p>
+          </div>
+        )}
+
+        {programme.content?.mission && (
+          <div className="mb-4">
+            <h3 className="font-semibold mb-2">Mission</h3>
+            <p className="text-justify">{programme.content.mission}</p>
+          </div>
+        )}
 
         {programme.content?.philosophy && (
           <div className="mb-4">
@@ -214,6 +228,17 @@ export function BulletinProgrammeView({
               </ul>
             </div>
           )}
+
+        {programme.content?.uniqueFeatures && programme.content.uniqueFeatures.length > 0 && (
+          <div className="mb-4">
+            <h3 className="font-semibold mb-2">Unique Features</h3>
+            <ul className="list-disc list-inside space-y-1">
+              {programme.content.uniqueFeatures.map((feature, i) => (
+                <li key={i}>{feature}</li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       <Separator />
